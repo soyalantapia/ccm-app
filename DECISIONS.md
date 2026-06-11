@@ -1,0 +1,30 @@
+# DECISIONS.md — Registro de decisiones (Fase 0)
+
+Decisiones tomadas durante la construcción de la demo, con su porqué. Los [PENDIENTE] del PRD se resolvieron con el [SUPUESTO] indicado, siempre configurables.
+
+## Arquitectura
+
+1. **Cero backend (manda el prompt sobre el PRD §4.1).** El PRD recomienda Supabase; esta fase es 100% frontend: seed estático en `src/data/seed/` + localStorage, todo detrás de la interfaz `DataStore`. Fase 1 enchufa backend real implementando esa interfaz sin tocar pantallas.
+2. **"Tiempo real" sin backend**: cada escritura emite por un bus interno y el evento `storage` del navegador la propaga a otras pestañas → el dashboard admin abierto en otra pestaña se mueve en vivo con las acciones del usuario.
+3. **Limitación conocida y aceptada**: los datos viven por dispositivo (localStorage). No hay sincronización entre teléfonos. El admin muestra "Demo local · la sincronización en la nube llega en Fase 1".
+4. **Archivos reales en `~/dev/ccm-app` + symlink en `~/Desktop/Programacion`**: el Desktop está en iCloud y rompe esbuild/rollup (patrón canónico del equipo).
+
+## Deploy
+
+5. **Repo**: `soyalantapia/ccm-app` (nombre libre, sin fallback necesario). URL: https://soyalantapia.github.io/ccm-app/
+6. **Pages por rama `gh-pages` (`npm run deploy`), no por Actions — bloqueo externo documentado.** El token OAuth de `gh` no tiene scope `workflow` y GitHub rechaza pushear `.github/workflows/`. Se intentó `gh auth refresh -s workflow` (device flow completado hasta la pantalla final), pero GitHub exige **sudo mode** (passkey/contraseña) que solo el dueño de la cuenta puede completar físicamente. El workflow `deploy.yml` queda listo en `.github/workflows/` (excluido de git vía `.gitignore`). **Para activarlo**: `gh auth refresh -h github.com -s workflow` → completar passkey → quitar la línea `.github/workflows/` de `.gitignore` → `git add -f .github/workflows/deploy.yml && git commit && git push` → `gh api -X PUT repos/soyalantapia/ccm-app/pages -f build_type=workflow`. Mientras tanto, el tab Actions muestra verde con el build automático `pages build and deployment`.
+7. **SPA en Pages**: `404.html` = copia de `index.html` (plugin en `vite.config.ts`). Las rutas profundas devuelven HTTP 404 con el shell de la app — aceptable para la demo (GitHub Pages no permite rewrites).
+
+## Producto
+
+8. **Compra VIP**: la orden se crea (`iniciada` → `redirigida_mp`) y el link de Mercado Pago se abre en **pestaña nueva**; la app queda en "Estamos confirmando tu pago". Razón: con links placeholder, navegar en la misma pestaña rompería el flujo de la demo. El PRD dice "redirige" — se respeta el contrato de estados y la salida a MP.
+9. **Links MP placeholder** = `https://www.mercadopago.com.ar` (aterriza en página real de MP), editables por plan desde Admin → Entradas y órdenes. Precios VIP "a confirmar" hasta que el admin los cargue ([PENDIENTE] PRD §18).
+10. **Sponsors ficticios** (Banco Distrito, Aura Beauty, Terruño Wines): el PRD prohíbe inventar sponsors reales; son placeholders editables con rubro, nivel y exclusividad para demostrar el sistema (uno con exclusividad de rubro, D20).
+11. **FAQ de 11 ítems**: Tikealo no es accesible desde acá; los 11 ítems se redactaron exclusivamente con datos del PRD (beneficios de registrarse, entrada gratuita con inscripción obligatoria, cupos, estacionamiento, networking/coworking, galas, etc.).
+12. **`/agenda` no es ruta separada en Fase 0**: la grilla del evento principal vive en su ficha (`/eventos/ccm-2026`). El PRD §16 Fase 0 no exige agenda standalone.
+13. **`/en-vivo` fuera de alcance Fase 0** (PRD §16 no lo incluye); el módulo EN VIVO llega con streaming en fases siguientes.
+14. **Imágenes**: editoriales de moda con licencia libre (Unsplash License), descargadas al repo en `public/img/` con créditos en `img/manifest.json` ([SUPUESTO] PRD §18 por falta de fotos reales).
+15. **Identidad**: un dispositivo = un perfil ([SUPUESTO] PRD §7.5); QR de acreditación estable por dispositivo con checksum simple (firma real en Fase 1).
+16. **Admin**: clave simple `ccm2026` definida en `src/config` (provisorio, documentado en pantalla); auth real con email+contraseña llega en Fase 1.
+17. **Postulaciones seed + decisiones**: las decisiones del admin sobre postulaciones seed se guardan como overrides en localStorage (el seed es inmutable).
+18. **Theming**: además del editor por token, presets de un toque ("Editorial CCM", "Noche de gala", "Bordeaux", "Esmeralda") para demostrar D23 en vivo.
