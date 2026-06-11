@@ -1,1 +1,0 @@
-import{n as e,r as t}from"./index-CgdGeniF.js";var n=t();function r(){return(0,n.jsx)(`div`,{className:`px-5 py-10 md:px-10`,children:(0,n.jsx)(e,{eyebrow:`Admin`,title:`Galerías y sponsors`,lead:`Sección en construcción.`})})}export{r as default};
