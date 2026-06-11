@@ -1,0 +1,1 @@
+import{n as e,r as t}from"./index-CgdGeniF.js";var n=t();function r(){return(0,n.jsx)(`div`,{className:`mx-auto max-w-6xl px-5 py-16`,children:(0,n.jsx)(e,{eyebrow:`Próximamente`,title:`Eventos`,lead:`Esta sección está en construcción.`})})}export{r as default};
