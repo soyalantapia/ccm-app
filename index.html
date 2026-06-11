@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es-AR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Córdoba Corazón de Moda · 14ª Edición. El Ecosistema de Negocios y Tendencias más influyente del interior del país. 19 y 20 de septiembre de 2026 · Hotel Quinto Centenario, Córdoba." />
+    <meta name="theme-color" content="#181410" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="CCM" />
+    <link rel="apple-touch-icon" href="/ccm-app/icons/apple-touch-icon.png" />
+    <title>Córdoba Corazón de Moda · 14ª Edición</title>
+    <script>
+      // Apply saved theme tokens before first paint (no flash of default theme).
+      try {
+        var t = JSON.parse(localStorage.getItem('ccm:theme') || '{}')
+        for (var k in t) document.documentElement.style.setProperty('--t-' + k, t[k])
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

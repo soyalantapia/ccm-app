@@ -1,0 +1,332 @@
+import type {
+  AnalyticsEvent,
+  Application,
+  ApplicationStatus,
+  CatalogProfile,
+  Convocatoria,
+  ContentItem,
+  DeviceProfile,
+  EventBlock,
+  EventItem,
+  Gallery,
+  OrderStatus,
+  PlanId,
+  ProfileFieldKey,
+  Registration,
+  Sponsor,
+  AdSlot,
+  SponsorCreative,
+  TicketOrder,
+  TicketPlan,
+} from '../types'
+import type { BlockAvailability, DataStore, PhotoDownload } from './DataStore'
+import { readJSON, writeJSON, newId } from '../../lib/storage'
+import { track as doTrack, getLocalAnalytics } from '../../lib/track'
+import * as identity from '../../lib/identity'
+import { seedPlans } from '../../config/plans'
+import { seedEvents } from '../seed/events'
+import { seedBlocks } from '../seed/blocks'
+import { seedCatalog } from '../seed/catalog'
+import { seedGalleries } from '../seed/galleries'
+import { seedSponsors } from '../seed/sponsors'
+import { seedContents } from '../seed/contents'
+import { seedConvocatorias } from '../seed/convocatorias'
+import { seedApplications } from '../seed/applications'
+import { seedAnalytics } from '../seed/analytics'
+
+const K = {
+  registrations: 'registrations',
+  orders: 'orders',
+  favorites: 'favorites',
+  downloads: 'downloads',
+  applications: 'applications',
+  applicationOverrides: 'applicationOverrides',
+  planOverrides: 'planOverrides',
+} as const
+
+type PlanOverride = { price?: number | null; mpLink?: string }
+type AppOverride = { status: ApplicationStatus; decidedAt: string }
+
+/** Implementación Fase 0: seed estático + localStorage (cero backend). */
+export class LocalDataStore implements DataStore {
+  /* ─── Perfil ─── */
+
+  getProfile(): DeviceProfile {
+    return identity.getProfile()
+  }
+
+  saveProfileFields(values: Partial<Record<ProfileFieldKey, string>>, source: string): void {
+    const before = identity.getProfile().fields
+    identity.saveProfileFields(values, source)
+    for (const [field, value] of Object.entries(values)) {
+      if (value && !before[field as ProfileFieldKey]?.value) {
+        this.track('profile_field_captured', { field, source })
+      }
+    }
+  }
+
+  saveConsents(consents: { terms?: boolean; news?: boolean; sponsors?: boolean }): void {
+    identity.saveConsents(consents)
+  }
+
+  /* ─── Eventos ─── */
+
+  getEvents(): EventItem[] {
+    return [...seedEvents].sort((a, b) => a.startDate.localeCompare(b.startDate))
+  }
+
+  getEvent(slug: string): EventItem | undefined {
+    return seedEvents.find((e) => e.slug === slug)
+  }
+
+  getEventById(id: string): EventItem | undefined {
+    return seedEvents.find((e) => e.id === id)
+  }
+
+  getBlocks(eventId: string): EventBlock[] {
+    return seedBlocks.filter((b) => b.eventId === eventId)
+  }
+
+  getBlock(blockId: string): EventBlock | undefined {
+    return seedBlocks.find((b) => b.id === blockId)
+  }
+
+  blockAvailability(blockId: string): BlockAvailability {
+    const block = this.getBlock(blockId)
+    if (!block) return { capacity: 0, taken: 0, left: 0, full: true }
+    const localTaken = this.getRegistrations().filter(
+      (r) => r.blockId === blockId && r.status === 'confirmada',
+    ).length
+    const taken = Math.min(block.capacity, block.seedTaken + localTaken)
+    return { capacity: block.capacity, taken, left: block.capacity - taken, full: taken >= block.capacity }
+  }
+
+  getRegistrations(): Registration[] {
+    return readJSON<Registration[]>(K.registrations, [])
+  }
+
+  isRegistered(eventId: string, blockId?: string): boolean {
+    return this.getRegistrations().some(
+      (r) =>
+        r.status === 'confirmada' &&
+        r.eventId === eventId &&
+        (blockId === undefined ? r.blockId === undefined : r.blockId === blockId),
+    )
+  }
+
+  register(eventId: string, blockId?: string): Registration | null {
+    if (this.isRegistered(eventId, blockId)) {
+      return (
+        this.getRegistrations().find(
+          (r) => r.status === 'confirmada' && r.eventId === eventId && r.blockId === blockId,
+        ) ?? null
+      )
+    }
+    if (blockId && this.blockAvailability(blockId).full) return null
+    const registration: Registration = {
+      id: newId('reg'),
+      eventId,
+      ...(blockId ? { blockId } : {}),
+      ts: new Date().toISOString(),
+      status: 'confirmada',
+    }
+    writeJSON(K.registrations, [...this.getRegistrations(), registration])
+    this.track('registration_created', { eventId, blockId: blockId ?? null })
+    return registration
+  }
+
+  cancelRegistration(registrationId: string): void {
+    const regs = this.getRegistrations()
+    const reg = regs.find((r) => r.id === registrationId)
+    if (!reg) return
+    reg.status = 'cancelada'
+    writeJSON(K.registrations, regs)
+    this.track('registration_cancelled', { eventId: reg.eventId, blockId: reg.blockId ?? null })
+  }
+
+  /* ─── Planes y órdenes ─── */
+
+  getPlans(): TicketPlan[] {
+    const overrides = readJSON<Partial<Record<PlanId, PlanOverride>>>(K.planOverrides, {})
+    return seedPlans.map((plan) => {
+      const o = overrides[plan.id]
+      return o ? { ...plan, ...(o.price !== undefined ? { price: o.price } : {}), ...(o.mpLink ? { mpLink: o.mpLink } : {}) } : plan
+    })
+  }
+
+  getPlan(id: PlanId): TicketPlan | undefined {
+    return this.getPlans().find((p) => p.id === id)
+  }
+
+  updatePlan(id: PlanId, patch: { price?: number | null; mpLink?: string }): void {
+    const overrides = readJSON<Partial<Record<PlanId, PlanOverride>>>(K.planOverrides, {})
+    overrides[id] = { ...overrides[id], ...patch }
+    writeJSON(K.planOverrides, overrides)
+  }
+
+  createOrder(planId: PlanId): TicketOrder {
+    const profile = this.getProfile()
+    const order: TicketOrder = {
+      id: newId('ord'),
+      planId,
+      ts: new Date().toISOString(),
+      status: 'iniciada',
+      buyerName: identity.displayName() || undefined,
+      buyerEmail: profile.fields.email?.value,
+    }
+    writeJSON(K.orders, [...this.getOrders(), order])
+    this.track('ticket_order_created', { planId, orderId: order.id })
+    return order
+  }
+
+  markOrderRedirected(orderId: string): void {
+    this.setOrderStatusInternal(orderId, 'redirigida_mp')
+    const order = this.getOrders().find((o) => o.id === orderId)
+    this.track('ticket_order_redirected_mp', { orderId, planId: order?.planId })
+  }
+
+  setOrderStatus(orderId: string, status: OrderStatus): void {
+    this.setOrderStatusInternal(orderId, status)
+    if (status === 'confirmada') {
+      const order = this.getOrders().find((o) => o.id === orderId)
+      this.track('ticket_order_confirmed', { orderId, planId: order?.planId })
+    }
+  }
+
+  private setOrderStatusInternal(orderId: string, status: OrderStatus): void {
+    const orders = this.getOrders()
+    const order = orders.find((o) => o.id === orderId)
+    if (!order) return
+    order.status = status
+    writeJSON(K.orders, orders)
+  }
+
+  getOrders(): TicketOrder[] {
+    return readJSON<TicketOrder[]>(K.orders, [])
+  }
+
+  /* ─── Catálogo ─── */
+
+  getCatalog(): CatalogProfile[] {
+    return seedCatalog
+  }
+
+  getCatalogProfile(slug: string): CatalogProfile | undefined {
+    return seedCatalog.find((p) => p.slug === slug)
+  }
+
+  /* ─── Fotos ─── */
+
+  getGalleries(): Gallery[] {
+    return seedGalleries
+  }
+
+  getGallery(slug: string): Gallery | undefined {
+    return seedGalleries.find((g) => g.slug === slug)
+  }
+
+  getFavorites(): string[] {
+    return readJSON<string[]>(K.favorites, [])
+  }
+
+  toggleFavorite(photoId: string): void {
+    const favorites = this.getFavorites()
+    const i = favorites.indexOf(photoId)
+    if (i >= 0) favorites.splice(i, 1)
+    else {
+      favorites.push(photoId)
+      this.track('photo_favorite', { photoId })
+    }
+    writeJSON(K.favorites, favorites)
+  }
+
+  recordDownload(photoId: string, galleryId: string): void {
+    const gallery = seedGalleries.find((g) => g.id === galleryId)
+    const download: PhotoDownload = {
+      photoId,
+      galleryId,
+      sponsorId: gallery?.sponsorId ?? '',
+      ts: new Date().toISOString(),
+    }
+    writeJSON(K.downloads, [...this.getDownloads(), download])
+    this.track('photo_download', { photoId, galleryId, sponsorId: download.sponsorId })
+  }
+
+  getDownloads(): PhotoDownload[] {
+    return readJSON<PhotoDownload[]>(K.downloads, [])
+  }
+
+  /* ─── Contenido ─── */
+
+  getContents(): ContentItem[] {
+    return [...seedContents].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
+  }
+
+  /* ─── Sponsors ─── */
+
+  getSponsors(): Sponsor[] {
+    return seedSponsors
+  }
+
+  getSponsor(id: string): Sponsor | undefined {
+    return seedSponsors.find((s) => s.id === id)
+  }
+
+  getCreative(slot: AdSlot, index = 0): { sponsor: Sponsor; creative: SponsorCreative } | undefined {
+    const withSlot = seedSponsors.flatMap((sponsor) =>
+      sponsor.creatives.filter((c) => c.slot === slot).map((creative) => ({ sponsor, creative })),
+    )
+    if (withSlot.length === 0) return undefined
+    return withSlot[index % withSlot.length]
+  }
+
+  /* ─── Convocatorias ─── */
+
+  getConvocatoria(slug: string): Convocatoria | undefined {
+    return seedConvocatorias.find((c) => c.slug === slug)
+  }
+
+  submitApplication(convocatoriaId: string, data: Record<string, string>): Application {
+    const application: Application = {
+      id: newId('app'),
+      convocatoriaId,
+      ts: new Date().toISOString(),
+      status: 'preinscripta',
+      data,
+    }
+    const local = readJSON<Application[]>(K.applications, [])
+    writeJSON(K.applications, [...local, application])
+    this.track('application_submitted', { convocatoriaId, applicationId: application.id })
+    return application
+  }
+
+  getApplications(): Application[] {
+    const overrides = readJSON<Record<string, AppOverride>>(K.applicationOverrides, {})
+    const seeded = seedApplications.map((app) => {
+      const o = overrides[app.id]
+      return o ? { ...app, status: o.status, decidedAt: o.decidedAt } : app
+    })
+    const local = readJSON<Application[]>(K.applications, []).map((app) => {
+      const o = overrides[app.id]
+      return o ? { ...app, status: o.status, decidedAt: o.decidedAt } : app
+    })
+    return [...seeded, ...local].sort((a, b) => b.ts.localeCompare(a.ts))
+  }
+
+  decideApplication(applicationId: string, status: Exclude<ApplicationStatus, 'preinscripta'>): void {
+    const overrides = readJSON<Record<string, AppOverride>>(K.applicationOverrides, {})
+    overrides[applicationId] = { status, decidedAt: new Date().toISOString() }
+    writeJSON(K.applicationOverrides, overrides)
+    this.track(status === 'aceptada' ? 'application_accepted' : 'application_rejected', { applicationId })
+  }
+
+  /* ─── Analytics ─── */
+
+  track(event: string, payload?: Record<string, unknown>): void {
+    doTrack(event, payload)
+  }
+
+  getAnalytics(): AnalyticsEvent[] {
+    return [...seedAnalytics, ...getLocalAnalytics()].sort((a, b) => a.ts.localeCompare(b.ts))
+  }
+}

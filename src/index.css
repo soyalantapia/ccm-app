@@ -1,0 +1,161 @@
+@import 'tailwindcss';
+
+:root {
+  /* ─── Design tokens (runtime) ─────────────────────────────────────────
+     Única fuente de color/tipografía/radios de toda la app (D23).
+     El editor de tema del admin sobreescribe estas variables en vivo;
+     index.html las re-aplica desde localStorage antes del primer paint. */
+  --t-bg: #f4efe3;
+  --t-surface: #fbf8ef;
+  --t-ink: #181410;
+  --t-ink-soft: #6b6353;
+  --t-line: #ddd3bd;
+  --t-accent: #b98a2f;
+  --t-accent-ink: #1c1503;
+  --t-night: #131c2e;
+  --t-night-soft: #1d2a42;
+  --t-night-ink: #f0e8d5;
+  --t-radius-sm: 2px;
+  --t-radius-md: 8px;
+  --t-radius-lg: 18px;
+  --t-font-display: 'Fraunces Variable', 'Iowan Old Style', Georgia, serif;
+  --t-font-sans: 'Archivo Variable', system-ui, -apple-system, sans-serif;
+}
+
+@theme inline {
+  /* Reset Tailwind's default palette: ONLY token colors exist.
+     (Hardcodear un gray-500 directamente no compila a nada — a propósito.) */
+  --color-*: initial;
+  --color-bg: var(--t-bg);
+  --color-surface: var(--t-surface);
+  --color-ink: var(--t-ink);
+  --color-ink-soft: var(--t-ink-soft);
+  --color-line: var(--t-line);
+  --color-accent: var(--t-accent);
+  --color-accent-ink: var(--t-accent-ink);
+  --color-night: var(--t-night);
+  --color-night-soft: var(--t-night-soft);
+  --color-night-ink: var(--t-night-ink);
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-success: #2e7d4f;
+  --color-danger: #b3372e;
+
+  --font-display: var(--t-font-display);
+  --font-sans: var(--t-font-sans);
+
+  --radius-sm: var(--t-radius-sm);
+  --radius-md: var(--t-radius-md);
+  --radius-lg: var(--t-radius-lg);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-bg text-ink font-sans;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: var(--t-accent);
+    color: var(--t-accent-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--t-accent);
+    outline-offset: 2px;
+  }
+  button {
+    cursor: pointer;
+  }
+}
+
+/* ─── Editorial type helpers ─────────────────────────────────────────── */
+
+@utility type-display {
+  font-family: var(--t-font-display);
+  font-weight: 540;
+  font-variation-settings: 'opsz' 144;
+  line-height: 0.96;
+  letter-spacing: -0.018em;
+}
+
+@utility type-serif {
+  font-family: var(--t-font-display);
+  font-variation-settings: 'opsz' 40;
+}
+
+@utility eyebrow {
+  font-family: var(--t-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ─── Motion ─────────────────────────────────────────────────────────── */
+
+@keyframes ccm-rise {
+  from {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes ccm-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ccm-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes ccm-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@utility animate-rise {
+  animation: ccm-rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@utility animate-fade {
+  animation: ccm-fade 0.3s ease-out both;
+}
+@utility animate-sheet-up {
+  animation: ccm-sheet-up 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@utility animate-marquee {
+  animation: ccm-marquee 28s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
