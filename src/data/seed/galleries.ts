@@ -1,6 +1,7 @@
 import type { Gallery } from '../types'
 import { IDS } from '../ids'
 
+/** Galería del Camino a CCM de marzo — sponsor S3: Aura Beauty (PRD §6.7, §12). */
 export const seedGalleries: Gallery[] = [
   {
     id: IDS.gallery.camino,
@@ -10,6 +11,35 @@ export const seedGalleries: Gallery[] = [
     date: 'Marzo 2026',
     cover: 'img/gallery/g01.jpg',
     sponsorId: IDS.sponsors.beauty,
-    photos: [{ id: 'ph-01', src: 'img/gallery/g01.jpg', alt: 'Foto del evento' }],
+    photos: [
+      { id: 'ph-01', src: 'img/gallery/g01.jpg', alt: 'Apertura del desfile cápsula sobre la pasarela central' },
+      { id: 'ph-02', src: 'img/gallery/g02.jpg', alt: 'Modelo con vestido de autor en tonos crudos bajo luz cálida' },
+      { id: 'ph-03', src: 'img/gallery/g03.jpg', alt: 'Detalle de sastrería deconstruida con costuras vistas' },
+      { id: 'ph-04', src: 'img/gallery/g04.jpg', alt: 'Backstage: retoque de maquillaje minutos antes de salir' },
+      { id: 'ph-05', src: 'img/gallery/g05.jpg', alt: 'Fila de looks colgados en el camarín, listos para pasarela' },
+      { id: 'ph-06', src: 'img/gallery/g06.jpg', alt: 'Acreditación de invitados en el hall del Hotel Quinto Centenario' },
+      { id: 'ph-07', src: 'img/gallery/g07.jpg', alt: 'Charla de apertura a sala llena en el Salón Principal' },
+      { id: 'ph-08', src: 'img/gallery/g08.jpg', alt: 'Diseñadora emergente saludando al final de su pasada' },
+      { id: 'ph-09', src: 'img/gallery/g09.jpg', alt: 'Look de tejido artesanal en telar criollo, plano completo' },
+      { id: 'ph-10', src: 'img/gallery/g10.jpg', alt: 'Público en primera fila fotografiando el desfile con sus teléfonos' },
+      { id: 'ph-11', src: 'img/gallery/g11.jpg', alt: 'Detalle de accesorios: aros de autor en metal batido' },
+      { id: 'ph-12', src: 'img/gallery/g12.jpg', alt: 'Beauty look con delineado gráfico dorado, primer plano' },
+      { id: 'ph-13', src: 'img/gallery/g13.jpg', alt: 'Ronda de networking entre diseñadores y marcas en Espacio Sabores' },
+      { id: 'ph-14', src: 'img/gallery/g14.jpg', alt: 'Modelo de espaldas mostrando la caída de una capa asimétrica' },
+      { id: 'ph-15', src: 'img/gallery/g15.jpg', alt: 'Brindis de bienvenida con copas en alto al atardecer' },
+      { id: 'ph-16', src: 'img/gallery/g16.jpg', alt: 'Patchwork de denim recuperado en pasarela, plano medio' },
+      { id: 'ph-17', src: 'img/gallery/g17.jpg', alt: 'Equipo de backstage ajustando el calce de un vestido columna' },
+      { id: 'ph-18', src: 'img/gallery/g18.jpg', alt: 'Vista general de la pasarela central iluminada en azul noche' },
+      { id: 'ph-19', src: 'img/gallery/g19.jpg', alt: 'Retrato de invitada con look total black y blazer oversize' },
+      { id: 'ph-20', src: 'img/gallery/g20.jpg', alt: 'Masterclass en Sala Atelier con fichas técnicas sobre la mesa' },
+      { id: 'ph-21', src: 'img/gallery/g21.jpg', alt: 'Pasada final con todos los diseñadores sobre la pasarela' },
+      { id: 'ph-22', src: 'img/gallery/g22.jpg', alt: 'Detalle de textura: lana cruda teñida en tonos tierra' },
+      { id: 'ph-23', src: 'img/gallery/g23.jpg', alt: 'Fotógrafos de prensa al pie de la pasarela durante el cierre' },
+      { id: 'ph-24', src: 'img/gallery/g24.jpg', alt: 'Mesa de degustación de Sabores CCM con cocina de autor' },
+      { id: 'ph-25', src: 'img/gallery/g25.jpg', alt: 'Modelo riendo en backstage con ruleros y bata de camarín' },
+      { id: 'ph-26', src: 'img/gallery/g26.jpg', alt: 'Look de gala en pasarela: vestido largo con brillo sutil' },
+      { id: 'ph-27', src: 'img/gallery/g27.jpg', alt: 'Organización y jurados conversando al final de la jornada' },
+      { id: 'ph-28', src: 'img/gallery/g28.jpg', alt: 'Cierre de la noche: pasarela vacía con luces encendidas' },
+    ],
   },
 ]
