@@ -61,7 +61,7 @@ export interface DataStore {
   getPlans(): TicketPlan[]
   getPlan(id: PlanId): TicketPlan | undefined
   updatePlan(id: PlanId, patch: { price?: number | null; mpLink?: string }): void
-  createOrder(planId: PlanId): TicketOrder
+  createOrder(planId: PlanId, qty?: number): TicketOrder
   markOrderRedirected(orderId: string): void
   setOrderStatus(orderId: string, status: OrderStatus): void
   getOrders(): TicketOrder[]

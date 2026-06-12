@@ -1,4 +1,7 @@
 import { ButtonLink, Img, SectionTitle } from '../../components/ui'
+import { useStore } from '../../data/store'
+import { IDS } from '../../data/ids'
+import { formatMoney } from '../tickets/format'
 
 const GALAS = [
   {
@@ -19,6 +22,9 @@ const GALAS = [
 
 /** Experiencias de gala (PRD §6.1.5) — dark block azul noche. */
 export function GalasSection() {
+  const vipFrom = useStore(
+    (s) => s.getPlans().find((p) => p.kind === 'vip' && p.price !== null)?.price ?? null,
+  )
   return (
     <section className="bg-night text-night-ink">
       <div className="mx-auto max-w-6xl px-5 py-16 md:py-24">
@@ -53,10 +59,13 @@ export function GalasSection() {
           ))}
         </div>
         <div className="mt-12 flex flex-wrap items-center gap-5">
-          <ButtonLink to="/entradas" size="lg">
+          <ButtonLink to={`/eventos/${IDS.slugs.principal}#entradas`} size="lg">
             Comprá tu entrada VIP
           </ButtonLink>
-          <span className="text-[13px] text-night-ink/60">Cupos reducidos por gala.</span>
+          <span className="text-[13px] text-night-ink/60">
+            {vipFrom !== null ? <>Desde {formatMoney(vipFrom)} + cargo por servicio · </> : ''}
+            Cupos reducidos por gala.
+          </span>
         </div>
       </div>
     </section>

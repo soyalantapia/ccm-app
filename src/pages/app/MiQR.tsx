@@ -77,7 +77,10 @@ export default function MiQR() {
                   return (
                     <article key={o.id} className="flex items-center justify-between gap-4 border-t border-line py-4">
                       <div className="min-w-0">
-                        <h3 className="type-serif truncate text-lg text-ink">{plan?.name ?? o.planId}</h3>
+                        <h3 className="type-serif truncate text-lg text-ink">
+                          {plan?.name ?? o.planId}
+                          {(o.qty ?? 1) > 1 && <span className="text-ink-soft"> ×{o.qty}</span>}
+                        </h3>
                         <p className="mt-0.5 text-xs text-ink-soft">Orden del {formatDay(o.ts)}</p>
                       </div>
                       <Badge tone={meta.tone}>{meta.label}</Badge>

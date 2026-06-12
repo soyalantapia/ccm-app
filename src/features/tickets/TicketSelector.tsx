@@ -1,0 +1,211 @@
+import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
+import { ArrowUpRight, Check, Minus, Plus } from 'lucide-react'
+import { Badge, Button, Sheet } from '../../components/ui'
+import { store, useStore } from '../../data/store'
+import { IDS } from '../../data/ids'
+import type { TicketOrder, TicketPlan } from '../../data/types'
+import { registerFree } from '../../lib/actions'
+import { requireProfile } from '../../lib/profileRequest'
+import { formatMoney } from './format'
+
+interface PendingCheckout {
+  orders: TicketOrder[]
+  total: number
+  mpLink: string
+}
+
+/**
+ * Selector de entradas estilo ticketera (datos reales de la venta vigente):
+ * tiers con stepper de cantidad, cargo por servicio visible y barra sticky
+ * con el total. Las gratuitas inscriben directo (flujo D22 → QR).
+ */
+export function TicketSelector({ className }: { className?: string }) {
+  const navigate = useNavigate()
+  const plans = useStore((s) => s.getPlans())
+  const registered = useStore((s) => s.isRegistered(IDS.events.principal))
+
+  const [qty, setQty] = useState<Partial<Record<string, number>>>({})
+  const [pending, setPending] = useState<PendingCheckout | null>(null)
+  const [confirming, setConfirming] = useState(false)
+
+  const vipPlans = useMemo(() => plans.filter((p) => p.kind === 'vip'), [plans])
+
+  const totalQty = vipPlans.reduce((acc, p) => acc + (qty[p.id] ?? 0), 0)
+  const total = vipPlans.reduce(
+    (acc, p) => acc + (qty[p.id] ?? 0) * ((p.price ?? 0) + p.serviceCharge),
+    0,
+  )
+
+  const bump = (plan: TicketPlan, delta: number) =>
+    setQty((q) => ({ ...q, [plan.id]: Math.min(6, Math.max(0, (q[plan.id] ?? 0) + delta)) }))
+
+  const checkout = async () => {
+    const ok = await requireProfile(
+      ['firstName', 'lastName', 'email', 'profession', 'phone'],
+      'compra_vip',
+      { title: 'Para comprar tus entradas necesitamos estos datos' },
+    )
+    if (!ok) return
+    const selected = vipPlans.filter((p) => (qty[p.id] ?? 0) > 0)
+    const orders = selected.map((p) => store.createOrder(p.id, qty[p.id]!))
+    const mpLink = selected.find((p) => p.mpLink)?.mpLink ?? 'https://www.mercadopago.com.ar'
+    setPending({ orders, total, mpLink })
+  }
+
+  const goToMp = () => {
+    if (!pending) return
+    pending.orders.forEach((o) => store.markOrderRedirected(o.id))
+    window.open(pending.mpLink, '_blank', 'noopener')
+    setPending(null)
+    setQty({})
+    setConfirming(true)
+  }
+
+  return (
+    <div className={className}>
+      {confirming && (
+        <div className="mb-6 flex items-start gap-3 rounded-md border border-accent/40 bg-accent/10 p-4 animate-rise">
+          <Check size={16} className="mt-0.5 shrink-0 text-accent" />
+          <div className="text-sm leading-relaxed text-ink">
+            <span className="font-semibold">Estamos confirmando tu pago.</span> Tu orden quedó
+            registrada: apenas Mercado Pago confirme, tu entrada aparece en{' '}
+            <button onClick={() => navigate('/mi-qr')} className="underline decoration-accent underline-offset-2">
+              Mi QR
+            </button>
+            .
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-hidden rounded-md border border-line bg-surface">
+        {plans.map((plan) => {
+          const isFree = plan.kind === 'general'
+          const count = qty[plan.id] ?? 0
+          return (
+            <article
+              key={plan.id}
+              className={`flex items-center justify-between gap-4 border-t border-line p-4 first:border-t-0 md:p-5 ${
+                count > 0 ? 'bg-accent/5' : ''
+              }`}
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="type-serif text-[17px] leading-snug text-ink md:text-lg">
+                    {plan.name}
+                  </h3>
+                  {plan.preventa && <Badge tone="accent">Preventa</Badge>}
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-ink-soft">{plan.tagline}</p>
+                <p className="type-serif mt-2 text-lg text-ink">
+                  {isFree ? (
+                    'Gratis'
+                  ) : (
+                    <>
+                      {formatMoney(plan.price ?? 0)}
+                      <span className="ml-2 font-sans text-[11px] text-ink-soft">
+                        +{formatMoney(plan.serviceCharge)} por servicio
+                      </span>
+                    </>
+                  )}
+                </p>
+              </div>
+
+              {isFree ? (
+                registered ? (
+                  <Badge tone="success" className="shrink-0">
+                    <Check size={11} /> Inscripto
+                  </Badge>
+                ) : (
+                  <Button size="sm" variant="outline" className="shrink-0" onClick={() => void registerFree(navigate)}>
+                    Inscribirme
+                  </Button>
+                )
+              ) : (
+                <div className="flex shrink-0 items-center gap-3">
+                  <button
+                    aria-label={`Quitar ${plan.name}`}
+                    onClick={() => bump(plan, -1)}
+                    disabled={count === 0}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-line text-ink transition-all active:scale-90 disabled:opacity-30 hover:border-ink"
+                  >
+                    <Minus size={14} />
+                  </button>
+                  <span className="type-serif w-5 text-center text-lg tabular-nums text-ink">{count}</span>
+                  <button
+                    aria-label={`Agregar ${plan.name}`}
+                    onClick={() => bump(plan, 1)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-accent-ink shadow-sm transition-all active:scale-90 hover:brightness-105"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+              )}
+            </article>
+          )
+        })}
+      </div>
+
+      <p className="mt-3 text-[11px] leading-relaxed text-ink-soft/80">
+        Las experiencias VIP tienen acceso independiente de la entrada general. Cupos limitados.
+      </p>
+
+      {/* Espaciador para que la barra sticky no tape contenido */}
+      {totalQty > 0 && <div className="h-24" aria-hidden />}
+
+      {/* Barra de compra sticky (app-style) — portal a body: el wrapper de
+          transición de página crea un containing block y rompería el fixed */}
+      {totalQty > 0 &&
+        createPortal(
+          <div className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 px-4 md:bottom-6 animate-rise">
+            <div className="mx-auto flex max-w-xl items-center justify-between gap-4 rounded-md bg-night p-3 pl-5 text-night-ink shadow-2xl">
+              <div>
+                <div className="type-serif text-lg leading-tight">{formatMoney(total)}</div>
+                <div className="text-[11px] text-night-ink/60">
+                  {totalQty} {totalQty === 1 ? 'entrada' : 'entradas'} · incluye cargo por servicio
+                </div>
+              </div>
+              <Button onClick={() => void checkout()} className="shrink-0">
+                Continuar
+              </Button>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* Sheet de salida a Mercado Pago */}
+      <Sheet open={pending !== null} onClose={() => setPending(null)} title="Te llevamos a Mercado Pago">
+        {pending && (
+          <div>
+            <p className="text-[15px] leading-relaxed text-ink-soft">
+              Tu orden por{' '}
+              <span className="font-semibold text-ink">{formatMoney(pending.total)}</span> ya quedó
+              registrada: completá el pago en Mercado Pago y confirmamos tu lugar.
+            </p>
+            <ul className="mt-4 space-y-1.5 border-t border-line pt-4">
+              {pending.orders.map((o) => {
+                const plan = store.getPlan(o.planId)
+                return (
+                  <li key={o.id} className="flex items-baseline justify-between gap-4 text-sm">
+                    <span className="text-ink">
+                      {plan?.name ?? o.planId}
+                      {o.qty > 1 && <span className="text-ink-soft"> ×{o.qty}</span>}
+                    </span>
+                    <span className="type-serif text-ink">{formatMoney(o.total)}</span>
+                  </li>
+                )
+              })}
+            </ul>
+            <Button size="lg" className="mt-6 w-full" onClick={goToMp}>
+              Ir a Mercado Pago <ArrowUpRight size={16} strokeWidth={2.25} aria-hidden />
+            </Button>
+            <p className="eyebrow mt-4 text-center text-[10px] text-ink-soft/70">
+              Pago seguro · se abre en una pestaña nueva
+            </p>
+          </div>
+        )}
+      </Sheet>
+    </div>
+  )
+}

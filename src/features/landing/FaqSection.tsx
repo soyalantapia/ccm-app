@@ -7,81 +7,82 @@ import { IDS } from '../../data/ids'
 
 const linkClass = 'font-semibold text-ink underline decoration-accent underline-offset-4 transition-colors hover:text-accent'
 
+/** Las preguntas reales de la página oficial del evento (Tikealo). */
 const FAQS: { q: string; a: ReactNode }[] = [
   {
-    q: '¿Qué gano si me registro?',
-    a: 'Sorteos, descuentos y beneficios exclusivos antes, durante y después del evento. Registrarte es gratis y te toma menos de un minuto: no te pedimos contraseña.',
+    q: '🎁 ¿Qué beneficios tiene registrarse?',
+    a: 'Sorteos, descuentos y beneficios exclusivos antes, durante y después del evento — además de tu QR de acceso siempre a mano. Registrarte es gratis y sin contraseña.',
   },
   {
-    q: '¿La entrada es gratuita?',
-    a: 'Sí. La entrada general es gratuita con inscripción previa obligatoria: sin inscripción no se ingresa.',
+    q: '📝 ¿Cómo me inscribo?',
+    a: 'Tocá "Registrate gratis": te pedimos nombre, email y profesión una sola vez, y tu acreditación con QR queda lista al instante en Mi QR.',
   },
   {
-    q: '¿Hay cupos?',
-    a: 'Sí, los cupos son limitados. Inscribite cuanto antes para asegurar tu lugar.',
+    q: '🎟️ ¿La entrada es gratuita?',
+    a: 'Sí. La acreditación general ("Primera Pasada") de sábado y domingo es gratuita con inscripción previa obligatoria.',
   },
   {
-    q: '¿Dónde es y cómo llego?',
+    q: '🌟 ¿Qué incluye la entrada general?',
+    a: 'Acceso a las 7 plataformas, +100 stands interactivos, pasarelas Primavera/Verano, workshops, degustaciones, intervenciones artísticas y los espacios de networking, durante toda la jornada.',
+  },
+  {
+    q: '✨ ¿Qué son las experiencias exclusivas?',
     a: (
       <>
-        En el {config.venue.name}, {config.venue.address}.{' '}
+        Las dos noches premium con acceso independiente: Night VIP + Desfile de las Estrellas (sábado 19
+        a 21 hs) y Sunset VIP + Desfile Internacional (domingo 18 a 20 hs), con desfiles exclusivos,
+        música en vivo, degustaciones y shows. También hay un combo de las dos noches.{' '}
+        <Link to={`/eventos/${IDS.slugs.principal}#entradas`} className={linkClass}>
+          Ver precios y comprar
+        </Link>
+        .
+      </>
+    ),
+  },
+  {
+    q: '📍 ¿Cuándo y dónde se realiza el evento?',
+    a: (
+      <>
+        Sábado 19 (9 a 21 hs) y domingo 20 de septiembre (9 a 20 hs) en el {config.venue.name},{' '}
+        {config.venue.address}.{' '}
         <a href={config.venue.mapsUrl} target="_blank" rel="noreferrer" className={linkClass}>
-          Cómo llegar
+          Mostrar mapa
         </a>
         .
       </>
     ),
   },
   {
-    q: '¿Hay estacionamiento?',
-    a: 'Sí: estacionamiento sin cargo en el Shopping Nuevo Centro.',
+    q: '⚠️ ¿Qué pasa si no me registro?',
+    a: 'Sin inscripción no se ingresa. La entrada es gratuita pero la inscripción previa es obligatoria y los cupos son limitados.',
   },
   {
-    q: '¿En qué horario es el evento?',
-    a: 'De 9 a 21 hs, ambas jornadas: sábado 19 y domingo 20 de septiembre.',
-  },
-  {
-    q: '¿Qué incluye la entrada general?',
-    a: 'Acceso a las 7 plataformas, +100 stands interactivos, pasarelas y workshops durante las dos jornadas.',
-  },
-  {
-    q: '¿Qué son las galas VIP y cómo las compro?',
+    q: '🎫 ¿Cómo compro entradas para los eventos VIP?',
     a: (
       <>
-        Son las dos pasarelas centrales con acceso pago: Night VIP + Desfile de las Estrellas (sábado 19, 19 a 21 hs)
-        y Sunset VIP + Desfile Internacional (domingo 20, 18 a 20 hs). Comprá la tuya en{' '}
+        Desde la{' '}
+        <Link to={`/eventos/${IDS.slugs.principal}#entradas`} className={linkClass}>
+          ficha del evento
+        </Link>{' '}
+        o en{' '}
         <Link to="/entradas" className={linkClass}>
           Entradas
         </Link>
-        .
+        : elegís cantidad y pagás por Mercado Pago. El cargo por servicio se muestra antes de confirmar.
       </>
     ),
   },
   {
-    q: '¿Hay espacios de networking?',
-    a: 'Sí: networking y coworking durante las dos jornadas, pensados para conectar con las +250 unidades de negocio del ecosistema.',
+    q: '🔥 ¿Hay cupos limitados?',
+    a: 'Sí: tanto la entrada general como cada charla, masterclass y experiencia VIP tienen cupo. Cuando un bloque se llena vas a verlo marcado como "Completo".',
   },
   {
-    q: '¿Cómo me postulo para participar?',
-    a: (
-      <>
-        A través de los Caminos a CCM: completá la postulación con tu historia y tu portfolio, y el equipo confirma tu
-        lugar.{' '}
-        <Link to={`/c/${IDS.convocatoriaSlugs.camino}`} className={linkClass}>
-          Postulate acá
-        </Link>
-        .
-      </>
-    ),
+    q: '🚗 ¿Hay estacionamiento?',
+    a: 'Sí: estacionamiento sin cargo en el Shopping Nuevo Centro.',
   },
   {
-    q: '¿Quién organiza CCM?',
-    a: (
-      <>
-        Córdoba Corazón de Moda, en su 14ª edición consecutiva. Produce {config.produceCredit}. Seguinos en Instagram:{' '}
-        {config.instagramHandle}.
-      </>
-    ),
+    q: '🤝 ¿Se puede hacer networking?',
+    a: 'Es uno de los ejes del evento: espacios de networking y coworking durante las dos jornadas, pensados para conectar profesionales, marcas y oportunidades de negocio.',
   },
 ]
 

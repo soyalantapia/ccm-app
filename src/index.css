@@ -151,6 +151,21 @@
   animation: ccm-marquee 28s linear infinite;
 }
 
+/* Transición de ruta (app-feel): fade + rise sutil y rápido */
+@keyframes ccm-page {
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@utility animate-page {
+  animation: ccm-page 0.24s ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

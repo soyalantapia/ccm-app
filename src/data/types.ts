@@ -74,7 +74,8 @@ export interface Registration {
 
 /* ─── Entradas y órdenes ─── */
 
-export type PlanId = 'general' | 'night-vip' | 'sunset-vip'
+/** Tiers reales del evento (fuente: página oficial en Tikealo). */
+export type PlanId = 'sab-general' | 'sab-night-vip' | 'combo-vip' | 'dom-general' | 'dom-sunset-vip'
 
 export interface TicketPlan {
   id: PlanId
@@ -82,9 +83,14 @@ export interface TicketPlan {
   tagline: string
   /** null = precio pendiente de confirmar ([PENDIENTE] PRD §18) */
   price: number | null
+  /** Cargo por servicio por unidad (0 en las gratuitas). */
+  serviceCharge: number
   mpLink: string | null
   perks: string[]
   featured?: boolean
+  day: 'sabado' | 'domingo' | 'combo'
+  kind: 'general' | 'vip'
+  preventa?: boolean
 }
 
 export type OrderStatus = 'iniciada' | 'redirigida_mp' | 'confirmada' | 'cancelada'
@@ -96,6 +102,9 @@ export interface TicketOrder {
   status: OrderStatus
   buyerName?: string
   buyerEmail?: string
+  qty: number
+  /** (precio + cargo por servicio) × qty al momento de crear la orden. */
+  total: number
 }
 
 /* ─── Catálogo ─── */

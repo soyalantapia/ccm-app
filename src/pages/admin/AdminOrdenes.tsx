@@ -4,7 +4,7 @@ import { store, useStore } from '../../data/store'
 import type { OrderStatus } from '../../data/types'
 import { OpsPlanEditor } from '../../features/admin/OpsPlanEditor'
 import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
-import { formatDateTime } from '../../features/admin/opsFormat'
+import { formatDateTime, formatMoney } from '../../features/admin/opsFormat'
 
 const STATUS_META: Record<OrderStatus, { label: string; tone: BadgeTone }> = {
   iniciada: { label: 'Iniciada', tone: 'neutral' },
@@ -20,6 +20,8 @@ interface OrderRow {
   ts: string
   status: OrderStatus
   historic: boolean
+  qty?: number
+  total?: number
 }
 
 export default function AdminOrdenes() {
@@ -44,6 +46,8 @@ export default function AdminOrdenes() {
       ts: o.ts,
       status: o.status,
       historic: false,
+      qty: o.qty ?? 1,
+      total: o.total,
     })),
     ...seedCreated.map((e) => ({
       id: e.id,
@@ -117,6 +121,7 @@ export default function AdminOrdenes() {
                   <tr className="border-b border-line">
                     <th className="eyebrow pb-3 pr-4 text-[10px] font-normal text-ink-soft">Comprador</th>
                     <th className="eyebrow pb-3 pr-4 text-[10px] font-normal text-ink-soft">Plan</th>
+                    <th className="eyebrow pb-3 pr-4 text-[10px] font-normal text-ink-soft">Total</th>
                     <th className="eyebrow pb-3 pr-4 text-[10px] font-normal text-ink-soft">Fecha</th>
                     <th className="eyebrow pb-3 pr-4 text-[10px] font-normal text-ink-soft">Estado</th>
                     <th className="pb-3" />
@@ -133,7 +138,13 @@ export default function AdminOrdenes() {
                           </Badge>
                         )}
                       </td>
-                      <td className="type-serif py-4 pr-4 text-base text-ink">{planName(row.planId)}</td>
+                      <td className="type-serif py-4 pr-4 text-base text-ink">
+                        {planName(row.planId)}
+                        {(row.qty ?? 1) > 1 && <span className="text-ink-soft"> ×{row.qty}</span>}
+                      </td>
+                      <td className="type-serif py-4 pr-4 text-base text-ink">
+                        {row.total !== undefined ? formatMoney(row.total) : '—'}
+                      </td>
                       <td className="py-4 pr-4 text-sm text-ink-soft">{formatDateTime(row.ts)}</td>
                       <td className="py-4 pr-4">
                         <Badge tone={STATUS_META[row.status].tone}>{STATUS_META[row.status].label}</Badge>
@@ -152,7 +163,11 @@ export default function AdminOrdenes() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-[15px] text-ink">{row.buyer}</div>
-                      <div className="type-serif mt-0.5 text-base text-ink">{planName(row.planId)}</div>
+                      <div className="type-serif mt-0.5 text-base text-ink">
+                        {planName(row.planId)}
+                        {(row.qty ?? 1) > 1 && <span className="text-ink-soft"> ×{row.qty}</span>}
+                        {row.total !== undefined && <span> · {formatMoney(row.total)}</span>}
+                      </div>
                       <div className="mt-1 text-xs text-ink-soft">{formatDateTime(row.ts)}</div>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">

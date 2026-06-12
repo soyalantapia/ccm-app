@@ -33,3 +33,11 @@ Decisiones tomadas durante la construcción de la demo, con su porqué. Los [PEN
 
 19. **Lighthouse móvil (simulación slow-4G): Performance 90 · CLS 0 · TBT 0ms · LCP 3,0s.** Optimizaciones aplicadas: imágenes recomprimidas (hero 381KB→90KB, total 14MB→8,7MB), preload del hero con fetchpriority high, landing eager (sin chunk lazy en la ruta de entrada), `qrcode` con import dinámico, app-shell estático del hero en `index.html` (pinta antes de que llegue el JS). El LCP simulado a slow-4G queda en 3,0s porque una SPA client-side no puede pintar antes de descargar JS+CSS; en 4G real/wifi el primer paint queda ~1-1,5s y las visitas siguientes cargan de la caché del service worker (~0,1s). La palanca para bajar de 2,5s en frío es el prerender de rutas públicas, ya previsto por el PRD §17 para la fase siguiente.
 20. **Reset de demo**: Admin → Configuración → "Reiniciar datos de la demo" limpia el dispositivo para presentar desde cero (recomendado antes de la reunión).
+
+## Iteración app-feel + datos reales de Tikealo (2026-06-12)
+
+21. **Precios y tiers REALES** (fuente: página oficial del evento en Tikealo): Sábado/Domingo Primera Pasada $0 · Night VIP $30.000 + $3.000 servicio · Sunset VIP $30.000 + $3.000 · Combo VIP 2 noches $50.000 + $5.000. Ya no hay "precio a confirmar"; los links de MP siguen placeholder editables.
+22. **La compra vive ADENTRO del evento**: la ficha del principal (`/eventos/ccm-2026`) es ahora una página de expo completa estilo ticketera: selector de entradas con stepper de cantidad + cargo por servicio + barra sticky con total → Mercado Pago; debajo info real del evento, "qué vas a vivir", experiencias especiales, por qué asistir, agenda por bloques y Director General (Néstor Moio). `/entradas` reusa el mismo selector.
+23. **App-feel**: banner hero del evento principal en `/eventos`; transiciones de página (fade+rise 240ms); footer web oculto en mobile fuera de la landing (manda el bottom nav); botón volver flotante en fichas; tap feedback global (`active:scale`); barra de compra en portal (evita el containing block del wrapper animado).
+24. **FAQ** actualizada a las 11 preguntas reales de Tikealo (con sus emojis) y descripción del evento principal con el copy oficial.
+25. Una orden ahora registra **cantidad y total** ((precio+servicio)×qty); visible en Mi QR y en Admin → Órdenes.

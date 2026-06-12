@@ -247,13 +247,20 @@ function Footer() {
 }
 
 export default function SiteLayout() {
+  const { pathname } = useLocation()
   return (
     <div className="flex min-h-dvh flex-col">
       <Header />
       <main className="flex-1 pb-24 md:pb-0">
-        <Outlet />
+        {/* Transición de página (app-feel): remonta con un fade+rise corto */}
+        <div key={pathname} className="animate-page">
+          <Outlet />
+        </div>
       </main>
-      <Footer />
+      {/* En mobile el footer web solo vive en la landing; adentro manda el bottom nav */}
+      <div className={pathname === '/' ? '' : 'hidden md:block'}>
+        <Footer />
+      </div>
       <BottomNav />
     </div>
   )

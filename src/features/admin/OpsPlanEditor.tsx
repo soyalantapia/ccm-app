@@ -9,7 +9,7 @@ import { formatMoney } from './opsFormat'
  * editables en vivo (PRD §10.15). La General es gratuita y sin link.
  */
 export function OpsPlanEditor({ plan }: { plan: TicketPlan }) {
-  const isFree = plan.id === 'general'
+  const isFree = plan.kind === 'general'
   const [price, setPrice] = useState(plan.price === null || plan.price === 0 ? '' : String(plan.price))
   const [mpLink, setMpLink] = useState(plan.mpLink ?? '')
 
@@ -45,13 +45,18 @@ export function OpsPlanEditor({ plan }: { plan: TicketPlan }) {
       <div className="mt-4 border-t border-line pt-4">
         <div className="type-serif text-2xl text-ink">
           {plan.price === null ? <span className="text-ink-soft">A confirmar</span> : formatMoney(plan.price)}
+          {!isFree && plan.serviceCharge > 0 && (
+            <span className="ml-2 font-sans text-[11px] text-ink-soft">
+              +{formatMoney(plan.serviceCharge)} por servicio
+            </span>
+          )}
         </div>
         <div className="eyebrow mt-1 text-[9px] text-ink-soft">Precio actual</div>
       </div>
 
       {isFree ? (
         <p className="mt-5 border-t border-line pt-4 text-xs leading-relaxed text-ink-soft">
-          La entrada general es gratuita con inscripción previa obligatoria — sin link de pago.
+          Acreditación general gratuita con inscripción previa obligatoria — sin link de pago.
         </p>
       ) : (
         <div className="mt-5 space-y-4 border-t border-line pt-4">

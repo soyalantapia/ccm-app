@@ -146,7 +146,7 @@ export const seedAnalytics: AnalyticsEvent[] = [
     event: 'ticket_order_created',
     ts: '2026-06-09T21:30:00-03:00',
     deviceId: 'dev-seed-0004',
-    payload: { planId: 'night-vip' },
+    payload: { planId: 'sab-night-vip' },
     seed: true,
   },
   {
@@ -154,7 +154,7 @@ export const seedAnalytics: AnalyticsEvent[] = [
     event: 'ticket_order_redirected_mp',
     ts: '2026-06-09T21:31:00-03:00',
     deviceId: 'dev-seed-0004',
-    payload: { planId: 'night-vip' },
+    payload: { planId: 'sab-night-vip' },
     seed: true,
   },
 
