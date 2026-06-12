@@ -20,7 +20,36 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <style>
+      /* Static app shell: paints the hero before the JS bundle arrives (mobile
+         LCP). React lo reemplaza al montar; replica layout y tokens default. */
+      #ccm-shell { background: #f4efe3; color: #181410; min-height: 100vh; }
+      #ccm-shell .sh-header { height: 4rem; display: flex; align-items: center; border-bottom: 1px solid #ddd3bd; }
+      #ccm-shell .sh-wrap { max-width: 72rem; margin: 0 auto; padding: 0 1.25rem; width: 100%; box-sizing: border-box; }
+      #ccm-shell .sh-mark { font-family: 'Iowan Old Style', Georgia, serif; font-size: 26px; line-height: 1; }
+      #ccm-shell .sh-hero { padding-top: 2.5rem; }
+      #ccm-shell .sh-eyebrow { display: flex; align-items: center; gap: .75rem; text-transform: uppercase; letter-spacing: .22em; font-size: .6875rem; font-weight: 600; color: #b98a2f; font-family: system-ui, sans-serif; }
+      #ccm-shell .sh-eyebrow::before { content: ''; width: 2rem; height: 1px; background: #b98a2f; }
+      #ccm-shell h1 { font-family: 'Iowan Old Style', Georgia, serif; font-weight: 600; font-size: clamp(2.6rem, 9vw, 5.5rem); line-height: .96; letter-spacing: -0.018em; margin: 1.5rem 0 0; }
+      #ccm-shell h1 em { color: #b98a2f; }
+      #ccm-shell .sh-sub { font-family: 'Iowan Old Style', Georgia, serif; font-size: 1.125rem; color: #6b6353; margin-top: 1.5rem; }
+      @media (min-width: 768px) { #ccm-shell .sh-hero { padding-top: 4rem; } #ccm-shell .sh-sub { font-size: 1.25rem; } }
+    </style>
+    <div id="root"><div id="ccm-shell">
+      <header class="sh-header"><div class="sh-wrap"><span class="sh-mark">CCM</span></div></header>
+      <div class="sh-wrap sh-hero">
+        <p class="sh-eyebrow">14ª Edición · 19 y 20 de septiembre 2026</p>
+        <h1>El <em>Ecosistema</em> de Negocios y <em>Tendencias</em> más influyente del interior del país</h1>
+        <p class="sh-sub">Hotel Quinto Centenario · Córdoba · 9 a 21 hs</p>
+      </div>
+    </div></div>
+    <script>
+      // El shell solo corresponde a la landing; en rutas profundas se oculta.
+      if (!/\/ccm-app\/?(\?|#|$)/.test(location.pathname + location.search)) {
+        var sh = document.getElementById('ccm-shell')
+        if (sh) sh.style.display = 'none'
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -28,3 +28,8 @@ Decisiones tomadas durante la construcción de la demo, con su porqué. Los [PEN
 16. **Admin**: clave simple `ccm2026` definida en `src/config` (provisorio, documentado en pantalla); auth real con email+contraseña llega en Fase 1.
 17. **Postulaciones seed + decisiones**: las decisiones del admin sobre postulaciones seed se guardan como overrides en localStorage (el seed es inmutable).
 18. **Theming**: además del editor por token, presets de un toque ("Editorial CCM", "Noche de gala", "Bordeaux", "Esmeralda") para demostrar D23 en vivo.
+
+## Performance (medido en la URL pública, 2026-06-11)
+
+19. **Lighthouse móvil (simulación slow-4G): Performance 90 · CLS 0 · TBT 0ms · LCP 3,0s.** Optimizaciones aplicadas: imágenes recomprimidas (hero 381KB→90KB, total 14MB→8,7MB), preload del hero con fetchpriority high, landing eager (sin chunk lazy en la ruta de entrada), `qrcode` con import dinámico, app-shell estático del hero en `index.html` (pinta antes de que llegue el JS). El LCP simulado a slow-4G queda en 3,0s porque una SPA client-side no puede pintar antes de descargar JS+CSS; en 4G real/wifi el primer paint queda ~1-1,5s y las visitas siguientes cargan de la caché del service worker (~0,1s). La palanca para bajar de 2,5s en frío es el prerender de rutas públicas, ya previsto por el PRD §17 para la fase siguiente.
+20. **Reset de demo**: Admin → Configuración → "Reiniciar datos de la demo" limpia el dispositivo para presentar desde cero (recomendado antes de la reunión).
