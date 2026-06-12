@@ -13,7 +13,9 @@ import { ToastHost } from './components/ui'
 import { track } from './lib/track'
 import NotFound from './pages/NotFound'
 
-const Landing = lazy(() => import('./pages/Landing'))
+// Landing is the entry route: imported eagerly so the first paint skips a
+// lazy-chunk round trip (mobile LCP). Everything else stays code-split.
+import Landing from './pages/Landing'
 const Entradas = lazy(() => import('./pages/Entradas'))
 const Eventos = lazy(() => import('./pages/Eventos'))
 const EventoFicha = lazy(() => import('./pages/EventoFicha'))
@@ -72,7 +74,7 @@ const router = createBrowserRouter(
         {
           element: <SiteLayout />,
           children: [
-            { path: '/', element: <S><Landing /></S> },
+            { path: '/', element: <Landing /> },
             { path: '/entradas', element: <S><Entradas /></S> },
             { path: '/eventos', element: <S><Eventos /></S> },
             { path: '/eventos/:slug', element: <S><EventoFicha /></S> },
