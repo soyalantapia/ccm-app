@@ -29,7 +29,7 @@ export default function Catalogo() {
   }, [catalog, platform, query])
 
   return (
-    <section className="mx-auto max-w-6xl px-5 py-16 md:py-24">
+    <section className="mx-auto max-w-6xl px-5 pb-16 pt-6 md:pb-24 md:pt-8">
       <SectionTitle
         eyebrow="Quiénes hacen CCM"
         title={
