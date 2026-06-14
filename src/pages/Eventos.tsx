@@ -98,7 +98,7 @@ export default function Eventos() {
           eyebrow="Antes de septiembre"
           title={
             <>
-              Caminos y <em className="italic text-accent">encuentros</em>
+              Caminos y <em className="text-accent">encuentros</em>
             </>
           }
           lead="Los eventos previos del ecosistema: charlas, networking y desfiles cápsula con cupo limitado."

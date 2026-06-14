@@ -12,7 +12,7 @@ export function ConvocatoriaBanner() {
         <div className="max-w-xl">
           <Eyebrow>Convocatoria abierta</Eyebrow>
           <h2 className="type-display mt-4 text-[clamp(2rem,6vw,3.4rem)] text-balance text-night-ink">
-            ¿Querés ser parte del <em className="italic text-accent">desfile</em>?
+            ¿Querés ser parte del <em className="text-accent">desfile</em>?
           </h2>
           <p className="mt-4 text-[15px] leading-relaxed text-night-ink/70">
             Contanos tu historia y postulate a los encuentros que nos llevan a la 14ª edición. Vení

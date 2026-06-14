@@ -18,7 +18,7 @@
   --t-radius-sm: 2px;
   --t-radius-md: 8px;
   --t-radius-lg: 18px;
-  --t-font-display: 'Fraunces Variable', 'Iowan Old Style', Georgia, serif;
+  --t-font-display: 'Schibsted Grotesk Variable', 'Archivo Variable', system-ui, sans-serif;
   --t-font-sans: 'Archivo Variable', system-ui, -apple-system, sans-serif;
 }
 
@@ -69,21 +69,28 @@
   button {
     cursor: pointer;
   }
+  /* Énfasis sin cursiva: el acento se hace con peso + color (text-accent),
+     nunca con itálica. Mata la itálica por defecto del navegador en <em>. */
+  em {
+    font-style: normal;
+  }
 }
 
-/* ─── Editorial type helpers ─────────────────────────────────────────── */
+/* ─── Type helpers (sans display, app-first) ──────────────────────────── */
 
 @utility type-display {
   font-family: var(--t-font-display);
-  font-weight: 540;
-  font-variation-settings: 'opsz' 144;
-  line-height: 0.96;
-  letter-spacing: -0.018em;
+  font-weight: 720;
+  line-height: 1.02;
+  letter-spacing: -0.022em;
 }
 
 @utility type-serif {
+  /* Display secundario (subtítulos, nombres, precios, horarios): misma sans,
+     peso medio. Mantiene el nombre de la utilidad por compatibilidad. */
   font-family: var(--t-font-display);
-  font-variation-settings: 'opsz' 40;
+  font-weight: 560;
+  letter-spacing: -0.011em;
 }
 
 @utility eyebrow {

@@ -52,7 +52,7 @@ export function SponsorForm() {
         <span aria-hidden className="mb-6 inline-block h-px w-10 bg-accent" />
         <p className="type-serif text-2xl text-ink md:text-3xl">
           Gracias — el equipo comercial te contacta en{' '}
-          <em className="italic text-accent">48 hs</em>.
+          <em className="text-accent">48 hs</em>.
         </p>
         <p className="mt-4 max-w-md text-[15px] leading-relaxed text-ink-soft">
           Tomamos nota de {values.company.trim()} para el rubro {values.industry.toLowerCase()}.

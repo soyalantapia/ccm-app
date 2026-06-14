@@ -19,7 +19,7 @@ export function RecentContent() {
             eyebrow="Contenido reciente"
             title={
               <>
-                CCM se <em className="italic text-accent">mira</em>
+                CCM se <em className="text-accent">mira</em>
               </>
             }
             lead="Aftermovies, desfiles y backstage de cada edición — sin salir de la plataforma."

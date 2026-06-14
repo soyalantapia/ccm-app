@@ -63,7 +63,7 @@ export function PrincipalBody({ event }: { event: EventItem }) {
               eyebrow="Entradas"
               title={
                 <>
-                  Asegurá tu <em className="italic text-accent">lugar</em>
+                  Asegurá tu <em className="text-accent">lugar</em>
                 </>
               }
               lead="La entrada general es gratuita con inscripción obligatoria. Las experiencias VIP se compran acá mismo."
@@ -107,7 +107,7 @@ export function PrincipalBody({ event }: { event: EventItem }) {
             eyebrow="Experiencias especiales"
             title={
               <>
-                Con acceso <em className="italic text-accent">independiente</em>
+                Con acceso <em className="text-accent">independiente</em>
               </>
             }
             lead="Desfiles exclusivos, música en vivo, shows y experiencias premium dentro del evento."
@@ -122,7 +122,7 @@ export function PrincipalBody({ event }: { event: EventItem }) {
                 <div>
                   <div className="eyebrow text-[9px] text-accent">{x.when}</div>
                   <div className="type-display mt-1.5 text-2xl md:text-3xl">{x.name}</div>
-                  <div className="type-serif mt-0.5 text-base italic text-night-ink/75">{x.show}</div>
+                  <div className="type-serif mt-0.5 text-base text-night-ink/75">{x.show}</div>
                 </div>
                 <div className="shrink-0 text-right">
                   {vipFrom !== null && (
@@ -160,7 +160,7 @@ export function PrincipalBody({ event }: { event: EventItem }) {
             eyebrow="Agenda · inscripción por bloque"
             title={
               <>
-                El <em className="italic text-accent">programa</em>
+                El <em className="text-accent">programa</em>
               </>
             }
             lead="Charlas, masterclasses y desfiles con cupo limitado. La disponibilidad se actualiza en vivo."

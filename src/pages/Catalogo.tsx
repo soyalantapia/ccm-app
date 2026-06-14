@@ -34,7 +34,7 @@ export default function Catalogo() {
         eyebrow="Quiénes hacen CCM"
         title={
           <>
-            Catálogo <em className="italic text-accent">CCM</em>
+            Catálogo <em className="text-accent">CCM</em>
           </>
         }
         lead="Diseñadores, artistas, influencers y marcas: las personas que hacen latir Córdoba Corazón de Moda. Tocá un perfil y mirá su trabajo de cerca."

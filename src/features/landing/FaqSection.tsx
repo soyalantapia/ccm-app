@@ -96,7 +96,7 @@ export function FaqSection() {
             eyebrow="Preguntas frecuentes"
             title={
               <>
-                Todo lo que <em className="italic text-accent">querés</em> saber
+                Todo lo que <em className="text-accent">querés</em> saber
               </>
             }
           />

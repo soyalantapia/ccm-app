@@ -17,7 +17,7 @@ export function CatalogCarousel() {
             eyebrow="Catálogo CCM"
             title={
               <>
-                Los <em className="italic text-accent">protagonistas</em> del ecosistema
+                Los <em className="text-accent">protagonistas</em> del ecosistema
               </>
             }
             lead="Diseñadores, artistas, influencers y marcas verificadas, con su portfolio completo."

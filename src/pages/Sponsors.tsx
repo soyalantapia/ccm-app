@@ -67,7 +67,7 @@ export default function Sponsors() {
           eyebrow="Sponsors · CCM 2026"
           title={
             <>
-              Cada plataforma, un <em className="italic text-accent">mercado</em> propio
+              Cada plataforma, un <em className="text-accent">mercado</em> propio
             </>
           }
           lead="Moda, belleza, turismo, arte, gastronomía, tecnología y sustentabilidad: siete plataformas con audiencia propia y una sola marca por rubro. Stands y activaciones, charlas y masterclasses, experiencias de marca y una base segmentada que sigue trabajando después del evento."
@@ -118,7 +118,7 @@ export default function Sponsors() {
             eyebrow="La plataforma"
             title={
               <>
-                Todo se <em className="italic text-accent">mide</em>
+                Todo se <em className="text-accent">mide</em>
               </>
             }
             lead="Esta plataforma convierte cada punto de contacto del evento en datos propios y trazables. Tres promesas que tu marca recibe firmadas:"
@@ -150,7 +150,7 @@ export default function Sponsors() {
             eyebrow="Estructura comercial"
             title={
               <>
-                Exclusividad por <em className="italic text-accent">rubro</em>
+                Exclusividad por <em className="text-accent">rubro</em>
               </>
             }
             lead="Una sola marca por categoría: si tu empresa toma un rubro, ningún competidor entra al evento ni a la plataforma. No vendemos espacios sueltos — vendemos mercados enteros, con resultados medidos."
@@ -208,7 +208,7 @@ export default function Sponsors() {
               eyebrow="Contacto comercial"
               title={
                 <>
-                  Hablemos de tu <em className="italic text-accent">marca</em>
+                  Hablemos de tu <em className="text-accent">marca</em>
                 </>
               }
               lead="Contanos quién sos y qué rubro querés tomar. El equipo comercial arma una propuesta a medida: stand, activación, contenido o el evento entero."

@@ -22,8 +22,8 @@ export function Hero() {
           <div className="relative z-10 animate-rise md:col-span-7 md:-mr-12">
             <Eyebrow>14ª Edición · 19 y 20 de septiembre 2026</Eyebrow>
             <h1 className="type-display mt-6 text-[clamp(2.6rem,9vw,5.5rem)] text-balance text-ink">
-              El <em className="italic text-accent">Ecosistema</em> de Negocios y{' '}
-              <em className="italic">Tendencias</em> más influyente del interior del país
+              El <em className="text-accent">Ecosistema</em> de Negocios y{' '}
+              <em>Tendencias</em> más influyente del interior del país
             </h1>
             <p className="type-serif mt-6 text-lg text-ink-soft md:text-xl">
               {config.venue.name} · Córdoba · 9 a 21 hs
@@ -45,7 +45,7 @@ export function Hero() {
             />
             <span
               aria-hidden
-              className="type-display absolute -top-5 left-4 italic text-accent text-5xl md:-left-6 md:text-6xl"
+              className="type-display absolute -top-5 left-4 text-accent text-5xl md:-left-6 md:text-6xl"
             >
               Nº14
             </span>

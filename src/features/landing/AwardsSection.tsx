@@ -15,7 +15,7 @@ export function AwardsSection() {
         <div className="md:col-span-8">
           <p className="type-display text-[clamp(1.7rem,4.5vw,2.6rem)] text-balance text-ink">
             Cada edición, los Premios Internacionales CCM distinguen a los{' '}
-            <em className="italic text-accent">protagonistas</em> del ecosistema.
+            <em className="text-accent">protagonistas</em> del ecosistema.
           </p>
           <div className="mt-10 space-y-5">
             <div className="flex items-start gap-4 border-t border-line pt-5">

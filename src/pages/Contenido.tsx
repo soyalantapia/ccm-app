@@ -76,7 +76,7 @@ export default function Contenido() {
       {/* Nota editorial — D3: el contenido se consume sin salir de la app. */}
       <div className="mt-16 border-t border-line pt-10 md:mt-24 md:grid md:grid-cols-12 md:gap-x-8">
         <p className="type-serif text-2xl text-ink md:col-span-6 md:text-3xl">
-          Todo el contenido vive <em className="italic text-accent">acá adentro</em>.
+          Todo el contenido vive <em className="text-accent">acá adentro</em>.
         </p>
         <p className="mt-4 text-[15px] leading-relaxed text-ink-soft md:col-span-5 md:col-start-8 md:mt-1">
           Nada de saltar entre plataformas: los videos del canal de CCM se reproducen embebidos, y

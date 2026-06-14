@@ -139,7 +139,7 @@ export default function EventoFicha() {
               eyebrow="Inscripción por bloque"
               title={
                 <>
-                  El <em className="italic text-accent">programa</em>
+                  El <em className="text-accent">programa</em>
                 </>
               }
               lead="Elegí tus bloques y asegurá tu lugar. Los cupos son limitados y la disponibilidad se actualiza en vivo."

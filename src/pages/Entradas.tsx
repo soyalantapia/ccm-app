@@ -15,7 +15,7 @@ export default function Entradas() {
           title="Entradas"
           lead={
             <>
-              La entrada general es <em className="italic text-accent">gratuita</em> con inscripción
+              La entrada general es <em className="text-accent">gratuita</em> con inscripción
               previa obligatoria. Las experiencias VIP — Night, Sunset o el combo de las dos noches —
               se compran acá, con acceso independiente.
             </>

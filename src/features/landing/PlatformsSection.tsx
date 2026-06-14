@@ -19,7 +19,7 @@ export function PlatformsSection() {
           eyebrow="Las 7 plataformas"
           title={
             <>
-              Un ecosistema, <em className="italic text-accent">siete</em> mundos
+              Un ecosistema, <em className="text-accent">siete</em> mundos
             </>
           }
           lead="Cada plataforma es un mercado propio, con sponsors exclusivos por rubro y su propia audiencia."

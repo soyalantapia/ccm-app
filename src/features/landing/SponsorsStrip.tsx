@@ -20,7 +20,7 @@ export function SponsorsStrip() {
           eyebrow="Sponsors 2026"
           title={
             <>
-              Marcas que <em className="italic text-accent">visten</em> el evento
+              Marcas que <em className="text-accent">visten</em> el evento
             </>
           }
           lead="Cada plataforma es un mercado propio, con exclusividad por rubro y resultados medidos."

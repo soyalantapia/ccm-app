@@ -50,7 +50,7 @@ export function ProfileFieldRow({ field }: { field: ProfileFieldKey }) {
               </div>
             </>
           ) : (
-            <div className="mt-1 text-sm italic text-ink-soft/50">Sin completar</div>
+            <div className="mt-1 text-sm text-ink-soft/50">Sin completar</div>
           )}
         </div>
         {captured ? (

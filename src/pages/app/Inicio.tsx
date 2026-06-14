@@ -32,11 +32,11 @@ export default function Inicio() {
         <h1 className="type-display mt-4 text-balance text-[clamp(2.4rem,8vw,4rem)] text-ink">
           {firstName ? (
             <>
-              Hola, <em className="italic text-accent">{firstName}</em>
+              Hola, <em className="text-accent">{firstName}</em>
             </>
           ) : (
             <>
-              Bienvenida/o a <em className="italic text-accent">CCM</em>
+              Bienvenida/o a <em className="text-accent">CCM</em>
             </>
           )}
         </h1>
@@ -98,7 +98,7 @@ export default function Inicio() {
         eyebrow="Antes de septiembre"
         title={
           <>
-            Próximos <em className="italic text-accent">Caminos</em>
+            Próximos <em className="text-accent">Caminos</em>
           </>
         }
         link={{ to: '/eventos', label: 'Toda la agenda' }}

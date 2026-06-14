@@ -31,7 +31,7 @@ export default function MiQR() {
         eyebrow="Mi QR"
         title={
           <>
-            Tu <em className="italic text-accent">acreditación</em>
+            Tu <em className="text-accent">acreditación</em>
           </>
         }
         lead={

@@ -52,7 +52,7 @@ export default function Fotos() {
         eyebrow="El recuerdo es tuyo"
         title={
           <>
-            Fotos <em className="italic text-accent">CCM</em>
+            Fotos <em className="text-accent">CCM</em>
           </>
         }
         lead="Las galerías oficiales de cada evento. Guardá tus favoritas con el corazón y descargá tu foto en alta, cortesía de nuestros sponsors."

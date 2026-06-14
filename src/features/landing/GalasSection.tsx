@@ -33,7 +33,7 @@ export function GalasSection() {
           eyebrow="Experiencias de gala"
           title={
             <>
-              Dos noches que <em className="italic text-accent">cierran</em> cada jornada
+              Dos noches que <em className="text-accent">cierran</em> cada jornada
             </>
           }
           lead="Las pasarelas centrales de la 14ª edición, con acceso exclusivo para entradas VIP."
@@ -52,7 +52,7 @@ export function GalasSection() {
                 <div className="absolute inset-x-0 bottom-0 p-6 md:p-8">
                   <div className="eyebrow text-[10px] text-accent">{g.when}</div>
                   <h3 className="type-display mt-2 text-4xl text-night-ink md:text-5xl">{g.plan}</h3>
-                  <p className="type-serif mt-1.5 text-lg italic text-night-ink/85">{g.show}</p>
+                  <p className="type-serif mt-1.5 text-lg text-night-ink/85">{g.show}</p>
                 </div>
               </div>
             </article>

@@ -9,7 +9,7 @@ export function ConvocatoriaSuccess({ event }: { event?: EventItem }) {
       <div className="flex flex-col items-center px-6 py-16 text-center md:px-16 md:py-24 animate-rise">
         <Eyebrow>Postulación enviada</Eyebrow>
         <h2 className="type-display mt-5 text-[clamp(2rem,7vw,3.6rem)] text-balance text-night-ink">
-          ¡Listo! Quedaste <em className="italic text-accent">preinscripta/o</em> 🖤
+          ¡Listo! Quedaste <em className="text-accent">preinscripta/o</em> 🖤
         </h2>
         <p className="mt-6 max-w-md text-[15px] leading-relaxed text-night-ink/75">
           El equipo CCM revisa tu historia y te confirma el lugar por teléfono. Máximo 1

@@ -22,7 +22,7 @@ export function CaminosSection() {
         eyebrow="Próximos Caminos a CCM"
         title={
           <>
-            El camino <em className="italic text-accent">empieza</em> antes
+            El camino <em className="text-accent">empieza</em> antes
           </>
         }
         lead="Encuentros previos del ecosistema: charlas, networking y desfiles cápsula rumbo a la 14ª edición."

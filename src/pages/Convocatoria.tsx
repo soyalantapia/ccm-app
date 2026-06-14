@@ -9,13 +9,13 @@ import { ConvocatoriaSuccess } from '../features/convocatoria/ConvocatoriaSucces
 import { ApplicationStatusPanel } from '../features/convocatoria/ApplicationStatus'
 import { formatDeadline } from '../features/convocatoria/format'
 
-/** Título display con la última palabra en italic dorado (énfasis editorial). */
+/** Título display con la última palabra en dorado (énfasis, sin cursiva). */
 function DisplayTitle({ title }: { title: string }) {
   const words = title.split(' ')
   const last = words.pop()
   return (
     <h1 className="type-display mt-5 text-[clamp(2.6rem,9vw,5.5rem)] text-balance text-ink">
-      {words.join(' ')} <em className="italic text-accent">{last}</em>
+      {words.join(' ')} <em className="text-accent">{last}</em>
     </h1>
   )
 }
