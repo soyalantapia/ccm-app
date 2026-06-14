@@ -26,13 +26,14 @@ const SECTIONS = [
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]
 
-/* Bottom nav app-style (mobile): 4 destinos primarios + "Más" (sheet). */
-const PRIMARY = [
-  { to: '/admin', label: 'Panel', icon: LayoutDashboard, end: true },
+/* Bottom nav app-style (mobile): 2 tabs laterales + "Panel" central sobresaliente
+   (FAB) + 1 tab + "Más" (sheet). */
+const NAV_LEFT = [
   { to: '/admin/eventos', label: 'Eventos', icon: CalendarDays },
   { to: '/admin/personas', label: 'Personas', icon: Users },
-  { to: '/admin/galerias', label: 'Sponsors', icon: Images },
 ]
+const NAV_CENTER = { to: '/admin', label: 'Panel', icon: LayoutDashboard, end: true }
+const NAV_RIGHT = [{ to: '/admin/galerias', label: 'Sponsors', icon: Images }]
 const MORE = [
   { to: '/admin/postulaciones', label: 'Postulaciones', icon: Inbox },
   { to: '/admin/ordenes', label: 'Entradas y órdenes', icon: Ticket },
@@ -95,49 +96,87 @@ function AdminGate({ onUnlock }: { onUnlock: () => void }) {
   )
 }
 
-/** Barra de navegación inferior (app-style) — solo mobile, identidad night. */
-function AdminBottomNav({ moreActive, onMore }: { moreActive: boolean; onMore: () => void }) {
+/** Pestaña plana (lateral) de la bottom nav. */
+function FlatTab({ item }: { item: { to: string; label: string; icon: typeof Users; end?: boolean } }) {
+  const Icon = item.icon
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-night-soft bg-night/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
-      <div className="grid grid-cols-5">
-        {PRIMARY.map((item) => {
-          const Icon = item.icon
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className="flex flex-col items-center gap-1 pb-1.5 pt-2.5 transition-transform active:scale-90"
-            >
-              {({ isActive }) => (
-                <>
-                  <Icon size={19} strokeWidth={1.75} className={isActive ? 'text-accent' : 'text-night-ink/55'} />
-                  <span
-                    className={`text-[9px] font-semibold uppercase tracking-[0.1em] ${
-                      isActive ? 'text-accent' : 'text-night-ink/55'
-                    }`}
-                  >
-                    {item.label}
-                  </span>
-                </>
-              )}
-            </NavLink>
-          )
-        })}
-        <button
-          onClick={onMore}
-          aria-label="Más secciones"
-          className="flex flex-col items-center gap-1 pb-1.5 pt-2.5 transition-transform active:scale-90"
-        >
-          <MoreHorizontal size={19} strokeWidth={1.75} className={moreActive ? 'text-accent' : 'text-night-ink/55'} />
+    <NavLink
+      to={item.to}
+      end={item.end}
+      className="flex flex-col items-center gap-1 pb-1.5 pt-3 transition-transform active:scale-90"
+    >
+      {({ isActive }) => (
+        <>
+          <Icon size={19} strokeWidth={1.75} className={isActive ? 'text-accent' : 'text-night-ink/55'} />
           <span
             className={`text-[9px] font-semibold uppercase tracking-[0.1em] ${
-              moreActive ? 'text-accent' : 'text-night-ink/55'
+              isActive ? 'text-accent' : 'text-night-ink/55'
             }`}
           >
-            Más
+            {item.label}
           </span>
-        </button>
+        </>
+      )}
+    </NavLink>
+  )
+}
+
+/**
+ * Barra de navegación inferior (app-style) — solo mobile, identidad night.
+ * "Panel" va al centro como pestaña circular elevada que sobresale por encima
+ * de la barra (FAB), para un look moderno (no una barra plana).
+ */
+function AdminBottomNav({ moreActive, onMore }: { moreActive: boolean; onMore: () => void }) {
+  const CenterIcon = NAV_CENTER.icon
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-40 md:hidden">
+      <div className="border-t border-night-soft bg-night/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
+        <div className="grid grid-cols-5 items-end">
+          {NAV_LEFT.map((item) => (
+            <FlatTab key={item.to} item={item} />
+          ))}
+
+          {/* Pestaña central circular sobresaliente (FAB) */}
+          <NavLink to={NAV_CENTER.to} end={NAV_CENTER.end} className="relative flex flex-col items-center pb-1.5">
+            {({ isActive }) => (
+              <>
+                <span
+                  className={`-mt-7 flex h-14 w-14 items-center justify-center rounded-full shadow-lg ring-4 ring-night transition-all duration-200 active:scale-95 ${
+                    isActive ? 'bg-accent text-accent-ink' : 'bg-night-soft text-night-ink'
+                  }`}
+                >
+                  <CenterIcon size={23} strokeWidth={1.75} />
+                </span>
+                <span
+                  className={`mt-1 text-[9px] font-semibold uppercase tracking-[0.1em] ${
+                    isActive ? 'text-accent' : 'text-night-ink/55'
+                  }`}
+                >
+                  {NAV_CENTER.label}
+                </span>
+              </>
+            )}
+          </NavLink>
+
+          {NAV_RIGHT.map((item) => (
+            <FlatTab key={item.to} item={item} />
+          ))}
+
+          <button
+            onClick={onMore}
+            aria-label="Más secciones"
+            className="flex flex-col items-center gap-1 pb-1.5 pt-3 transition-transform active:scale-90"
+          >
+            <MoreHorizontal size={19} strokeWidth={1.75} className={moreActive ? 'text-accent' : 'text-night-ink/55'} />
+            <span
+              className={`text-[9px] font-semibold uppercase tracking-[0.1em] ${
+                moreActive ? 'text-accent' : 'text-night-ink/55'
+              }`}
+            >
+              Más
+            </span>
+          </button>
+        </div>
       </div>
     </nav>
   )
