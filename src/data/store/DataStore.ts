@@ -34,6 +34,11 @@ export interface PhotoDownload {
   ts: string
 }
 
+/** Alta de evento desde el admin (el store genera id + slug). */
+export type NewEvent = Omit<EventItem, 'id' | 'slug'> & { slug?: string }
+/** Alta de bloque desde el admin (el store genera id). */
+export type NewBlock = Omit<EventBlock, 'id'>
+
 /**
  * DataStore — única puerta de acceso a datos de TODA la UI (patrón repositorio).
  * Fase 0: seed estático + localStorage. Fase 1: se enchufa un backend real
@@ -49,8 +54,14 @@ export interface DataStore {
   getEvents(): EventItem[]
   getEvent(slug: string): EventItem | undefined
   getEventById(id: string): EventItem | undefined
+  createEvent(input: NewEvent): EventItem
+  updateEvent(id: string, patch: Partial<EventItem>): void
+  deleteEvent(id: string): void
   getBlocks(eventId: string): EventBlock[]
   getBlock(blockId: string): EventBlock | undefined
+  createBlock(input: NewBlock): EventBlock
+  updateBlock(id: string, patch: Partial<EventBlock>): void
+  deleteBlock(id: string): void
   blockAvailability(blockId: string): BlockAvailability
   getRegistrations(): Registration[]
   isRegistered(eventId: string, blockId?: string): boolean

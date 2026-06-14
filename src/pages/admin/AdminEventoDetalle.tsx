@@ -1,14 +1,24 @@
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, MapPin } from 'lucide-react'
-import { Badge, ButtonLink, EmptyState, Img, Stat } from '../../components/ui'
-import { useStore } from '../../data/store'
+import { useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, MapPin, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Badge, Button, ButtonLink, EmptyState, Img, Sheet, Stat } from '../../components/ui'
+import { store, useStore } from '../../data/store'
+import type { EventBlock } from '../../data/types'
 import { CorePageHeader } from '../../features/admin/CorePageHeader'
 import { CorePanel } from '../../features/admin/CorePanel'
 import { CoreOccupancyBar } from '../../features/admin/CoreOccupancyBar'
+import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
+import { OpsEventForm } from '../../features/admin/OpsEventForm'
+import { OpsBlockForm } from '../../features/admin/OpsBlockForm'
 import { EVENT_TYPE_META, formatDateTime, percent } from '../../features/admin/coreFormat'
 
 export default function AdminEventoDetalle() {
   const { id = '' } = useParams()
+  const navigate = useNavigate()
+  const [editOpen, setEditOpen] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [blockForm, setBlockForm] = useState<{ open: boolean; block?: EventBlock }>({ open: false })
+  const [deleteBlock, setDeleteBlock] = useState<EventBlock | null>(null)
 
   const event = useStore((s) => s.getEventById(id))
   const blocks = useStore((s) =>
@@ -39,7 +49,7 @@ export default function AdminEventoDetalle() {
             </ButtonLink>
           }
         >
-          El ID no corresponde a ningún evento del seed.
+          El ID no corresponde a ningún evento — puede que se haya eliminado.
         </EmptyState>
       </div>
     )
@@ -79,6 +89,16 @@ export default function AdminEventoDetalle() {
               </span>
             </span>
           }
+          actions={
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+                <Pencil size={13} strokeWidth={2} /> Editar
+              </Button>
+              <OpsDangerButton size="sm" onClick={() => setConfirmDelete(true)}>
+                <Trash2 size={13} strokeWidth={2} /> Eliminar
+              </OpsDangerButton>
+            </div>
+          }
         />
       </div>
 
@@ -86,19 +106,43 @@ export default function AdminEventoDetalle() {
         <div className="space-y-10 lg:col-span-2">
           {/* Bloques con ocupación en vivo */}
           <CorePanel title="Bloques" note="Cupo seed + inscripciones de esta demo, en vivo">
+            <div className="mb-5">
+              <Button variant="outline" size="sm" onClick={() => setBlockForm({ open: true })}>
+                <Plus size={13} strokeWidth={2} /> Agregar bloque
+              </Button>
+            </div>
             {blocks.length === 0 ? (
-              <p className="py-4 text-sm text-ink-soft">Este evento no tiene bloques con cupo.</p>
+              <p className="py-2 text-sm text-ink-soft">
+                Este evento todavía no tiene bloques. Agregá charlas, masterclasses o desfiles con
+                "Agregar bloque".
+              </p>
             ) : (
               <div className="space-y-6">
                 {blocks.map(({ block, avail, localTaken }) => (
                   <div key={block.id} className="border-b border-line pb-5 last:border-b-0">
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="eyebrow text-[9px] text-accent">
                           {block.kind} · {block.day} · {block.start}–{block.end} hs
                         </p>
                         <p className="type-serif mt-1.5 text-lg leading-snug text-ink">{block.title}</p>
                         <p className="mt-0.5 text-[12px] text-ink-soft">{block.room}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          onClick={() => setBlockForm({ open: true, block })}
+                          aria-label="Editar bloque"
+                          className="rounded-sm p-2 text-ink-soft transition-colors hover:bg-ink/5 hover:text-ink"
+                        >
+                          <Pencil size={15} strokeWidth={1.75} />
+                        </button>
+                        <button
+                          onClick={() => setDeleteBlock(block)}
+                          aria-label="Eliminar bloque"
+                          className="rounded-sm p-2 text-ink-soft transition-colors hover:bg-danger/10 hover:text-danger"
+                        >
+                          <Trash2 size={15} strokeWidth={1.75} />
+                        </button>
                       </div>
                     </div>
                     <CoreOccupancyBar className="mt-3" taken={avail.taken} capacity={avail.capacity} />
@@ -166,6 +210,54 @@ export default function AdminEventoDetalle() {
           </div>
         </aside>
       </div>
+
+      {/* Modales: editar evento, crear/editar bloque, confirmaciones de borrado */}
+      <OpsEventForm open={editOpen} event={event} onClose={() => setEditOpen(false)} />
+      <OpsBlockForm
+        open={blockForm.open}
+        eventId={event.id}
+        block={blockForm.block}
+        onClose={() => setBlockForm({ open: false })}
+      />
+      <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title="¿Eliminar este evento?">
+        <p className="text-[15px] leading-relaxed text-ink-soft">
+          Se elimina <em className="text-accent">{event.title}</em> y todos sus bloques. Desaparece de
+          la app. Podés recrearlo, o reiniciar la demo para volver a los datos originales.
+        </p>
+        <div className="mt-6 flex flex-col gap-2.5">
+          <OpsDangerButton
+            className="w-full justify-center"
+            onClick={() => {
+              store.deleteEvent(event.id)
+              navigate('/admin/eventos')
+            }}
+          >
+            Sí, eliminar evento
+          </OpsDangerButton>
+          <Button variant="ghost" size="lg" className="w-full" onClick={() => setConfirmDelete(false)}>
+            Cancelar
+          </Button>
+        </div>
+      </Sheet>
+      <Sheet open={!!deleteBlock} onClose={() => setDeleteBlock(null)} title="¿Eliminar este bloque?">
+        <p className="text-[15px] leading-relaxed text-ink-soft">
+          Se elimina <em className="text-accent">{deleteBlock?.title}</em> del programa.
+        </p>
+        <div className="mt-6 flex flex-col gap-2.5">
+          <OpsDangerButton
+            className="w-full justify-center"
+            onClick={() => {
+              if (deleteBlock) store.deleteBlock(deleteBlock.id)
+              setDeleteBlock(null)
+            }}
+          >
+            Sí, eliminar bloque
+          </OpsDangerButton>
+          <Button variant="ghost" size="lg" className="w-full" onClick={() => setDeleteBlock(null)}>
+            Cancelar
+          </Button>
+        </div>
+      </Sheet>
     </div>
   )
 }

@@ -19,8 +19,9 @@ import type {
   TicketOrder,
   TicketPlan,
 } from '../types'
-import type { BlockAvailability, DataStore, PhotoDownload } from './DataStore'
+import type { BlockAvailability, DataStore, NewBlock, NewEvent, PhotoDownload } from './DataStore'
 import { readJSON, writeJSON, newId } from '../../lib/storage'
+import { mergeOverlay, overlayCreate, overlayDelete, overlayEdit, slugify } from './overlay'
 import { track as doTrack, getLocalAnalytics } from '../../lib/track'
 import * as identity from '../../lib/identity'
 import { seedPlans } from '../../config/plans'
@@ -42,6 +43,8 @@ const K = {
   applications: 'applications',
   applicationOverrides: 'applicationOverrides',
   planOverrides: 'planOverrides',
+  eventsOverlay: 'eventsOverlay',
+  blocksOverlay: 'blocksOverlay',
 } as const
 
 type PlanOverride = { price?: number | null; mpLink?: string }
@@ -72,23 +75,63 @@ export class LocalDataStore implements DataStore {
   /* ─── Eventos ─── */
 
   getEvents(): EventItem[] {
-    return [...seedEvents].sort((a, b) => a.startDate.localeCompare(b.startDate))
+    return mergeOverlay(seedEvents, K.eventsOverlay).sort((a, b) => a.startDate.localeCompare(b.startDate))
   }
 
   getEvent(slug: string): EventItem | undefined {
-    return seedEvents.find((e) => e.slug === slug)
+    return this.getEvents().find((e) => e.slug === slug)
   }
 
   getEventById(id: string): EventItem | undefined {
-    return seedEvents.find((e) => e.id === id)
+    return this.getEvents().find((e) => e.id === id)
+  }
+
+  createEvent(input: NewEvent): EventItem {
+    const existing = new Set(this.getEvents().map((e) => e.slug))
+    const base = input.slug || slugify(input.title)
+    let slug = base
+    for (let i = 2; existing.has(slug); i++) slug = `${base}-${i}`
+    const event: EventItem = { ...input, id: newId('ev'), slug }
+    overlayCreate(K.eventsOverlay, event)
+    this.track('admin_event_created', { eventId: event.id, type: event.type })
+    return event
+  }
+
+  updateEvent(id: string, patch: Partial<EventItem>): void {
+    overlayEdit(K.eventsOverlay, id, patch)
+    this.track('admin_event_updated', { eventId: id })
+  }
+
+  deleteEvent(id: string): void {
+    // Borra el evento y, en cascada, sus bloques.
+    this.getBlocks(id).forEach((b) => overlayDelete(K.blocksOverlay, b.id))
+    overlayDelete(K.eventsOverlay, id)
+    this.track('admin_event_deleted', { eventId: id })
   }
 
   getBlocks(eventId: string): EventBlock[] {
-    return seedBlocks.filter((b) => b.eventId === eventId)
+    return mergeOverlay(seedBlocks, K.blocksOverlay).filter((b) => b.eventId === eventId)
   }
 
   getBlock(blockId: string): EventBlock | undefined {
-    return seedBlocks.find((b) => b.id === blockId)
+    return mergeOverlay(seedBlocks, K.blocksOverlay).find((b) => b.id === blockId)
+  }
+
+  createBlock(input: NewBlock): EventBlock {
+    const block: EventBlock = { ...input, id: newId('blk') }
+    overlayCreate(K.blocksOverlay, block)
+    this.track('admin_block_created', { blockId: block.id, eventId: block.eventId })
+    return block
+  }
+
+  updateBlock(id: string, patch: Partial<EventBlock>): void {
+    overlayEdit(K.blocksOverlay, id, patch)
+    this.track('admin_block_updated', { blockId: id })
+  }
+
+  deleteBlock(id: string): void {
+    overlayDelete(K.blocksOverlay, id)
+    this.track('admin_block_deleted', { blockId: id })
   }
 
   blockAvailability(blockId: string): BlockAvailability {

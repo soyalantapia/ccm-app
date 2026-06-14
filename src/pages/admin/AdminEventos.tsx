@@ -1,13 +1,16 @@
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
-import { Badge } from '../../components/ui'
+import { ArrowRight, Plus } from 'lucide-react'
+import { Badge, Button } from '../../components/ui'
 import { useStore } from '../../data/store'
 import { CorePageHeader } from '../../features/admin/CorePageHeader'
 import { CoreOccupancyBar } from '../../features/admin/CoreOccupancyBar'
+import { OpsEventForm } from '../../features/admin/OpsEventForm'
 import { EVENT_TYPE_META, percent } from '../../features/admin/coreFormat'
 
 export default function AdminEventos() {
   const navigate = useNavigate()
+  const [formOpen, setFormOpen] = useState(false)
 
   const rows = useStore((s) =>
     s.getEvents().map((event) => {
@@ -28,7 +31,14 @@ export default function AdminEventos() {
         title="Eventos"
         live
         lead="Inscriptos y ocupación se actualizan en vivo con cada acción del público."
+        actions={
+          <Button size="sm" onClick={() => setFormOpen(true)}>
+            <Plus size={14} strokeWidth={2} /> Crear evento
+          </Button>
+        }
       />
+
+      <OpsEventForm open={formOpen} onClose={() => setFormOpen(false)} />
 
       {/* Tabla editorial (desktop) */}
       <div className="mt-10 hidden md:block">
@@ -116,8 +126,9 @@ export default function AdminEventos() {
       </div>
 
       <p className="mt-8 border-t border-line pt-4 text-[11px] leading-relaxed text-ink-soft/70">
-        Los inscriptos combinan los cupos previos del seed con las inscripciones de esta demo. El CRUD
-        completo de eventos llega en Fase 1 (PRD §10.2).
+        Los inscriptos combinan los cupos previos del seed con las inscripciones de esta demo. Podés
+        crear, editar y eliminar eventos y sus bloques desde acá — los cambios aparecen al instante en
+        la app. En Fase 1 esto vive en el backend con roles y auditoría (PRD §10.2).
       </p>
     </div>
   )
