@@ -91,7 +91,7 @@ export default function Dashboard() {
       </div>
 
       <div className="mt-12 grid gap-x-10 gap-y-10 lg:grid-cols-5">
-        <div className="space-y-10 lg:col-span-3">
+        <div className="min-w-0 space-y-10 lg:col-span-3">
           {/* Ocupación de bloques — acá se VE el dato en vivo */}
           <CorePanel
             title={`Ocupación de bloques · ${caminoEvent?.title ?? 'Camino a CCM'}`}
@@ -206,7 +206,7 @@ export default function Dashboard() {
         </div>
 
         {/* Actividad en vivo — bloque night de contraste */}
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <div className="rounded-md border border-night-soft bg-night p-5 md:p-6">
             <div className="flex items-baseline justify-between gap-4">
               <h2 className="eyebrow text-[10px] text-night-ink">Actividad en vivo</h2>

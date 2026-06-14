@@ -2,15 +2,50 @@ import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
-import { copyFileSync } from 'node:fs'
+import { copyFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-// GitHub Pages SPA fallback: any deep route 404 serves the app shell.
+const SITE = 'https://soyalantapia.github.io/ccm-app'
+
+/**
+ * Rutas con preview propio al compartir (WhatsApp/redes). Como WhatsApp lee los
+ * meta OG del HTML estático SIN ejecutar JS, prerenderizamos un `<ruta>.html`
+ * por sección con su título/descripción/imagen. GitHub Pages sirve `/ruta` desde
+ * `ruta.html` con HTTP 200 (el link profundo deja de ser un 404 sin preview).
+ */
+const OG_ROUTES = [
+  { path: 'app', title: 'La app de CCM 2026', desc: 'Tu acceso por QR, tu agenda y las fotos del evento — todo en tu teléfono. Instalable y sin conexión.', img: 'og-app.jpg', alt: 'La app de Córdoba Corazón de Moda' },
+  { path: 'admin', title: 'Panel CCM · El dato propio', desc: 'Inscripciones, entradas, descargas y sponsors medidos en tiempo real. Reporte de impacto por sponsor.', img: 'og-admin.jpg', alt: 'Panel de gestión de Córdoba Corazón de Moda' },
+  { path: 'sponsors', title: 'Sé sponsor de CCM 2026', desc: 'Audiencia calificada, exclusividad por rubro y una base de datos propia que sigue trabajando post-evento.', img: 'og-sponsors.jpg', alt: 'Sponsors de Córdoba Corazón de Moda' },
+  { path: 'eventos', title: 'Eventos · CCM 2026', desc: 'Caminos, capacitaciones y las dos galas centrales de la 14ª edición. 19 y 20 de septiembre, Córdoba.', img: 'og-eventos.jpg', alt: 'Eventos de Córdoba Corazón de Moda' },
+  { path: 'entradas', title: 'Entradas · CCM 2026', desc: 'Entrada general gratis con inscripción. Experiencias VIP Night, Sunset y el combo de las dos noches.', img: 'og-eventos.jpg', alt: 'Entradas de Córdoba Corazón de Moda' },
+]
+
+// GitHub Pages SPA fallback (404 → app shell) + previews OG por ruta.
 function spaFallback(): Plugin {
   return {
     name: 'spa-404-fallback',
     closeBundle() {
-      copyFileSync(resolve(__dirname, 'dist/index.html'), resolve(__dirname, 'dist/404.html'))
+      const distIndex = resolve(__dirname, 'dist/index.html')
+      const base = readFileSync(distIndex, 'utf8')
+      copyFileSync(distIndex, resolve(__dirname, 'dist/404.html'))
+
+      const setAttr = (html: string, re: RegExp, value: string) =>
+        html.replace(re, (_m, p1, p2) => `${p1}${value}${p2}`)
+
+      for (const r of OG_ROUTES) {
+        let html = base
+        html = html.replace(/<title>[^<]*<\/title>/, `<title>${r.title}</title>`)
+        html = setAttr(html, /(<meta name="description" content=")[^"]*(")/, r.desc)
+        html = setAttr(html, /(<meta property="og:title" content=")[^"]*(")/, r.title)
+        html = setAttr(html, /(<meta property="og:description" content=")[^"]*(")/, r.desc)
+        html = setAttr(html, /(<meta property="og:url" content=")[^"]*(")/, `${SITE}/${r.path}`)
+        html = setAttr(html, /(<meta property="og:image:alt" content=")[^"]*(")/, r.alt)
+        html = setAttr(html, /(<meta name="twitter:title" content=")[^"]*(")/, r.title)
+        html = setAttr(html, /(<meta name="twitter:description" content=")[^"]*(")/, r.desc)
+        html = html.split('og-image.jpg').join(r.img) // og:image, secure_url, twitter:image
+        writeFileSync(resolve(__dirname, 'dist', `${r.path}.html`), html)
+      }
     },
   }
 }

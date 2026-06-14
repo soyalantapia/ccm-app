@@ -31,7 +31,7 @@ export function CorePageHeader({ title, eyebrow = 'Admin', lead, live, actions }
         <h1 className="type-display mt-4 text-[clamp(2.1rem,6vw,3.2rem)] text-ink">{title}</h1>
         {lead && <p className="mt-3 max-w-xl text-xs leading-relaxed text-ink-soft/80">{lead}</p>}
       </div>
-      {actions && <div className="shrink-0">{actions}</div>}
+      {actions && <div className="w-full sm:w-auto sm:shrink-0">{actions}</div>}
     </header>
   )
 }
