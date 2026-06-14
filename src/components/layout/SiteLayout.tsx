@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { CalendarDays, Home, Images, Menu, QrCode, Ticket, User, X } from 'lucide-react'
+import { CalendarDays, Home, Menu, QrCode, Store, Ticket, User, X } from 'lucide-react'
 import { Button } from '../ui'
 import { registerFree } from '../../lib/actions'
 import { useStore } from '../../data/store'
@@ -20,7 +20,7 @@ const BOTTOM_NAV = [
   { to: '/app', label: 'Inicio', icon: Home },
   { to: '/eventos', label: 'Eventos', icon: CalendarDays },
   { to: '/mi-qr', label: 'Mi QR', icon: QrCode, center: true },
-  { to: '/fotos', label: 'Fotos', icon: Images },
+  { to: '/catalogo', label: 'Expositores', icon: Store },
   { to: '/perfil', label: 'Perfil', icon: User },
 ]
 

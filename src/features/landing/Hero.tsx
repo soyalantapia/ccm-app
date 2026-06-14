@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
-import { Button, ButtonLink, Countdown, Eyebrow, Img } from '../../components/ui'
+import { Button, ButtonLink, Countdown, Eyebrow } from '../../components/ui'
+import { HeroVideo } from './HeroVideo'
 import { registerFree } from '../../lib/actions'
 import { useStore } from '../../data/store'
 import { IDS } from '../../data/ids'
@@ -30,19 +31,13 @@ export function Hero() {
             </p>
           </div>
 
-          {/* Foto portada */}
+          {/* Video portada (reel del evento) */}
           <div className="relative animate-rise md:col-span-5 md:row-span-2 md:mt-4">
             <span
               aria-hidden
               className="absolute -bottom-4 -right-3 h-full w-full rounded-md border border-accent md:-right-4"
             />
-            <Img
-              src="img/hero/hero-main.jpg"
-              alt="Pasarela de la 14ª edición de Córdoba Corazón de Moda"
-              ratio="4/5"
-              priority
-              className="rounded-md"
-            />
+            <HeroVideo />
             <span
               aria-hidden
               className="type-display absolute -top-5 left-4 text-accent text-5xl md:-left-6 md:text-6xl"
