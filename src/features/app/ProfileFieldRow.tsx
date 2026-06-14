@@ -6,10 +6,12 @@ import type { ProfileFieldKey } from '../../data/types'
 import { formatDay, sourceLabel } from './meta'
 
 /**
- * Fila de progressive profiling (PRD §8.5): valor + origen de captura;
- * los vacíos se completan vía sheet global (D22) y los existentes se
- * editan con un mini form inline.
+ * Fila de progressive profiling (PRD §8.5): valor + origen de captura.
+ * El completado masivo vive en ProfileCompleteCard (vía principal); acá la
+ * fila sirve para VER y corregir un dato puntual. Un campo vacío muestra un
+ * estado discreto "Sin completar" + un mini "Agregar" que usa el sheet global.
  */
+
 export function ProfileFieldRow({ field }: { field: ProfileFieldKey }) {
   const captured = useStore((s) => s.getProfile().fields[field])
   const meta = FIELD_META[field]
@@ -18,7 +20,7 @@ export function ProfileFieldRow({ field }: { field: ProfileFieldKey }) {
 
   const complete = async () => {
     const ok = await requireProfile([field], 'edicion_perfil', {
-      title: 'Completá tu perfil',
+      title: `Completá tu ${meta.label.toLowerCase()}`,
       message: 'Una sola vez: no te lo volvemos a pedir.',
     })
     if (ok) toast('Perfil actualizado ✓')
@@ -63,9 +65,12 @@ export function ProfileFieldRow({ field }: { field: ProfileFieldKey }) {
             </button>
           )
         ) : (
-          <Button variant="outline" size="sm" className="shrink-0" onClick={() => void complete()}>
-            + Completar
-          </Button>
+          <button
+            onClick={() => void complete()}
+            className="eyebrow shrink-0 pt-0.5 text-[10px] text-ink-soft transition-colors hover:text-accent"
+          >
+            Agregar
+          </button>
         )}
       </div>
 

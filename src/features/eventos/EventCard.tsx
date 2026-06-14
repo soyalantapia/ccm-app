@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
-import { Badge, Eyebrow, Img } from '../../components/ui'
+import { ArrowRight, CalendarDays, MapPin } from 'lucide-react'
+import { Badge, Img } from '../../components/ui'
 import type { EventItem } from '../../data/types'
 import { EVENT_TYPE_LABELS } from './eventMeta'
 
@@ -8,46 +8,55 @@ interface EventCardProps {
   event: EventItem
   /** Inscripto al evento o a alguno de sus bloques. */
   registered: boolean
-  /** Card destacada (evento principal): ocupa las dos columnas. */
-  featured?: boolean
-  /** Offset editorial en desktop (grilla asimétrica). */
-  offset?: boolean
 }
 
-/** Card editorial del listado /eventos: cover 16/10, fecha, título serif, venue. */
-export function EventCard({ event, registered, featured, offset }: EventCardProps) {
+/**
+ * Card autocontenida del listado /eventos: una unidad cerrada con borde completo.
+ * Meta arriba (tipo + fecha), foto, y bloque de info dentro de la misma card.
+ */
+export function EventCard({ event, registered }: EventCardProps) {
   return (
     <Link
       to={`/eventos/${event.slug}`}
-      className={`group block ${featured ? 'md:col-span-2' : ''} ${offset ? 'md:mt-12' : ''}`}
+      className="group flex h-full flex-col overflow-hidden rounded-md border border-line bg-surface transition-all duration-200 hover:border-ink/40 hover:shadow-[0_18px_50px_-22px_rgba(24,20,16,0.28)] active:scale-[0.99]"
     >
-      <article className={featured ? 'md:grid md:grid-cols-5 md:items-end md:gap-10' : ''}>
-        <Img
-          src={event.cover}
-          alt={event.title}
-          ratio="16/10"
-          className={`rounded-md ${featured ? 'md:col-span-3' : ''}`}
-          imgClassName="transition duration-700 group-hover:scale-[1.04]"
-        />
-        <div className={`mt-5 ${featured ? 'md:col-span-2 md:mt-0 md:pb-1' : ''}`}>
-          <Eyebrow>
-            {event.dateLabel}
-            {event.timeLabel ? ` · ${event.timeLabel}` : ''}
-          </Eyebrow>
-          <h3 className={`type-serif mt-3 text-balance text-ink ${featured ? 'text-3xl md:text-4xl' : 'text-2xl'}`}>
-            {event.title}
-          </h3>
-          <p className="mt-2 text-sm text-ink-soft">
-            {EVENT_TYPE_LABELS[event.type]} · {event.venue}
-          </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            {registered && <Badge tone="success">Ya estás inscripto</Badge>}
-            <span className="eyebrow flex items-center gap-1 text-[10px] text-ink transition-transform duration-200 group-hover:translate-x-0.5">
-              Ver ficha <ArrowRight size={12} />
-            </span>
-          </div>
+      {/* Fila de meta: chip de tipo + fecha bien visible → "esto es un evento distinto" */}
+      <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+        <Badge tone="accent">{EVENT_TYPE_LABELS[event.type]}</Badge>
+        <span className="eyebrow flex items-center gap-1.5 text-ink-soft">
+          <CalendarDays size={12} className="text-accent" />
+          {event.dateLabel}
+        </span>
+      </div>
+
+      <Img
+        src={event.cover}
+        alt={event.title}
+        ratio="3/2"
+        imgClassName="transition duration-700 group-hover:scale-[1.04]"
+      />
+
+      <div className="flex flex-1 flex-col p-4 md:p-5">
+        {event.timeLabel && (
+          <p className="eyebrow text-ink-soft">{event.timeLabel}</p>
+        )}
+        <h3 className="type-serif mt-2 text-balance text-2xl text-ink">{event.title}</h3>
+        <p className="mt-2 flex items-center gap-1.5 text-sm text-ink-soft">
+          <MapPin size={14} className="shrink-0 text-accent" />
+          {event.venue}
+        </p>
+
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+          {registered ? (
+            <Badge tone="success">Ya estás inscripto</Badge>
+          ) : (
+            <span className="eyebrow text-ink-soft">Cupo limitado</span>
+          )}
+          <span className="eyebrow flex items-center gap-1 text-ink transition-transform duration-200 group-hover:translate-x-0.5">
+            Ver evento <ArrowRight size={12} />
+          </span>
         </div>
-      </article>
+      </div>
     </Link>
   )
 }

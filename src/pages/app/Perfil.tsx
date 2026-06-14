@@ -5,6 +5,7 @@ import { store, useStore } from '../../data/store'
 import { IDS } from '../../data/ids'
 import { FIELD_META } from '../../lib/profileRequest'
 import { AppSection } from '../../features/app/AppSection'
+import { ProfileCompleteCard } from '../../features/app/ProfileCompleteCard'
 import { ProfileFieldRow } from '../../features/app/ProfileFieldRow'
 import { APPLICATION_STATUS_META, formatDay } from '../../features/app/meta'
 import type { ProfileFieldKey } from '../../data/types'
@@ -57,11 +58,15 @@ export default function Perfil() {
         </div>
       </header>
 
-      {/* Tus datos — progressive profiling */}
+      {/* CTA principal: completar todo de una sola vez (estado en vivo) */}
+      <div className="mt-10 md:mt-12">
+        <ProfileCompleteCard />
+      </div>
+
+      {/* Tus datos — progressive profiling (ver / corregir cada dato) */}
       <AppSection eyebrow="Tus datos">
         <p className="-mt-1 text-sm leading-relaxed text-ink-soft">
-          Cada dato se pide una sola vez, justo cuando hace falta. Acá podés completarlos o
-          corregirlos cuando quieras.
+          Acá podés ver y corregir cada dato por separado cuando quieras.
         </p>
         <div className="mt-5 border-b border-line">
           {FIELD_ORDER.map((field) => (

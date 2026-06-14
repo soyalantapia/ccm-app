@@ -112,13 +112,12 @@ export default function Eventos() {
           Pronto vas a encontrar nuevos encuentros en esta categoría.
         </EmptyState>
       ) : (
-        <div className="mt-10 grid animate-rise gap-x-8 gap-y-14 md:grid-cols-2">
-          {visible.map((event, i) => (
+        <div className="mt-10 grid animate-rise gap-x-6 gap-y-6 sm:gap-y-8 md:grid-cols-2 md:items-stretch">
+          {visible.map((event) => (
             <EventCard
               key={event.id}
               event={event}
               registered={registeredEventIds.has(event.id)}
-              offset={i % 2 === 1}
             />
           ))}
         </div>
