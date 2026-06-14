@@ -8,6 +8,8 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="CCM" />
+    <link rel="icon" type="image/svg+xml" href="/ccm-app/favicon.svg" />
+    <link rel="icon" type="image/png" href="/ccm-app/favicon.png" />
     <link rel="apple-touch-icon" href="/ccm-app/icons/apple-touch-icon.png" />
     <link rel="preload" as="image" href="/ccm-app/video/hero-poster.jpg" fetchpriority="high" />
     <link rel="preload" as="font" type="font/woff2" href="/ccm-app/fonts/schibsted-display.woff2" crossorigin />
@@ -42,16 +44,18 @@
     <style>
       /* Static app shell: paints the hero before the JS bundle arrives (mobile
          LCP). React lo reemplaza al montar; replica layout y tokens default. */
-      #ccm-shell { background: #f4efe3; color: #181410; min-height: 100vh; }
-      #ccm-shell .sh-header { height: 4rem; display: flex; align-items: center; border-bottom: 1px solid #ddd3bd; }
+      /* Usa los tokens --t-* (ya aplicados por el script pre-paint) con fallback
+         al default vigente, para que un tema custom no choque con el shell. */
+      #ccm-shell { background: var(--t-bg, #f4efe3); color: var(--t-ink, #181410); min-height: 100vh; }
+      #ccm-shell .sh-header { height: 4rem; display: flex; align-items: center; border-bottom: 1px solid var(--t-line, #ddd3bd); }
       #ccm-shell .sh-wrap { max-width: 72rem; margin: 0 auto; padding: 0 1.25rem; width: 100%; box-sizing: border-box; }
       #ccm-shell .sh-mark { font-family: system-ui, sans-serif; font-weight: 800; letter-spacing: -.02em; font-size: 26px; line-height: 1; }
       #ccm-shell .sh-hero { padding-top: 2.5rem; }
-      #ccm-shell .sh-eyebrow { display: flex; align-items: center; gap: .75rem; text-transform: uppercase; letter-spacing: .22em; font-size: .6875rem; font-weight: 600; color: #b98a2f; font-family: system-ui, sans-serif; }
-      #ccm-shell .sh-eyebrow::before { content: ''; width: 2rem; height: 1px; background: #b98a2f; }
+      #ccm-shell .sh-eyebrow { display: flex; align-items: center; gap: .75rem; text-transform: uppercase; letter-spacing: .22em; font-size: .6875rem; font-weight: 600; color: var(--t-accent, #a87d22); font-family: system-ui, sans-serif; }
+      #ccm-shell .sh-eyebrow::before { content: ''; width: 2rem; height: 1px; background: var(--t-accent, #a87d22); }
       #ccm-shell h1 { font-family: system-ui, -apple-system, sans-serif; font-weight: 750; font-size: clamp(2.4rem, 8.5vw, 5rem); line-height: 1.02; letter-spacing: -0.022em; margin: 1.5rem 0 0; }
-      #ccm-shell h1 em { color: #b98a2f; font-style: normal; }
-      #ccm-shell .sh-sub { font-family: system-ui, sans-serif; font-weight: 500; font-size: 1.125rem; color: #6b6353; margin-top: 1.5rem; }
+      #ccm-shell h1 em { color: var(--t-accent, #a87d22); font-style: normal; }
+      #ccm-shell .sh-sub { font-family: system-ui, sans-serif; font-weight: 500; font-size: 1.125rem; color: var(--t-ink-soft, #6b6353); margin-top: 1.5rem; }
       @media (min-width: 768px) { #ccm-shell .sh-hero { padding-top: 4rem; } #ccm-shell .sh-sub { font-size: 1.25rem; } }
     </style>
     <div id="root"><div id="ccm-shell">

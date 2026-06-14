@@ -4,7 +4,7 @@ import { IDS } from '../ids'
 /**
  * Históricos seed para que el dashboard admin no nazca vacío y respalde el pitch
  * "datos a escala" (PRD §10.1). En vez de objetos literales, el array se construye
- * PROGRAMÁTICAMENTE al cargar el módulo: escala de PRE-EVENTO (~7.800 eventos)
+ * PROGRAMÁTICAMENTE al cargar el módulo: escala de PRE-EVENTO (~6.400 eventos)
  * distribuida en los últimos ~40 días, con IDs reales del seed y taxonomía PRD §13.
  *
  * - Base temporal: se toma `Date.now()` una sola vez; los offsets en ms reparten

@@ -17,13 +17,15 @@ const NOISE_EVENTS = new Set<string>([
   'photo_view',
   'profile_view',
   'content_view',
+  'stand_view',
   'ad_impression',
   'ad_skip',
   'pwa_prompt_shown',
   'pwa_prompt_dismissed',
 ])
 
-function isSignal(e: AnalyticsEvent): boolean {
+/** Señal de negocio (no-ruido). Exportada para recortar ANTES del slice del feed. */
+export function isSignal(e: AnalyticsEvent): boolean {
   return !NOISE_EVENTS.has(e.event)
 }
 

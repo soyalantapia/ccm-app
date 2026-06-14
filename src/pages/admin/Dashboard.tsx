@@ -5,7 +5,7 @@ import { IDS } from '../../data/ids'
 import { CorePageHeader } from '../../features/admin/CorePageHeader'
 import { CorePanel } from '../../features/admin/CorePanel'
 import { CoreOccupancyBar } from '../../features/admin/CoreOccupancyBar'
-import { CoreLiveFeed } from '../../features/admin/CoreLiveFeed'
+import { CoreLiveFeed, isSignal } from '../../features/admin/CoreLiveFeed'
 import { LiveSimulator } from '../../features/admin/LiveSimulator'
 import { downloadAnalyticsCsv } from '../../features/admin/coreAnalytics'
 import { ORDER_STATUSES, ORDER_STATUS_META, formatRelative, percent } from '../../features/admin/coreFormat'
@@ -55,9 +55,15 @@ export default function Dashboard() {
   const ordersByStatus = ORDER_STATUSES.map((status) => {
     const ofStatus = orders.filter((o) => o.status === status)
     return { status, count: ofStatus.length, last: ofStatus.at(-1)?.ts }
-  })
+  }).filter((r) => r.count > 0)
 
-  const liveEvents = [...analytics].slice(-12).reverse()
+  // Feed: SOLO señal de negocio y por recencia (ts desc). Se filtra ANTES de
+  // recortar a 12 para que el ruido (vistas/impresiones) no vacíe la lista.
+  const liveEvents = analytics
+    .filter(isSignal)
+    .slice()
+    .sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0))
+    .slice(0, 12)
 
   return (
     <div className="px-5 py-8 md:px-10">
@@ -109,12 +115,11 @@ export default function Dashboard() {
           {/* Órdenes por estado */}
           <CorePanel
             title="Órdenes por estado"
-            note={seedOrders > 0 ? `Órdenes de esta demo · ${seedOrders} histórica del seed suma al total` : 'Órdenes de esta demo'}
+            note="Históricas del seed + las de esta demo — el total cuadra con el KPI «Órdenes VIP»"
           >
-            {orders.length === 0 ? (
+            {orders.length === 0 && seedOrders === 0 ? (
               <p className="py-4 text-sm text-ink-soft">
-                Sin órdenes en esta demo todavía. Iniciá una compra VIP desde la app y la vas a ver
-                aparecer acá.
+                Sin órdenes todavía. Iniciá una compra VIP desde la app y la vas a ver aparecer acá.
               </p>
             ) : (
               <table className="w-full border-collapse text-left">
@@ -141,6 +146,17 @@ export default function Dashboard() {
                       </td>
                     </tr>
                   ))}
+                  {seedOrders > 0 && (
+                    <tr className="border-b border-line">
+                      <td className="py-3 pr-4">
+                        <Badge tone="outline">Históricas (seed)</Badge>
+                      </td>
+                      <td className="type-serif py-3 pr-4 text-right text-lg tabular-nums text-ink">
+                        {seedOrders}
+                      </td>
+                      <td className="hidden py-3 text-right text-[12px] text-ink-soft sm:table-cell">—</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             )}

@@ -85,3 +85,17 @@ Tercer batch (verificado en vivo en el preview, sin errores de consola; tsc + bu
 52. **Tabs sin corte en mobile** (`components/ui/Tabs.tsx`): `whitespace-nowrap` → "Mis descargas" (y demás tabs de Fotos/Eventos/Postulaciones) ya no envuelven a 2 líneas; la fila scrollea horizontal.
 
 **Pendiente (única "L" del roadmap): prerender de rutas públicas (SSG)** → SEO + LCP<2,5s en frío. NO se incluyó en este batch a propósito: es un cambio arquitectónico al build (vite-plugin-ssg/prerender) y no conviene shippearlo sin verificación dedicada justo antes de la demo con Gastón. Queda como paso siguiente, aislado y verificado aparte.
+
+## Auditoría completa + fixes (2026-06-14)
+
+Auditoría multi-agente (6 lentes + verificación adversarial) + verificación determinística en runtime + recorrido manual. Resultado: 56 PASS, 0 bug bloqueante, integridad de datos y matemática del reporte verificadas al dígito. Informe completo en `AUDITORIA.md`. Fixes aplicados:
+53. **A11y diálogos full-screen**: `Interstitial` y `SponsorReport` ahora usan `useFocusTrap` (foco atrapado + restitución + Escape; en el interstitial, Escape solo cuando ya se puede saltar). Antes ninguno atrapaba el foco — era el hallazgo a11y más serio.
+54. **PWA `registerType: 'autoUpdate'` → `'prompt'`** (`vite.config.ts`): con autoUpdate el SW hacía `skipWaiting()` incondicional y el banner `UpdatePrompt` nunca disparaba (swap silencioso de assets en media demo). Con 'prompt', el SW queda en espera, `needRefresh` dispara el banner y `skipWaiting` queda gated por el mensaje SKIP_WAITING (verificado en `dist/sw.js`).
+55. **Feed en vivo (D48 reforzado)** (`Dashboard.tsx` + `CoreLiveFeed` exporta `isSignal`): se filtra la señal ANTES de recortar a 12 y se ordena por recencia → el feed ya no aparece casi vacío con el seed dominado por impresiones/vistas.
+56. **KPI «Órdenes VIP» reconciliado** (`Dashboard.tsx`): la tabla "Órdenes por estado" suma una fila "Históricas (seed)" → el total cuadra con el KPI (antes el KPI incluía seed y la tabla no).
+57. **Labels del feed para eventos nuevos** (`coreAnalytics.ts`): `stand_lead_captured`/`sponsor_lead`/`calendar_export`/`onboarding_completed` con label en español; `stand_view` movido a la denylist del feed.
+58. **Reporte: slot S4 (video patrocinado)** sumado a `AdSlot` (`types.ts`) y al desglose por espacio (`SponsorReport.tsx`) → el desglose cuadra con el total.
+59. **Favicon + og-image** (`index.html` `<link rel=icon>` svg+png; `vite.config.ts` `includeAssets`) → favicon en pestaña y og-image precacheada/offline. App-shell estático ahora usa `var(--t-*)` (hereda el tema, corrige el dorado viejo #b98a2f).
+60. **`Tabs` con ARIA** (`role=tablist/tab` + `aria-selected`). **PRD §13** reconciliada con el código (eventos nuevos, `stand_view`, slots S1-S4/S6); docstring de `analytics.ts` corregido (~6.400).
+
+**Límites de Fase 1 documentados (no se tocan en Fase 0):** (a) el combo VIP usa el mpLink del primer plan — Fase 1: checkout por tier o carrito MP único; (b) inscribirse a un bloque del principal no marca la entrada general event-level — coherencia o copy en Fase 1. **Deuda anotada:** contraste del dorado en micro-texto (3.26:1, bajo AA solo en eyebrows); `video_complete` declarado pero no emitido.

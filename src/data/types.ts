@@ -152,7 +152,7 @@ export interface Gallery {
 
 /* ─── Sponsors y publicidad ─── */
 
-export type AdSlot = 'S1' | 'S2' | 'S3' | 'S6'
+export type AdSlot = 'S1' | 'S2' | 'S3' | 'S4' | 'S6'
 
 export interface SponsorCreative {
   slot: AdSlot

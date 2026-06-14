@@ -13,12 +13,17 @@ interface TabsProps {
 
 export function Tabs({ tabs, active, onChange, className }: TabsProps) {
   return (
-    <div className={`no-scrollbar flex gap-7 overflow-x-auto border-b border-line ${className ?? ''}`}>
+    <div
+      role="tablist"
+      className={`no-scrollbar flex gap-7 overflow-x-auto border-b border-line ${className ?? ''}`}
+    >
       {tabs.map((tab) => {
         const isActive = tab.id === active
         return (
           <button
             key={tab.id}
+            role="tab"
+            aria-selected={isActive}
             onClick={() => onChange(tab.id)}
             className={`eyebrow shrink-0 whitespace-nowrap border-b-2 pb-3 transition-colors ${
               isActive

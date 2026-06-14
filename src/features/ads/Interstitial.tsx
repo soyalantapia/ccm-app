@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowUpRight, X } from 'lucide-react'
 import { store, useStore } from '../../data/store'
 import { bus } from '../../lib/bus'
+import { useFocusTrap } from '../../lib/useFocusTrap'
 import type { Sponsor, SponsorCreative } from '../../data/types'
 
 const SEEN_KEY = 'ccm:interstitial-seen'
@@ -38,6 +39,20 @@ export function Interstitial() {
   const [open, setOpen] = useState(() => !isAdmin && !alreadySeen && !!pair)
   const [remaining, setRemaining] = useState(SKIP_SECONDS)
   const tracked = useRef(false)
+  const panelRef = useRef<HTMLDivElement>(null)
+  // Ref para que `skip` sea estable (no re-corre el focus-trap en cada tick).
+  const canSkipRef = useRef(false)
+  canSkipRef.current = remaining <= 0
+
+  /** Cierra el interstitial — solo cuando ya se puede saltar (>=3s). */
+  const skip = useCallback(() => {
+    if (!canSkipRef.current) return
+    if (pair) store.track('ad_skip', { slot: 'S1', sponsorId: pair.sponsor.id })
+    setOpen(false)
+  }, [pair])
+
+  // Foco atrapado dentro del diálogo full-screen + Escape salta (cuando se puede).
+  useFocusTrap(open && !!pair, panelRef, skip)
 
   // Marca como vista al montar (una sola vez por sesión) + impresión.
   useEffect(() => {
@@ -83,11 +98,6 @@ export function Interstitial() {
   const { sponsor, creative } = pair
   const canSkip = remaining <= 0
 
-  const skip = () => {
-    store.track('ad_skip', { slot: 'S1', sponsorId: sponsor.id })
-    setOpen(false)
-  }
-
   const click = () => {
     store.track('ad_click', { slot: 'S1', sponsorId: sponsor.id })
     setOpen(false)
@@ -96,6 +106,7 @@ export function Interstitial() {
 
   return createPortal(
     <div
+      ref={panelRef}
       role="dialog"
       aria-modal="true"
       aria-label={`Espacio del sponsor principal: ${sponsor.name}`}

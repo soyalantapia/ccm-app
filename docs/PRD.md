@@ -327,6 +327,8 @@ Admin crea galería (+sponsor S3) → upload masivo → CDN/thumbnails → publi
 user_created (dispositivo) · profile_field_captured (campo, acción origen) · application_submitted/_accepted/_rejected · event_view/block_view · registration_created/_cancelled/waitlist_joined · **ticket_order_created/_redirected_mp/_confirmed** · checkin (punto) · stand_visit (origen) · content_view/video_play/video_complete · live_view · photo_view/_favorite/_download · ad_impression/ad_click (slot, creative) · newsletter_sent/_open/_click (tanda, url) · push_sent/_open · mission_completed/points_earned/reward_redeemed · activation_entry (consent) · survey_response · profile_view.
 Todos con user_id (anónimo o perfilado), tenant_id, session_id, ts.
 
+**Implementado en Fase 0 (reconciliación con el código).** Además de los de arriba, la demo emite: `page_view` (ruta), `qr_view` (Mi QR), `stand_view` (= `stand_visit`; en código se llama `stand_view`) + `stand_lead_captured` (lead del stand, con sponsorId), `sponsor_lead` (form "Quiero ser sponsor"), `calendar_export` (.ics), `sponsor_report_generated`, `onboarding_completed`, y los de instalación PWA `pwa_prompt_shown/_dismissed/_install_accepted`. Ad slots vigentes: S1 (splash), S2 (feed), S3 (pre-descarga), S4 (video patrocinado), S6 (Mi QR). Pendiente: `video_complete` (hoy solo `video_play`); `waitlist_joined`, `checkin`, `live_view`, newsletter/push/missions/surveys llegan en fases siguientes.
+
 ---
 
 ## 14. Integraciones

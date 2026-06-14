@@ -1,9 +1,10 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Download, Printer, X } from 'lucide-react'
 import { Button } from '../../components/ui'
 import { config } from '../../config'
 import { store } from '../../data/store'
+import { useFocusTrap } from '../../lib/useFocusTrap'
 import type { AdSlot, Sponsor } from '../../data/types'
 import { ctr, formatDate } from './opsFormat'
 
@@ -12,9 +13,10 @@ const SLOT_LABELS: Record<AdSlot, string> = {
   S1: 'S1 · Bienvenida (splash)',
   S2: 'S2 · Feed nativo',
   S3: 'S3 · Pre-descarga de foto',
+  S4: 'S4 · Video patrocinado',
   S6: 'S6 · Pantalla Mi QR',
 }
-const SLOT_ORDER: AdSlot[] = ['S1', 'S2', 'S3', 'S6']
+const SLOT_ORDER: AdSlot[] = ['S1', 'S2', 'S3', 'S4', 'S6']
 
 interface SlotRow {
   slot: AdSlot
@@ -153,20 +155,22 @@ function Figure({ value, label, accent }: { value: string | number; label: strin
 export function SponsorReport({ sponsor, onClose }: SponsorReportProps) {
   const metrics = useSponsorMetrics(sponsor.id)
   const period = useMemo(eventPeriod, [])
+  const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     store.track('sponsor_report_generated', { sponsorId: sponsor.id })
   }, [sponsor.id])
 
+  // Bloquea el scroll del fondo mientras el reporte está abierto.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
     return () => {
-      document.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
     }
-  }, [onClose])
+  }, [])
+
+  // Foco atrapado + Escape para cerrar + restitución del foco al botón que abrió.
+  useFocusTrap(true, overlayRef, onClose)
 
   return createPortal(
     <>
@@ -188,7 +192,10 @@ export function SponsorReport({ sponsor, onClose }: SponsorReportProps) {
         @page { margin: 14mm; }
       `}</style>
 
-      <div className="fixed inset-0 z-50 flex flex-col items-center overflow-y-auto bg-night/60 p-4 backdrop-blur-[2px] sm:p-8">
+      <div
+        ref={overlayRef}
+        className="fixed inset-0 z-50 flex flex-col items-center overflow-y-auto bg-night/60 p-4 backdrop-blur-[2px] sm:p-8"
+      >
         <button
           onClick={onClose}
           aria-label="Cerrar reporte"

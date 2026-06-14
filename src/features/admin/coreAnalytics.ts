@@ -3,6 +3,7 @@ import {
   Activity,
   CalendarCheck,
   CalendarDays,
+  CalendarPlus,
   CalendarX,
   Download,
   Eye,
@@ -12,6 +13,9 @@ import {
   MousePointerClick,
   PenLine,
   Play,
+  ScanLine,
+  Sparkles,
+  Store,
   Ticket,
   UserPlus,
 } from 'lucide-react'
@@ -107,6 +111,16 @@ export function describeAnalyticsEvent(
       return { icon: Inbox, label: 'Postulación rechazada' }
     case 'profile_view':
       return { icon: Eye, label: 'Perfil del catálogo visto' }
+    case 'stand_lead_captured':
+      return { icon: ScanLine, label: `Lead captado en stand · ${sponsorName(p, s)}` }
+    case 'stand_view':
+      return { icon: Eye, label: `Stand visitado · ${sponsorName(p, s)}` }
+    case 'sponsor_lead':
+      return { icon: Store, label: 'Consulta comercial de sponsor' }
+    case 'calendar_export':
+      return { icon: CalendarPlus, label: 'Evento agregado al calendario' }
+    case 'onboarding_completed':
+      return { icon: Sparkles, label: 'Onboarding completado' }
     default: {
       const pretty = e.event.replace(/_/g, ' ')
       return { icon: Activity, label: pretty.charAt(0).toUpperCase() + pretty.slice(1) }

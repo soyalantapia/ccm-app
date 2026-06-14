@@ -21,8 +21,11 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['icons/apple-touch-icon.png'],
+      // 'prompt' (no 'autoUpdate'): el SW nuevo queda en espera y el banner
+      // UpdatePrompt dispara needRefresh → "Actualizar" controlado, sin swap
+      // silencioso de assets en media demo (ver auditoría).
+      registerType: 'prompt',
+      includeAssets: ['icons/apple-touch-icon.png', 'favicon.svg', 'favicon.png', 'og-image.jpg'],
       manifest: {
         name: 'Córdoba Corazón de Moda',
         short_name: 'CCM',
