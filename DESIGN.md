@@ -18,13 +18,15 @@
 
 Opacidades permitidas: `text-ink-soft/70`, `bg-ink/5`, `border-night-soft`, etc. `white`/`black` solo sobre fotografía (overlays).
 
-## Tipografía
+## Tipografía (sans, app-first)
 
-- `type-display` → Fraunces optical 144, tight. Títulos grandes. Tamaños con clamp: hero `text-[clamp(2.6rem,9vw,5.5rem)]`, sección `text-[clamp(2rem,6vw,3.4rem)]`.
-- `type-serif` → Fraunces optical 40. Subtítulos, nombres, números destacados (`text-xl`–`text-3xl`).
+Dirección: **app moderna, no revista**. Sin serif display, **sin itálicas** (marean y leen a "editorial"). El énfasis se hace con **peso + dorado**, nunca con cursiva.
+
+- `type-display` → **Schibsted Grotesk** peso 720, tight (`letter-spacing -0.022em`). Títulos grandes. Tamaños con clamp: hero `text-[clamp(2.6rem,9vw,5.5rem)]`, sección `text-[clamp(2rem,6vw,3.4rem)]`. (Token `--t-font-display`.)
+- `type-serif` → display secundario: misma sans, peso 560. Subtítulos, nombres, precios, horarios (`text-xl`–`text-3xl`). *(El nombre de la utilidad se mantiene por compatibilidad; ya no es serif.)*
 - `eyebrow` → Archivo uppercase tracking 0.22em 11px. Etiquetas, labels, nav.
 - Body: Archivo (default `font-sans`), `text-[15px] leading-relaxed text-ink-soft` para párrafos.
-- *Italic* de Fraunces para énfasis editorial: `<em className="italic text-accent">moda</em>` dentro de títulos.
+- **Énfasis en títulos**: `<em className="text-accent">moda</em>` — solo color dorado, sin itálica. Hay un reset global `em { font-style: normal }`, así que ningún `<em>` se renderiza en cursiva. **No usar la clase `italic` en ningún lado.**
 
 ## Patrones editoriales (usar estos, no inventar otros)
 
