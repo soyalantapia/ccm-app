@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Badge, Button, toast } from '../../components/ui'
 import { store, useStore } from '../../data/store'
 import { requireProfile } from '../../lib/profileRequest'
@@ -15,6 +16,26 @@ export function BlockRow({ block }: { block: EventBlock }) {
       .getRegistrations()
       .find((r) => r.status === 'confirmada' && r.eventId === block.eventId && r.blockId === block.id),
   )
+
+  /* block_view (PRD §13): se emite una sola vez al entrar el bloque en viewport. */
+  const ref = useRef<HTMLElement>(null)
+  const viewed = useRef(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting) && !viewed.current) {
+          viewed.current = true
+          store.track('block_view', { blockId: block.id, eventId: block.eventId })
+          observer.disconnect()
+        }
+      },
+      { threshold: 0.5 },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [block.id, block.eventId])
 
   const onRegister = async () => {
     const ok = await requireProfile(
@@ -38,7 +59,7 @@ export function BlockRow({ block }: { block: EventBlock }) {
   }
 
   return (
-    <article className="grid gap-4 border-t border-line py-7 md:grid-cols-[7.5rem_1fr_auto] md:gap-8">
+    <article ref={ref} className="grid gap-4 border-t border-line py-7 md:grid-cols-[7.5rem_1fr_auto] md:gap-8">
       <div>
         <div className="type-serif text-2xl text-ink">{block.start}</div>
         <div className="mt-0.5 text-xs text-ink-soft">a {block.end} hs</div>

@@ -2,12 +2,12 @@ import { Suspense, lazy, useEffect, type ReactNode } from 'react'
 import {
   Outlet,
   RouterProvider,
-  ScrollRestoration,
   createBrowserRouter,
   useLocation,
 } from 'react-router-dom'
 import SiteLayout from './components/layout/SiteLayout'
 import AdminLayout from './components/layout/AdminLayout'
+import { ScrollManager } from './components/layout/ScrollManager'
 import { ProfileSheetProvider } from './components/profile/ProfileSheetProvider'
 import { ToastHost } from './components/ui'
 import { track } from './lib/track'
@@ -59,9 +59,9 @@ function Root() {
 
   return (
     <ProfileSheetProvider>
+      <ScrollManager />
       <Outlet />
       <ToastHost />
-      <ScrollRestoration />
     </ProfileSheetProvider>
   )
 }

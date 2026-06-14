@@ -76,6 +76,7 @@ export function ProfileFieldRow({ field }: { field: ProfileFieldKey }) {
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder={meta.placeholder}
+            aria-label={meta.label}
             autoComplete={meta.autocomplete}
             autoFocus
             className="min-w-0 flex-1 basis-48"

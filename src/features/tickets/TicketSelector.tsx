@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ArrowUpRight, Check, Minus, Plus } from 'lucide-react'
@@ -29,6 +29,14 @@ export function TicketSelector({ className }: { className?: string }) {
   const [qty, setQty] = useState<Partial<Record<string, number>>>({})
   const [pending, setPending] = useState<PendingCheckout | null>(null)
   const [confirming, setConfirming] = useState(false)
+  /**
+   * Guard anti doble-submit. Se usa un ref (no estado) porque el setState no se
+   * refleja sincrónicamente: dos taps en el mismo tick leerían el mismo render
+   * y crearían órdenes duplicadas. El ref se actualiza al instante. El `busy`
+   * de estado existe solo para deshabilitar el botón en la UI.
+   */
+  const busyRef = useRef(false)
+  const [busy, setBusy] = useState(false)
 
   const vipPlans = useMemo(() => plans.filter((p) => p.kind === 'vip'), [plans])
 
@@ -38,20 +46,33 @@ export function TicketSelector({ className }: { className?: string }) {
     0,
   )
 
-  const bump = (plan: TicketPlan, delta: number) =>
+  const bump = (plan: TicketPlan, delta: number) => {
+    if (confirming) setConfirming(false) // empieza una selección nueva → oculta el aviso anterior
     setQty((q) => ({ ...q, [plan.id]: Math.min(6, Math.max(0, (q[plan.id] ?? 0) + delta)) }))
+  }
 
   const checkout = async () => {
-    const ok = await requireProfile(
-      ['firstName', 'lastName', 'email', 'profession', 'phone'],
-      'compra_vip',
-      { title: 'Para comprar tus entradas necesitamos estos datos' },
-    )
-    if (!ok) return
-    const selected = vipPlans.filter((p) => (qty[p.id] ?? 0) > 0)
-    const orders = selected.map((p) => store.createOrder(p.id, qty[p.id]!))
-    const mpLink = selected.find((p) => p.mpLink)?.mpLink ?? 'https://www.mercadopago.com.ar'
-    setPending({ orders, total, mpLink })
+    if (busyRef.current || pending) return // anti doble-submit (ref = bloqueo en el mismo tick)
+    busyRef.current = true
+    setBusy(true)
+    try {
+      const ok = await requireProfile(
+        ['firstName', 'lastName', 'email', 'profession', 'phone'],
+        'compra_vip',
+        { title: 'Para comprar tus entradas necesitamos estos datos' },
+      )
+      if (!ok) return
+      const selected = vipPlans.filter((p) => (qty[p.id] ?? 0) > 0)
+      if (selected.length === 0) return
+      const orders = selected.map((p) => store.createOrder(p.id, qty[p.id]!))
+      // Total real de las órdenes creadas (no del render, que pudo cambiar durante el await).
+      const orderedTotal = orders.reduce((acc, o) => acc + o.total, 0)
+      const mpLink = selected.find((p) => p.mpLink)?.mpLink ?? 'https://www.mercadopago.com.ar'
+      setPending({ orders, total: orderedTotal, mpLink })
+    } finally {
+      busyRef.current = false
+      setBusy(false)
+    }
   }
 
   const goToMp = () => {
@@ -128,17 +149,17 @@ export function TicketSelector({ className }: { className?: string }) {
                     aria-label={`Quitar ${plan.name}`}
                     onClick={() => bump(plan, -1)}
                     disabled={count === 0}
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-line text-ink transition-all active:scale-90 disabled:opacity-30 hover:border-ink"
+                    className="flex h-11 w-11 items-center justify-center rounded-full border border-line text-ink transition-all active:scale-90 disabled:opacity-30 hover:border-ink"
                   >
-                    <Minus size={14} />
+                    <Minus size={15} />
                   </button>
                   <span className="type-serif w-5 text-center text-lg tabular-nums text-ink">{count}</span>
                   <button
                     aria-label={`Agregar ${plan.name}`}
                     onClick={() => bump(plan, 1)}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-accent-ink shadow-sm transition-all active:scale-90 hover:brightness-105"
+                    className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-accent-ink shadow-sm transition-all active:scale-90 hover:brightness-105"
                   >
-                    <Plus size={14} />
+                    <Plus size={15} />
                   </button>
                 </div>
               )}
@@ -166,7 +187,7 @@ export function TicketSelector({ className }: { className?: string }) {
                   {totalQty} {totalQty === 1 ? 'entrada' : 'entradas'} · incluye cargo por servicio
                 </div>
               </div>
-              <Button onClick={() => void checkout()} className="shrink-0">
+              <Button onClick={() => void checkout()} disabled={busy || !!pending} className="shrink-0">
                 Continuar
               </Button>
             </div>

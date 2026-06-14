@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { Sparkles } from 'lucide-react'
 import { Badge, Eyebrow, EmptyState, SectionTitle } from '../../components/ui'
 import { store, useStore } from '../../data/store'
@@ -113,9 +114,9 @@ export function PrincipalBody({ event }: { event: EventItem }) {
           />
           <div className="mt-8 grid gap-4 md:mt-10 md:grid-cols-2">
             {EXPERIENCIAS.map((x) => (
-              <a
+              <Link
                 key={x.name}
-                href="#entradas"
+                to="#entradas"
                 className="group flex items-center justify-between gap-4 rounded-md border border-night-soft bg-night-soft/40 p-5 transition-colors hover:border-accent/60"
               >
                 <div>
@@ -131,7 +132,7 @@ export function PrincipalBody({ event }: { event: EventItem }) {
                     Comprar ↑
                   </div>
                 </div>
-              </a>
+              </Link>
             ))}
           </div>
         </div>

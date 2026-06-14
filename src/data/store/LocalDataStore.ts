@@ -139,8 +139,10 @@ export class LocalDataStore implements DataStore {
     const regs = this.getRegistrations()
     const reg = regs.find((r) => r.id === registrationId)
     if (!reg) return
-    reg.status = 'cancelada'
-    writeJSON(K.registrations, regs)
+    writeJSON(
+      K.registrations,
+      regs.map((r) => (r.id === registrationId ? { ...r, status: 'cancelada' as const } : r)),
+    )
     this.track('registration_cancelled', { eventId: reg.eventId, blockId: reg.blockId ?? null })
   }
 
@@ -199,10 +201,11 @@ export class LocalDataStore implements DataStore {
 
   private setOrderStatusInternal(orderId: string, status: OrderStatus): void {
     const orders = this.getOrders()
-    const order = orders.find((o) => o.id === orderId)
-    if (!order) return
-    order.status = status
-    writeJSON(K.orders, orders)
+    if (!orders.some((o) => o.id === orderId)) return
+    writeJSON(
+      K.orders,
+      orders.map((o) => (o.id === orderId ? { ...o, status } : o)),
+    )
   }
 
   getOrders(): TicketOrder[] {
@@ -235,13 +238,12 @@ export class LocalDataStore implements DataStore {
 
   toggleFavorite(photoId: string): void {
     const favorites = this.getFavorites()
-    const i = favorites.indexOf(photoId)
-    if (i >= 0) favorites.splice(i, 1)
-    else {
-      favorites.push(photoId)
+    if (favorites.includes(photoId)) {
+      writeJSON(K.favorites, favorites.filter((id) => id !== photoId))
+    } else {
+      writeJSON(K.favorites, [...favorites, photoId])
       this.track('photo_favorite', { photoId })
     }
-    writeJSON(K.favorites, favorites)
   }
 
   recordDownload(photoId: string, galleryId: string): void {

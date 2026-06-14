@@ -37,7 +37,7 @@ export function Countdown({ to, tone = 'ink', className }: { to: string; tone?: 
             <div className={`eyebrow mt-1.5 text-[9px] ${lab}`}>{u.label}</div>
           </div>
           {i < units.length - 1 && (
-            <span aria-hidden className={`type-serif mt-1 text-2xl sm:text-4xl ${tone === 'night' ? 'text-accent' : 'text-accent'}`}>
+            <span aria-hidden className="type-serif mt-1 text-2xl text-accent sm:text-4xl">
               ·
             </span>
           )}

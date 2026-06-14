@@ -46,7 +46,7 @@ Si necesitás algo que no existe, crealo en `src/features/<tu-area>/` consumiend
 
 - Contenedor: `mx-auto max-w-6xl px-5` (admin: `px-5 md:px-10`).
 - Ritmo vertical generoso: secciones `py-16 md:py-24`; entre título y contenido `mt-10 md:mt-14`.
-- Radios SOLO vía tokens: `rounded-sm` (botones, badges), `rounded-md` (cards), `rounded-lg` (sheets/modals). Nunca `rounded-xl`/`rounded-full` salvo avatares y el botón central del bottom nav.
+- Radios SOLO vía tokens: `rounded-sm` (botones, badges), `rounded-md` (cards), `rounded-lg` (sheets/modals). Nunca `rounded-xl`. `rounded-full` se permite solo en controles circulares "app-native": avatares, botón central del bottom nav, steppers +/− del selector de entradas, el play de YouTube y el botón flotante "volver" sobre el hero de las fichas.
 
 ## Motion
 

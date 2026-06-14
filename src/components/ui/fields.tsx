@@ -48,7 +48,7 @@ export function Select({ options, placeholder, className, ...rest }: SelectProps
   return (
     <select className={`${inputClass} appearance-none ${className ?? ''}`} {...rest}>
       {placeholder && (
-        <option value="" disabled>
+        <option value="" disabled hidden>
           {placeholder}
         </option>
       )}
