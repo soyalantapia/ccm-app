@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
-import { Card, Eyebrow, SectionTitle, toast } from '../../components/ui'
+import { Button, Card, Eyebrow, SectionTitle, Sheet, toast } from '../../components/ui'
 import { config } from '../../config'
 import { removeKey } from '../../lib/storage'
 import { OpsThemeEditor } from '../../features/admin/OpsThemeEditor'
@@ -10,18 +10,16 @@ const STORAGE_PREFIX = 'ccm:'
 
 export default function AdminConfiguracion() {
   const [showKey, setShowKey] = useState(false)
+  const [confirming, setConfirming] = useState(false)
 
   const resetDemo = () => {
-    const ok = window.confirm(
-      '¿Reiniciar todos los datos de la demo? Se borran inscripciones, órdenes, postulaciones, perfil y analytics de este dispositivo. El tema actual se conserva.',
-    )
-    if (!ok) return
     const keys: string[] = []
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i)
       if (k && k.startsWith(STORAGE_PREFIX) && k !== `${STORAGE_PREFIX}theme`) keys.push(k)
     }
     keys.forEach((k) => removeKey(k.slice(STORAGE_PREFIX.length)))
+    setConfirming(false)
     toast('✓ Datos de la demo reiniciados')
   }
 
@@ -74,7 +72,9 @@ export default function AdminConfiguracion() {
             Fase 1.
           </p>
           <div className="mt-5 border-t border-line pt-5">
-            <OpsDangerButton onClick={resetDemo}>Reiniciar datos de la demo</OpsDangerButton>
+            <OpsDangerButton onClick={() => setConfirming(true)}>
+              Reiniciar datos de la demo
+            </OpsDangerButton>
             <p className="mt-3 text-xs leading-relaxed text-ink-soft/80">
               Deja la app como recién instalada (el tema elegido se conserva). Útil para resetear
               antes de presentar.
@@ -82,6 +82,22 @@ export default function AdminConfiguracion() {
           </div>
         </Card>
       </section>
+
+      {/* Confirmación con el sheet propio (no window.confirm — rompe el app-feel) */}
+      <Sheet open={confirming} onClose={() => setConfirming(false)} title="¿Reiniciar la demo?">
+        <p className="text-[15px] leading-relaxed text-ink-soft">
+          Se borran inscripciones, órdenes, postulaciones, perfil y analytics de este dispositivo.
+          El tema elegido se conserva. Esta acción no se puede deshacer.
+        </p>
+        <div className="mt-6 flex flex-col gap-2.5">
+          <OpsDangerButton onClick={resetDemo} className="w-full justify-center">
+            Sí, reiniciar todo
+          </OpsDangerButton>
+          <Button variant="ghost" size="lg" className="w-full" onClick={() => setConfirming(false)}>
+            Cancelar
+          </Button>
+        </div>
+      </Sheet>
     </div>
   )
 }

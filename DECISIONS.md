@@ -48,3 +48,18 @@ Decisiones tomadas durante la construcción de la demo, con su porqué. Los [PEN
 27. **Doble-submit de compra arreglado** (`TicketSelector`): el guard estaba en `useState` (no se refleja en el mismo tick), así que un doble/triple-tap creaba órdenes duplicadas. Ahora el guard es un `useRef` (bloqueo sincrónico) + botón `disabled`. Verificado: triple-click → 1 sola orden.
 28. **Otros**: steppers de cantidad a 44×44px (touch target); total del sheet recalculado desde las órdenes creadas (no del render); `block_view` (PRD §13) por IntersectionObserver en cada bloque; aria-label en el input inline del perfil; `<option>` placeholder con `hidden`; escrituras inmutables en LocalDataStore (cancelRegistration/setOrderStatus/toggleFavorite); ternario muerto en Countdown.
 29. Excepciones de `rounded-full` documentadas en DESIGN.md (controles circulares app-native: steppers, FAB de volver, play de YouTube, avatares, nav central).
+
+## Auditoría 360 + Bloque 0/1 del roadmap (2026-06-14)
+
+Tras una auditoría multi-agente (producto/PRD, UX, diseño, código, a11y/perf) se implementó el primer batch:
+30. **Robustez demo**: `uuid()` con fallback (crypto.randomUUID rompía en contexto no-seguro) en `lib/identity.ts`; `<Img>` con `onError` → fallback editorial (no más hueco gris).
+31. **Cancelar inscripción**: optimista + `toast` con acción "Deshacer" (Toast extendido para aceptar `{ tone, action, duration }`, retrocompatible).
+32. **Service worker**: `UpdatePrompt` (`useRegisterSW` de vite-plugin-pwa/react) muestra "nueva versión disponible → Actualizar"; el registro del SW se movió de main.tsx al componente.
+33. **Reset de demo**: confirmación con `Sheet` propio (no `window.confirm`).
+34. **Seed a escala de pre-evento**: `analytics.ts` genera ~5.850 eventos programáticamente → dashboard abre con ~1189 registrados / 703 inscripciones / 122 descargas / 41 órdenes (antes "4").
+35. **Slot S1 — interstitial de apertura**: `features/ads/Interstitial.tsx` (1×/sesión, skippeable 3s, trackeado), montado en ProfileSheetProvider; creatividad S1 de Banco Distrito en sponsors.ts; `AdSlot` ahora incluye 'S1'.
+36. **Contraste dorado**: `--t-accent` #b98a2f → #a87d22 (mejora AA sobre crema 2.7→3.3, mantiene AA sobre noche).
+37. **Fuente display auto-hosteada** (`public/fonts/schibsted-display.woff2`) con `@font-face` de URL estable + `<link rel=preload>` → corta el FOUT del título (LCP). Se quitó el import fontsource de Schibsted.
+38. **CTA del header visible en mobile** ("Registrate" / "Mi QR").
+
+Pendiente del roadmap (Bloque 2/3): reporte de impacto exportable por sponsor, panel que respira/timeline del dato, skeletons, focus-trap a11y, onboarding+instalar PWA, variedad de seed (galerías/sponsor/capacitación/CRM), .ics, chips de logo de sponsors, prerender SEO.

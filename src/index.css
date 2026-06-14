@@ -1,5 +1,15 @@
 @import 'tailwindcss';
 
+/* Fuente display auto-hosteada con nombre/URL estable (no fingerprinted) para
+   poder precargarla desde index.html y cortar el FOUT sobre el título (LCP). */
+@font-face {
+  font-family: 'Schibsted Display';
+  src: url('/ccm-app/fonts/schibsted-display.woff2') format('woff2');
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* ─── Design tokens (runtime) ─────────────────────────────────────────
      Única fuente de color/tipografía/radios de toda la app (D23).
@@ -10,7 +20,7 @@
   --t-ink: #181410;
   --t-ink-soft: #6b6353;
   --t-line: #ddd3bd;
-  --t-accent: #b98a2f;
+  --t-accent: #a87d22;
   --t-accent-ink: #1c1503;
   --t-night: #131c2e;
   --t-night-soft: #1d2a42;
@@ -18,7 +28,7 @@
   --t-radius-sm: 2px;
   --t-radius-md: 8px;
   --t-radius-lg: 18px;
-  --t-font-display: 'Schibsted Grotesk Variable', 'Archivo Variable', system-ui, sans-serif;
+  --t-font-display: 'Schibsted Display', 'Schibsted Grotesk Variable', 'Archivo Variable', system-ui, sans-serif;
   --t-font-sans: 'Archivo Variable', system-ui, -apple-system, sans-serif;
 }
 

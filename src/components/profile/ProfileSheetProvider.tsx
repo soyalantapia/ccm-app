@@ -6,6 +6,7 @@ import { getProfile, missingFields } from '../../lib/identity'
 import { store } from '../../data/store'
 import { FIELD_META, type ProfileRequest } from '../../lib/profileRequest'
 import { Sheet, Field, Input, Button } from '../ui'
+import { Interstitial } from '../../features/ads/Interstitial'
 import type { ProfileFieldKey } from '../../data/types'
 
 /**
@@ -67,6 +68,7 @@ export function ProfileSheetProvider({ children }: { children: ReactNode }) {
   return (
     <>
       {children}
+      <Interstitial />
       <Sheet open={!!request} onClose={() => close(false)} title={request?.title}>
         {request && (
           <form onSubmit={submit} className="space-y-4">

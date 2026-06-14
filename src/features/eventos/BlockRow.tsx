@@ -54,8 +54,20 @@ export function BlockRow({ block }: { block: EventBlock }) {
 
   const onCancel = () => {
     if (!registration) return
+    const eventId = registration.eventId
+    const blockId = registration.blockId
     store.cancelRegistration(registration.id)
-    toast('Inscripción cancelada', 'info')
+    toast('Inscripción cancelada', {
+      tone: 'info',
+      action: {
+        label: 'Deshacer',
+        onClick: () => {
+          const restored = store.register(eventId, blockId)
+          if (restored) toast('Inscripción confirmada ✓')
+          else toast('Ese bloque ya está completo', 'info')
+        },
+      },
+    })
   }
 
   return (

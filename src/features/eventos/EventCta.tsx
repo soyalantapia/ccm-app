@@ -45,8 +45,19 @@ export function EventCta({ event }: { event: EventItem }) {
           variant="ghost"
           size="sm"
           onClick={() => {
+            const eventId = registration.eventId
             store.cancelRegistration(registration.id)
-            toast('Inscripción cancelada', 'info')
+            toast('Inscripción cancelada', {
+              tone: 'info',
+              action: {
+                label: 'Deshacer',
+                onClick: () => {
+                  const restored = store.register(eventId)
+                  if (restored) toast('Inscripción confirmada ✓')
+                  else toast('No pudimos reactivar tu inscripción', 'info')
+                },
+              },
+            })
           }}
         >
           Cancelar

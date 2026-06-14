@@ -8,6 +8,7 @@ import {
 import SiteLayout from './components/layout/SiteLayout'
 import AdminLayout from './components/layout/AdminLayout'
 import { ScrollManager } from './components/layout/ScrollManager'
+import { UpdatePrompt } from './components/layout/UpdatePrompt'
 import { ProfileSheetProvider } from './components/profile/ProfileSheetProvider'
 import { ToastHost } from './components/ui'
 import { track } from './lib/track'
@@ -62,6 +63,7 @@ function Root() {
       <ScrollManager />
       <Outlet />
       <ToastHost />
+      <UpdatePrompt />
     </ProfileSheetProvider>
   )
 }

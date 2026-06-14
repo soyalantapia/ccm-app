@@ -78,8 +78,8 @@ function Header() {
             ))}
           </nav>
           <div className="flex items-center gap-2.5">
-            <Button size="sm" className="hidden sm:inline-flex" onClick={() => void registerFree(navigate)}>
-              {registered ? 'Mi QR' : 'Registrate gratis'}
+            <Button size="sm" onClick={() => void registerFree(navigate)}>
+              {registered ? 'Mi QR' : 'Registrate'}
             </Button>
             <button
               onClick={() => setMenuOpen(true)}

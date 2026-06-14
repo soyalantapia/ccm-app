@@ -1,27 +1,52 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, Info } from 'lucide-react'
 
+type ToastTone = 'success' | 'info'
+
+interface ToastAction {
+  label: string
+  onClick: () => void
+}
+
+interface ToastOptions {
+  tone?: ToastTone
+  action?: ToastAction
+  duration?: number
+}
+
 interface ToastItem {
   id: number
   message: string
-  tone: 'success' | 'info'
+  tone: ToastTone
+  action?: ToastAction
+  duration: number
 }
 
 let push: (t: Omit<ToastItem, 'id'>) => void = () => {}
 let counter = 0
 
-export function toast(message: string, tone: 'success' | 'info' = 'success') {
-  push({ message, tone })
+/**
+ * toast('texto') → success ~2.8s
+ * toast('texto', 'info') → tono explícito (compat)
+ * toast('texto', { tone, action, duration }) → con acción ("Deshacer"), sube a ~5s
+ */
+export function toast(message: string, opts: ToastTone | ToastOptions = 'success') {
+  const o: ToastOptions = typeof opts === 'string' ? { tone: opts } : opts
+  const tone = o.tone ?? 'success'
+  const duration = o.duration ?? (o.action ? 5000 : 2800)
+  push({ message, tone, action: o.action, duration })
 }
 
 export function ToastHost() {
   const [items, setItems] = useState<ToastItem[]>([])
 
+  const dismiss = (id: number) => setItems((prev) => prev.filter((t) => t.id !== id))
+
   useEffect(() => {
-    push = ({ message, tone }) => {
+    push = ({ message, tone, action, duration }) => {
       const id = ++counter
-      setItems((prev) => [...prev, { id, message, tone }])
-      setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), 2800)
+      setItems((prev) => [...prev, { id, message, tone, action, duration }])
+      setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), duration)
     }
     return () => {
       push = () => {}
@@ -33,14 +58,26 @@ export function ToastHost() {
       {items.map((t) => (
         <div
           key={t.id}
-          className="flex max-w-sm items-center gap-2.5 rounded-md bg-ink px-4 py-3 text-sm font-medium text-bg shadow-2xl animate-rise"
+          className="pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-md bg-ink px-4 py-3 text-sm font-medium text-bg shadow-2xl animate-rise"
         >
           {t.tone === 'success' ? (
             <CheckCircle2 size={16} className="shrink-0 text-accent" />
           ) : (
             <Info size={16} className="shrink-0 text-accent" />
           )}
-          {t.message}
+          <span>{t.message}</span>
+          {t.action && (
+            <button
+              type="button"
+              onClick={() => {
+                t.action?.onClick()
+                dismiss(t.id)
+              }}
+              className="-my-1 ml-1.5 shrink-0 rounded-sm px-2 py-1 font-semibold text-accent transition hover:bg-accent hover:text-accent-ink"
+            >
+              {t.action.label}
+            </button>
+          )}
         </div>
       ))}
     </div>

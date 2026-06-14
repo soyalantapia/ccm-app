@@ -9,9 +9,40 @@ import type { DeviceProfile, ProfileFieldKey } from '../data/types'
 
 const KEY = 'profile'
 
+/**
+ * UUID robusto que NUNCA tira excepción.
+ * crypto.randomUUID() solo existe en contexto seguro (https/localhost); si la
+ * demo se abre por http/LAN/file:// lanza y deja pantalla blanca. Caemos a
+ * getRandomValues y, en última instancia, a un id aleatorio simple.
+ */
+function uuid(): string {
+  const c = typeof crypto !== 'undefined' ? crypto : undefined
+  if (c?.randomUUID) {
+    try {
+      return c.randomUUID()
+    } catch {
+      // sigue al fallback
+    }
+  }
+  if (c?.getRandomValues) {
+    try {
+      const bytes = c.getRandomValues(new Uint8Array(16))
+      bytes[6] = (bytes[6] & 0x0f) | 0x40
+      bytes[8] = (bytes[8] & 0x3f) | 0x80
+      const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+    } catch {
+      // sigue al fallback
+    }
+  }
+  // Último recurso: no es criptográfico, pero garantiza no romper la demo.
+  const rnd = () => Math.random().toString(16).slice(2)
+  return `${rnd()}${rnd()}-${Date.now().toString(16)}`
+}
+
 function blankProfile(): DeviceProfile {
   return {
-    deviceId: `dev-${crypto.randomUUID().slice(0, 13)}`,
+    deviceId: `dev-${uuid().slice(0, 13)}`,
     createdAt: new Date().toISOString(),
     fields: {},
     consents: {},

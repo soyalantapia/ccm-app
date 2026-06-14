@@ -32,7 +32,7 @@ export const DEFAULT_THEME: Record<TokenKey, string> = {
   ink: '#181410',
   'ink-soft': '#6b6353',
   line: '#ddd3bd',
-  accent: '#b98a2f',
+  accent: '#a87d22',
   'accent-ink': '#1c1503',
   night: '#131c2e',
   'night-soft': '#1d2a42',

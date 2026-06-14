@@ -1,16 +1,15 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import '@fontsource-variable/schibsted-grotesk/wght.css'
 import '@fontsource-variable/archivo/index.css'
 import './index.css'
 import App from './App'
 import { initTheme } from './lib/theme'
 import { ensureDevice } from './lib/identity'
-import { registerSW } from 'virtual:pwa-register'
 
+// El service worker lo registra <UpdatePrompt/> (useRegisterSW) para poder
+// avisar "nueva versión disponible" en vez de dejar un build viejo en pantalla.
 initTheme()
 ensureDevice()
-registerSW({ immediate: true })
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

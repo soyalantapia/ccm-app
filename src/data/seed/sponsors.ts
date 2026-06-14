@@ -16,6 +16,12 @@ export const seedSponsors: Sponsor[] = [
     tagline: 'El banco que invierte en la industria creativa del interior',
     creatives: [
       {
+        slot: 'S1',
+        headline: 'Dos jornadas que visten el futuro de Córdoba',
+        sub: 'Banco Distrito presenta Córdoba Corazón de Moda 2026: la plataforma que financia, impulsa y celebra a la industria creativa del interior.',
+        cta: 'Conocé a Banco Distrito',
+      },
+      {
         slot: 'S2',
         headline: 'Tu marca de autor también es un negocio. Banco Distrito la financia.',
         sub: 'Créditos y cuentas pensados para emprendedores del ecosistema CCM.',
