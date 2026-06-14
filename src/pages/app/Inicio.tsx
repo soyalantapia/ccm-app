@@ -10,6 +10,7 @@ import { HomeHeader } from '../../features/app/home/HomeHeader'
 import { PrimaryActionCard } from '../../features/app/home/PrimaryActionCard'
 import { ActionStrip } from '../../features/app/home/ActionStrip'
 import { DiscoverRow } from '../../features/app/home/DiscoverRow'
+import { WelcomeSheet } from '../../features/app/WelcomeSheet'
 
 /**
  * Inicio (feed) — PRD §8.1, estrategia app-nativa: header compacto, card de
@@ -115,6 +116,9 @@ export default function Inicio() {
           ))}
         </div>
       </AppSection>
+
+      {/* Onboarding de primera vez (no se solapa con el interstitial S1) */}
+      <WelcomeSheet />
     </div>
   )
 }

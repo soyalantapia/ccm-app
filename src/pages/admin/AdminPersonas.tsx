@@ -3,6 +3,7 @@ import { useStore } from '../../data/store'
 import type { ProfileFieldKey } from '../../data/types'
 import { CorePageHeader } from '../../features/admin/CorePageHeader'
 import { CorePanel } from '../../features/admin/CorePanel'
+import { DeviceTimeline } from '../../features/admin/DeviceTimeline'
 import {
   APPLICATION_STATUS_META,
   PROFILE_FIELD_LABELS,
@@ -24,6 +25,10 @@ export default function AdminPersonas() {
   const downloads = useStore((s) => s.getDownloads())
   const orders = useStore((s) => s.getOrders())
   const applications = useStore((s) => s.getApplications())
+  const analytics = useStore((s) => s.getAnalytics())
+
+  // Timeline del dato: eventos de ESTE dispositivo, en orden cronológico.
+  const deviceEvents = analytics.filter((e) => e.deviceId === profile.deviceId)
 
   const capturedFields = PROFILE_FIELD_ORDER.filter(
     (key): key is ProfileFieldKey => Boolean(profile.fields[key]?.value),
@@ -136,6 +141,26 @@ export default function AdminPersonas() {
                 {a.label}
               </p>
             ))}
+          </div>
+        </div>
+
+        {/* Timeline del dato propio — el remate del pitch (PRD §10.5) */}
+        <div className="mt-7 border-t border-line pt-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <p className="eyebrow text-[9px] text-accent">Timeline del dato</p>
+            <span className="eyebrow flex items-center gap-1.5 text-[8px] text-success">
+              <span aria-hidden className="animate-pulse leading-none">
+                ●
+              </span>
+              En vivo
+            </span>
+          </div>
+          <p className="mt-2 text-[12px] leading-relaxed text-ink-soft">
+            Cada acción de este dispositivo queda registrada con su origen y su hora exacta. Probá:
+            esa acción de hace unos segundos ya es esta fila.
+          </p>
+          <div className="mt-4">
+            <DeviceTimeline events={deviceEvents} />
           </div>
         </div>
       </Card>

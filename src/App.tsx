@@ -10,7 +10,8 @@ import AdminLayout from './components/layout/AdminLayout'
 import { ScrollManager } from './components/layout/ScrollManager'
 import { UpdatePrompt } from './components/layout/UpdatePrompt'
 import { ProfileSheetProvider } from './components/profile/ProfileSheetProvider'
-import { ToastHost } from './components/ui'
+import { InstallBanner } from './components/layout/InstallBanner'
+import { AdminPending, PagePending, ToastHost } from './components/ui'
 import { track } from './lib/track'
 import NotFound from './pages/NotFound'
 
@@ -40,16 +41,14 @@ const AdminGalerias = lazy(() => import('./pages/admin/AdminGalerias'))
 const AdminOrdenes = lazy(() => import('./pages/admin/AdminOrdenes'))
 const AdminConfiguracion = lazy(() => import('./pages/admin/AdminConfiguracion'))
 
-function PageLoader() {
-  return (
-    <div className="flex min-h-[55vh] items-center justify-center">
-      <span className="type-display animate-pulse text-3xl text-ink-soft/30">CCM</span>
-    </div>
-  )
+/** Suspense de página pública/app: skeleton con forma de página. */
+function S({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<PagePending />}>{children}</Suspense>
 }
 
-function S({ children }: { children: ReactNode }) {
-  return <Suspense fallback={<PageLoader />}>{children}</Suspense>
+/** Suspense del panel admin: skeleton con KPIs + filas. */
+function SA({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<AdminPending />}>{children}</Suspense>
 }
 
 function Root() {
@@ -63,6 +62,7 @@ function Root() {
       <ScrollManager />
       <Outlet />
       <ToastHost />
+      <InstallBanner />
       <UpdatePrompt />
     </ProfileSheetProvider>
   )
@@ -99,14 +99,14 @@ const router = createBrowserRouter(
           path: '/admin',
           element: <AdminLayout />,
           children: [
-            { index: true, element: <S><Dashboard /></S> },
-            { path: 'eventos', element: <S><AdminEventos /></S> },
-            { path: 'eventos/:id', element: <S><AdminEventoDetalle /></S> },
-            { path: 'postulaciones', element: <S><AdminPostulaciones /></S> },
-            { path: 'personas', element: <S><AdminPersonas /></S> },
-            { path: 'galerias', element: <S><AdminGalerias /></S> },
-            { path: 'ordenes', element: <S><AdminOrdenes /></S> },
-            { path: 'configuracion', element: <S><AdminConfiguracion /></S> },
+            { index: true, element: <SA><Dashboard /></SA> },
+            { path: 'eventos', element: <SA><AdminEventos /></SA> },
+            { path: 'eventos/:id', element: <SA><AdminEventoDetalle /></SA> },
+            { path: 'postulaciones', element: <SA><AdminPostulaciones /></SA> },
+            { path: 'personas', element: <SA><AdminPersonas /></SA> },
+            { path: 'galerias', element: <SA><AdminGalerias /></SA> },
+            { path: 'ordenes', element: <SA><AdminOrdenes /></SA> },
+            { path: 'configuracion', element: <SA><AdminConfiguracion /></SA> },
           ],
         },
       ],

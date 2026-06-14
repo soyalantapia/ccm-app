@@ -3,9 +3,13 @@ import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowUpRight, X } from 'lucide-react'
 import { store, useStore } from '../../data/store'
+import { bus } from '../../lib/bus'
 import type { Sponsor, SponsorCreative } from '../../data/types'
 
 const SEEN_KEY = 'ccm:interstitial-seen'
+// Señal de "el interstitial ya terminó" (no se mostró o se cerró) para que el
+// onboarding pueda aparecer sin quedar debajo de esta pieza full-screen.
+const DONE_KEY = 'ccm:interstitial-done'
 const SKIP_SECONDS = 3
 
 /** Resuelve el sponsor Principal y su creatividad S1 desde el seed. */
@@ -46,6 +50,17 @@ export function Interstitial() {
     }
     store.track('ad_impression', { slot: 'S1', sponsorId: pair.sponsor.id })
   }, [open, pair])
+
+  // Cuando el interstitial no se muestra o se cierra, avisamos al onboarding.
+  useEffect(() => {
+    if (open) return
+    try {
+      sessionStorage.setItem(DONE_KEY, '1')
+    } catch {
+      /* sessionStorage no disponible */
+    }
+    bus.emit('ui:interstitial-done')
+  }, [open])
 
   // Contador de habilitación del skip.
   useEffect(() => {

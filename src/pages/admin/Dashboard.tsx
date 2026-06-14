@@ -6,6 +6,7 @@ import { CorePageHeader } from '../../features/admin/CorePageHeader'
 import { CorePanel } from '../../features/admin/CorePanel'
 import { CoreOccupancyBar } from '../../features/admin/CoreOccupancyBar'
 import { CoreLiveFeed } from '../../features/admin/CoreLiveFeed'
+import { LiveSimulator } from '../../features/admin/LiveSimulator'
 import { downloadAnalyticsCsv } from '../../features/admin/coreAnalytics'
 import { ORDER_STATUSES, ORDER_STATUS_META, formatRelative, percent } from '../../features/admin/coreFormat'
 
@@ -65,9 +66,12 @@ export default function Dashboard() {
         live
         lead="Demo local · sincronización en la nube en Fase 1"
         actions={
-          <Button variant="outline" size="sm" onClick={() => downloadAnalyticsCsv(analytics)}>
-            <Download size={13} strokeWidth={2} /> Exportar CSV
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <LiveSimulator />
+            <Button variant="outline" size="sm" onClick={() => downloadAnalyticsCsv(analytics)}>
+              <Download size={13} strokeWidth={2} /> Exportar CSV
+            </Button>
+          </div>
         }
       />
 

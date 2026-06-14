@@ -1,7 +1,10 @@
-import { Badge, Card } from '../../components/ui'
+import { useState } from 'react'
+import { FileText } from 'lucide-react'
+import { Badge, Button, Card } from '../../components/ui'
 import type { BadgeTone } from '../../components/ui/Badge'
 import type { Sponsor, SponsorCreative } from '../../data/types'
 import { ctr } from './opsFormat'
+import { SponsorReport } from './SponsorReport'
 
 const LEVEL_TONE: Record<Sponsor['level'], BadgeTone> = {
   Principal: 'night',
@@ -47,6 +50,7 @@ interface OpsSponsorCardProps {
 
 /** Card de sponsor con creatividades por slot y métricas de impacto (PRD §10.9). */
 export function OpsSponsorCard({ sponsor, impressions, clicks }: OpsSponsorCardProps) {
+  const [reportOpen, setReportOpen] = useState(false)
   return (
     <Card className="flex h-full flex-col p-5 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
@@ -80,6 +84,18 @@ export function OpsSponsorCard({ sponsor, impressions, clicks }: OpsSponsorCardP
           <dt className="eyebrow mt-1 text-[9px] text-ink-soft">CTR</dt>
         </div>
       </dl>
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setReportOpen(true)}
+        className="mt-4 w-full justify-center"
+      >
+        <FileText size={15} strokeWidth={1.75} />
+        Generar reporte
+      </Button>
+
+      {reportOpen && <SponsorReport sponsor={sponsor} onClose={() => setReportOpen(false)} />}
     </Card>
   )
 }

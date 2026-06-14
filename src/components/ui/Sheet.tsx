@@ -1,6 +1,7 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { useFocusTrap } from '../../lib/useFocusTrap'
 
 interface SheetProps {
   open: boolean
@@ -13,16 +14,19 @@ interface SheetProps {
 
 /** Bottom sheet en mobile, diálogo centrado en desktop. */
 export function Sheet({ open, onClose, title, children, size = 'md' }: SheetProps) {
+  const panelRef = useRef<HTMLDivElement>(null)
+  const titleId = useId()
+
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
     return () => {
-      document.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
     }
-  }, [open, onClose])
+  }, [open])
+
+  // Atrapa el foco, lo restituye al cerrar y unifica el cierre con Escape.
+  useFocusTrap(open, panelRef, onClose)
 
   if (!open) return null
 
@@ -30,15 +34,24 @@ export function Sheet({ open, onClose, title, children, size = 'md' }: SheetProp
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
       <div className="absolute inset-0 bg-night/60 backdrop-blur-[2px] animate-fade" onClick={onClose} />
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
+        aria-label={title ? undefined : 'Diálogo'}
         className={`relative flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-lg border-t border-line bg-surface shadow-2xl animate-sheet-up sm:rounded-lg sm:border sm:animate-rise ${
           size === 'lg' ? 'sm:max-w-2xl' : 'sm:max-w-md'
         }`}
       >
         <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-line sm:hidden" aria-hidden />
         <div className="flex items-start justify-between gap-4 px-6 pt-4 sm:pt-6">
-          {title ? <div className="type-serif text-xl leading-snug">{title}</div> : <span />}
+          {title ? (
+            <div id={titleId} className="type-serif text-xl leading-snug">
+              {title}
+            </div>
+          ) : (
+            <span />
+          )}
           <button
             onClick={onClose}
             aria-label="Cerrar"
