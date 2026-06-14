@@ -30,18 +30,30 @@ export function ScrollManager() {
     const id = decodeURIComponent(hash.slice(1))
     const targetHash = hash
 
+    let done = false
     const attempt = () => {
-      if (window.location.hash !== targetHash) return true // el usuario ya navegó → cortar
+      if (done) return
+      if (window.location.hash !== targetHash) {
+        done = true // el usuario ya navegó → cortar
+        return
+      }
       const el = document.getElementById(id)
-      if (!el) return false
+      if (!el) return
       el.scrollIntoView({ behavior: 'instant' as ScrollBehavior, block: 'start' })
-      return true
+      done = true
     }
 
-    // Reintentos hasta que la ruta lazy monte el ancla (cap ~1s).
-    const delays = [0, 60, 140, 260, 420, 650, 1000]
-    delays.forEach((d) => setTimeout(attempt, d))
-    // sin cleanup: los intentos son idempotentes y están guardados por hash
+    // Poll denso hasta que la ruta lazy monte el ancla, con un techo de ~3s
+    // para tolerar el cold-load del chunk en producción (red lenta).
+    attempt()
+    const iv = setInterval(() => {
+      attempt()
+      if (done) clearInterval(iv)
+    }, 70)
+    const stop = setTimeout(() => clearInterval(iv), 3000)
+    // sin cleanup que cancele: los intentos son idempotentes y están guardados
+    // por hash. Solo limpiamos el timer de corte para no dejarlo colgado.
+    void stop
   }, [pathname, hash, key])
 
   return null
