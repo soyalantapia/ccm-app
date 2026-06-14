@@ -1,7 +1,5 @@
 import { useState } from 'react'
-import { Eye, EyeOff } from 'lucide-react'
 import { Button, Card, Eyebrow, SectionTitle, Sheet, toast } from '../../components/ui'
-import { config } from '../../config'
 import { removeKey } from '../../lib/storage'
 import { OpsThemeEditor } from '../../features/admin/OpsThemeEditor'
 import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
@@ -9,7 +7,6 @@ import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
 const STORAGE_PREFIX = 'ccm:'
 
 export default function AdminConfiguracion() {
-  const [showKey, setShowKey] = useState(false)
   const [confirming, setConfirming] = useState(false)
 
   const resetDemo = () => {
@@ -40,22 +37,10 @@ export default function AdminConfiguracion() {
       <section className="mt-14 border-t border-line pt-10">
         <Eyebrow>Acceso</Eyebrow>
         <Card className="mt-5 max-w-xl p-5 md:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="eyebrow text-[10px] text-ink-soft">Clave actual del panel</div>
-              <div className="type-serif mt-1.5 text-2xl tracking-wide text-ink">
-                {showKey ? config.adminKey : '••••••••'}
-              </div>
-            </div>
-            <button
-              onClick={() => setShowKey((v) => !v)}
-              className="eyebrow flex items-center gap-1.5 text-[10px] text-ink-soft transition-colors hover:text-ink"
-              aria-label={showKey ? 'Ocultar clave' : 'Mostrar clave'}
-            >
-              {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
-              {showKey ? 'Ocultar' : 'Mostrar'}
-            </button>
-          </div>
+          <p className="text-[15px] leading-relaxed text-ink">
+            En esta demo, <em className="text-accent">cualquier clave</em> habilita el panel — así no
+            hay nada que recordar al presentar.
+          </p>
           <p className="mt-4 border-t border-line pt-4 text-xs leading-relaxed text-ink-soft">
             Mecanismo provisorio de Fase 0 — en Fase 1 se reemplaza por usuarios con email,
             contraseña y roles por sección.

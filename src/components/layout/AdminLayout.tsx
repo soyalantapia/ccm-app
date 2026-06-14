@@ -13,7 +13,6 @@ import {
   Ticket,
   Users,
 } from 'lucide-react'
-import { config } from '../../config'
 import { Button, Field, Input, Sheet } from '../ui'
 
 const SECTIONS = [
@@ -42,16 +41,12 @@ const MORE = [
 
 function AdminGate({ onUnlock }: { onUnlock: () => void }) {
   const [key, setKey] = useState('')
-  const [error, setError] = useState(false)
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    if (key === config.adminKey) {
-      sessionStorage.setItem('ccm:admin', '1')
-      onUnlock()
-    } else {
-      setError(true)
-    }
+    // Demo: cualquier clave habilita el panel (la auth real llega en Fase 1).
+    sessionStorage.setItem('ccm:admin', '1')
+    onUnlock()
   }
 
   return (
@@ -65,15 +60,12 @@ function AdminGate({ onUnlock }: { onUnlock: () => void }) {
           onSubmit={submit}
           className="mt-8 space-y-4 rounded-lg border border-night-soft bg-night-soft/40 p-6"
         >
-          <Field label="Clave de acceso" error={error ? 'Clave incorrecta' : undefined}>
+          <Field label="Clave de acceso">
             <Input
               type="password"
               value={key}
-              onChange={(e) => {
-                setKey(e.target.value)
-                setError(false)
-              }}
-              placeholder="••••••••"
+              onChange={(e) => setKey(e.target.value)}
+              placeholder="Cualquier clave entra (demo)"
               autoFocus
               className="border-night-soft bg-night text-night-ink placeholder:text-night-ink/30"
             />
@@ -82,7 +74,8 @@ function AdminGate({ onUnlock }: { onUnlock: () => void }) {
             Ingresar
           </Button>
           <p className="text-center text-[11px] leading-relaxed text-night-ink/40">
-            Acceso provisorio de demo · en Fase 1 se reemplaza por usuarios con email y contraseña
+            Demo: cualquier clave habilita el panel. En Fase 1 se reemplaza por usuarios con email,
+            contraseña y roles por sección.
           </p>
         </form>
         <Link
