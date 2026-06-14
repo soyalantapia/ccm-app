@@ -1,17 +1,20 @@
 import { useState, type FormEvent } from 'react'
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   ArrowLeft,
+  ArrowUpRight,
+  ChevronRight,
   Images,
   LayoutDashboard,
   CalendarDays,
   Inbox,
+  MoreHorizontal,
   Settings,
   Ticket,
   Users,
 } from 'lucide-react'
 import { config } from '../../config'
-import { Button, Field, Input } from '../ui'
+import { Button, Field, Input, Sheet } from '../ui'
 
 const SECTIONS = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -19,6 +22,19 @@ const SECTIONS = [
   { to: '/admin/postulaciones', label: 'Postulaciones', icon: Inbox },
   { to: '/admin/personas', label: 'Personas', icon: Users },
   { to: '/admin/galerias', label: 'Galerías y sponsors', icon: Images },
+  { to: '/admin/ordenes', label: 'Entradas y órdenes', icon: Ticket },
+  { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
+]
+
+/* Bottom nav app-style (mobile): 4 destinos primarios + "Más" (sheet). */
+const PRIMARY = [
+  { to: '/admin', label: 'Panel', icon: LayoutDashboard, end: true },
+  { to: '/admin/eventos', label: 'Eventos', icon: CalendarDays },
+  { to: '/admin/personas', label: 'Personas', icon: Users },
+  { to: '/admin/galerias', label: 'Sponsors', icon: Images },
+]
+const MORE = [
+  { to: '/admin/postulaciones', label: 'Postulaciones', icon: Inbox },
   { to: '/admin/ordenes', label: 'Entradas y órdenes', icon: Ticket },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]
@@ -79,8 +95,64 @@ function AdminGate({ onUnlock }: { onUnlock: () => void }) {
   )
 }
 
+/** Barra de navegación inferior (app-style) — solo mobile, identidad night. */
+function AdminBottomNav({ moreActive, onMore }: { moreActive: boolean; onMore: () => void }) {
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-night-soft bg-night/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
+      <div className="grid grid-cols-5">
+        {PRIMARY.map((item) => {
+          const Icon = item.icon
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className="flex flex-col items-center gap-1 pb-1.5 pt-2.5 transition-transform active:scale-90"
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon size={19} strokeWidth={1.75} className={isActive ? 'text-accent' : 'text-night-ink/55'} />
+                  <span
+                    className={`text-[9px] font-semibold uppercase tracking-[0.1em] ${
+                      isActive ? 'text-accent' : 'text-night-ink/55'
+                    }`}
+                  >
+                    {item.label}
+                  </span>
+                </>
+              )}
+            </NavLink>
+          )
+        })}
+        <button
+          onClick={onMore}
+          aria-label="Más secciones"
+          className="flex flex-col items-center gap-1 pb-1.5 pt-2.5 transition-transform active:scale-90"
+        >
+          <MoreHorizontal size={19} strokeWidth={1.75} className={moreActive ? 'text-accent' : 'text-night-ink/55'} />
+          <span
+            className={`text-[9px] font-semibold uppercase tracking-[0.1em] ${
+              moreActive ? 'text-accent' : 'text-night-ink/55'
+            }`}
+          >
+            Más
+          </span>
+        </button>
+      </div>
+    </nav>
+  )
+}
+
 export default function AdminLayout() {
   const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem('ccm:admin') === '1')
+  const [moreOpen, setMoreOpen] = useState(false)
+  const { pathname } = useLocation()
+
+  const active =
+    SECTIONS.find((s) => s.to === pathname) ??
+    SECTIONS.find((s) => !s.end && pathname.startsWith(`${s.to}/`)) ??
+    SECTIONS[0]
+  const moreActive = MORE.some((m) => pathname === m.to || pathname.startsWith(`${m.to}/`))
 
   if (!unlocked) return <AdminGate onUnlock={() => setUnlocked(true)} />
 
@@ -129,38 +201,55 @@ export default function AdminLayout() {
         </div>
       </aside>
 
-      {/* Top bar mobile */}
-      <div className="sticky top-0 z-40 border-b border-night-soft bg-night text-night-ink md:hidden">
+      {/* Header compacto mobile (app): logo + sección actual */}
+      <header className="sticky top-0 z-40 border-b border-night-soft bg-night/95 text-night-ink backdrop-blur-md md:hidden">
         <div className="flex h-14 items-center justify-between px-4">
           <Link to="/admin" className="flex items-baseline gap-2">
             <span className="type-display text-xl">CCM</span>
             <span className="eyebrow text-[8px] text-accent">Admin</span>
           </Link>
-          <Link to="/" className="eyebrow flex items-center gap-1.5 text-[9px] text-night-ink/50">
-            <ArrowLeft size={11} /> App
-          </Link>
+          <span className="eyebrow text-[10px] text-night-ink/70">{active.label}</span>
         </div>
-        <nav className="no-scrollbar flex gap-1 overflow-x-auto px-3 pb-2.5">
-          {SECTIONS.map((s) => (
-            <NavLink
-              key={s.to}
-              to={s.to}
-              end={s.end}
-              className={({ isActive }) =>
-                `eyebrow shrink-0 rounded-sm px-3 py-1.5 text-[9px] transition-colors ${
-                  isActive ? 'bg-accent text-accent-ink' : 'text-night-ink/55'
-                }`
-              }
-            >
-              {s.label}
-            </NavLink>
-          ))}
-        </nav>
-      </div>
+      </header>
 
-      <main className="min-w-0 flex-1 bg-bg">
-        <Outlet />
+      <main className="min-w-0 flex-1 bg-bg pb-24 md:pb-0">
+        {/* Transición de página (app-feel): remonta con un fade+rise corto */}
+        <div key={pathname} className="animate-page">
+          <Outlet />
+        </div>
       </main>
+
+      <AdminBottomNav moreActive={moreActive} onMore={() => setMoreOpen(true)} />
+
+      {/* Sheet "Más": secciones secundarias + volver a la app */}
+      <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title="Más secciones">
+        <div className="space-y-1">
+          {MORE.map((m) => {
+            const Icon = m.icon
+            return (
+              <Link
+                key={m.to}
+                to={m.to}
+                onClick={() => setMoreOpen(false)}
+                className="flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-ink/5 active:scale-[0.99]"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-line bg-bg text-accent">
+                  <Icon size={17} strokeWidth={1.75} />
+                </span>
+                <span className="flex-1 text-[15px] text-ink">{m.label}</span>
+                <ChevronRight size={16} className="shrink-0 text-ink-soft/60" />
+              </Link>
+            )
+          })}
+        </div>
+        <Link
+          to="/"
+          onClick={() => setMoreOpen(false)}
+          className="mt-4 flex items-center justify-center gap-2 border-t border-line pt-4 text-[13px] text-ink-soft transition-colors hover:text-ink"
+        >
+          <ArrowUpRight size={14} /> Ver la app pública
+        </Link>
+      </Sheet>
     </div>
   )
 }
