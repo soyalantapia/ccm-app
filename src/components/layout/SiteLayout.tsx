@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { CalendarDays, Home, Menu, QrCode, Store, Ticket, User, X } from 'lucide-react'
+import { CalendarDays, Heart, Home, Menu, QrCode, Store, Ticket, User, X } from 'lucide-react'
 import { Button } from '../ui'
 import { registerFree } from '../../lib/actions'
 import { useStore } from '../../data/store'
@@ -26,11 +26,17 @@ const BOTTOM_NAV = [
 
 function Wordmark({ tone = 'ink' }: { tone?: 'ink' | 'night' }) {
   return (
-    <Link to="/" className="group flex items-baseline gap-2.5">
+    <Link to="/" className="group flex items-center gap-2">
       <span className={`type-display text-[26px] leading-none ${tone === 'night' ? 'text-night-ink' : 'text-ink'}`}>
         CCM
       </span>
-      <span aria-hidden className="hidden h-3.5 w-px self-center bg-accent sm:block" />
+      {/* El corazón de "Corazón de Moda" — monograma de marca */}
+      <Heart
+        aria-hidden
+        size={11}
+        strokeWidth={0}
+        className="shrink-0 fill-accent transition-transform duration-200 group-hover:scale-125"
+      />
       <span
         className={`eyebrow hidden text-[9px] sm:block ${
           tone === 'night' ? 'text-night-ink/60' : 'text-ink-soft'
@@ -191,7 +197,10 @@ function Footer() {
       <div className="mx-auto max-w-6xl px-5 py-14">
         <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
           <div>
-            <div className="type-display text-5xl">CCM</div>
+            <div className="flex items-center gap-2">
+              <span className="type-display text-5xl">CCM</span>
+              <Heart aria-hidden size={18} strokeWidth={0} className="fill-accent" />
+            </div>
             <p className="eyebrow mt-3 text-[9px] text-night-ink/50">
               Córdoba Corazón de Moda · {config.edition}
             </p>
@@ -217,6 +226,9 @@ function Footer() {
               </Link>
               <Link to="/c/camino-a-ccm" className="block text-night-ink/70 transition-colors hover:text-night-ink">
                 Postulate
+              </Link>
+              <Link to="/stand" className="block text-night-ink/70 transition-colors hover:text-night-ink">
+                Experiencia de stand
               </Link>
               <Link to="/terminos" className="block text-night-ink/70 transition-colors hover:text-night-ink">
                 Términos

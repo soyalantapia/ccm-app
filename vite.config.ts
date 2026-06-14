@@ -58,6 +58,18 @@ export default defineConfig({
               expiration: { maxEntries: 400, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },
+          {
+            // Reel del hero: no se precachea (pesa ~2,7MB) pero se guarda al primer
+            // play (CacheFirst + range requests) → instantáneo y offline después.
+            urlPattern: ({ request }) => request.destination === 'video',
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'ccm-video',
+              rangeRequests: true,
+              cacheableResponse: { statuses: [0, 200, 206] },
+              expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            },
+          },
         ],
       },
     }),

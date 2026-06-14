@@ -102,6 +102,10 @@ const principalBlocks = [
   'blk-p-7',
 ] as const
 const photoIds = Array.from({ length: 28 }, (_, i) => `ph-${String(i + 1).padStart(2, '0')}`)
+// Galerías nuevas (variedad de seed): fotos + sponsor de cada una.
+const caminoAbrilPhotoIds = Array.from({ length: 10 }, (_, i) => `ph-abr-${String(i + 1).padStart(2, '0')}`)
+const capacitacionPhotoIds = Array.from({ length: 8 }, (_, i) => `ph-cap-${String(i + 1).padStart(2, '0')}`)
+const desfileGalaPhotoIds = Array.from({ length: 12 }, (_, i) => `ph-gala-${String(i + 1).padStart(2, '0')}`)
 const vipPlans: PlanId[] = ['sab-night-vip', 'combo-vip', 'dom-sunset-vip']
 const videoIds = [
   { contentId: 'vid-01', youtubeId: 'cPRpNqmziUs' },
@@ -169,12 +173,45 @@ function buildSeedAnalytics(): AnalyticsEvent[] {
     )
   }
 
+  // Galerías nuevas (variedad de seed): cada una con su galleryId/sponsorId reales,
+  // mismo patrón de fechado (offset relativo a la ventana). Volúmenes menores que la
+  // de Marzo para que el Reporte de Impacto de cada sponsor no nazca vacío pero siga
+  // siendo verosímil.
+  const seededGalleries = [
+    { galleryId: IDS.gallery.capacitacionMayo, sponsorId: IDS.sponsors.eyewear, photos: capacitacionPhotoIds, views: 180, downloads: 78 },
+    { galleryId: IDS.gallery.caminoAbril, sponsorId: IDS.sponsors.wines, photos: caminoAbrilPhotoIds, views: 140, downloads: 52 },
+    { galleryId: IDS.gallery.desfileGala, sponsorId: IDS.sponsors.banco, photos: desfileGalaPhotoIds, views: 210, downloads: 95 },
+  ] as const
+  for (const g of seededGalleries) {
+    for (let i = 0, n = N(g.views); i < n; i++) {
+      out.push(
+        event('photo_view', offset(i % 60 === 0), {
+          photoId: pick(g.photos),
+          galleryId: g.galleryId,
+          sponsorId: g.sponsorId,
+        }),
+      )
+    }
+    for (let i = 0, n = N(g.downloads); i < n; i++) {
+      out.push(
+        event('photo_download', offset(i % 40 === 0), {
+          photoId: pick(g.photos),
+          galleryId: g.galleryId,
+          sponsorId: g.sponsorId,
+        }),
+      )
+    }
+  }
+
   // ad_impression · ~3000 — por slot S2/S3/S6 y sponsorId reales (más al Principal).
   const adSlots = [
     { slot: 'S2', sponsorId: IDS.sponsors.banco, w: 50 }, // Principal
     { slot: 'S6', sponsorId: IDS.sponsors.banco, w: 18 }, // Principal (acreditación)
     { slot: 'S3', sponsorId: IDS.sponsors.beauty, w: 20 }, // Oro (galería)
     { slot: 'S2', sponsorId: IDS.sponsors.beauty, w: 6 }, // Oro
+    { slot: 'S3', sponsorId: IDS.sponsors.eyewear, w: 16 }, // Oro (galería taller)
+    { slot: 'S2', sponsorId: IDS.sponsors.eyewear, w: 10 }, // Oro (feed)
+    { slot: 'S6', sponsorId: IDS.sponsors.eyewear, w: 3 }, // Oro (Mi QR)
     { slot: 'S2', sponsorId: IDS.sponsors.wines, w: 4 }, // Plata
     { slot: 'S6', sponsorId: IDS.sponsors.wines, w: 2 }, // Plata
   ] as const

@@ -54,4 +54,22 @@ export const seedEvents: EventItem[] = [
     cover: 'img/events/camino-30.jpg',
     sponsorIds: [IDS.sponsors.wines],
   },
+  {
+    id: IDS.events.capacitacionMayo,
+    slug: IDS.slugs.capacitacionMayo,
+    type: 'capacitacion',
+    title: 'Taller intensivo: Marca de autor que vende',
+    subtitle: 'Capacitación CCM · Formación del ecosistema',
+    dateLabel: 'Sábado 16 de mayo',
+    startDate: '2026-05-16',
+    timeLabel: '10 a 17 hs',
+    venue: config.venue.name,
+    address: config.venue.address,
+    mapsUrl: config.venue.mapsUrl,
+    description:
+      'Una jornada completa de formación para diseñadores, artistas y emprendedores que quieren profesionalizar su marca antes de llegar a la pasarela. En cuatro bloques de trabajo intensivo se cubren los pilares del negocio: cómo construir una identidad de autor que se sostenga, cómo poner precio sin regalar el trabajo, cómo contar la marca en redes y cómo armar la ficha técnica que las marcas y la prensa esperan ver. Formato taller con mentoras de la industria, cupos reducidos por bloque para que cada proyecto reciba devolución. Llevá tu colección en proceso: se trabaja con casos reales de las asistentes.',
+    cover: 'img/events/principal.jpg',
+    sponsorIds: [IDS.sponsors.eyewear, IDS.sponsors.banco],
+    past: true,
+  },
 ]

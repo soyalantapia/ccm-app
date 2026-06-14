@@ -20,7 +20,7 @@ export function Tabs({ tabs, active, onChange, className }: TabsProps) {
           <button
             key={tab.id}
             onClick={() => onChange(tab.id)}
-            className={`eyebrow shrink-0 border-b-2 pb-3 transition-colors ${
+            className={`eyebrow shrink-0 whitespace-nowrap border-b-2 pb-3 transition-colors ${
               isActive
                 ? 'border-accent text-ink'
                 : 'border-transparent text-ink-soft hover:text-ink'

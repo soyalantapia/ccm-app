@@ -81,4 +81,30 @@ export const seedSponsors: Sponsor[] = [
       },
     ],
   },
+  {
+    id: IDS.sponsors.eyewear,
+    name: 'Vialux Eyewear',
+    industry: 'Óptica y eyewear',
+    level: 'Oro',
+    exclusive: false,
+    tagline: 'Anteojos de autor diseñados para mirar y ser mirado',
+    creatives: [
+      {
+        slot: 'S2',
+        headline: 'El accesorio que define tu LOOK ya tiene firma: Vialux Eyewear',
+        sub: 'Armazones de edición limitada inspirados en las pasarelas de CCM 2026.',
+        cta: 'Ver la colección',
+      },
+      {
+        slot: 'S3',
+        headline: 'Mirá tus fotos con la nitidez de Vialux Eyewear',
+        sub: 'La óptica oficial de CCM. Descargá tu foto y agendá tu prueba de armazones sin cargo.',
+        cta: 'Reservar prueba',
+      },
+      {
+        slot: 'S6',
+        headline: 'Tu QR de acceso llega con Vialux Eyewear',
+      },
+    ],
+  },
 ]

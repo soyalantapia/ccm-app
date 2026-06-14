@@ -2,8 +2,10 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AdBanner, Badge, Button, EmptyState, SectionTitle } from '../../components/ui'
 import { store, useStore } from '../../data/store'
+import { IDS } from '../../data/ids'
 import { registerFree } from '../../lib/actions'
 import { AccreditationCard } from '../../features/app/AccreditationCard'
+import { AddToCalendar } from '../../features/app/AddToCalendar'
 import { AppSection } from '../../features/app/AppSection'
 import { RegistrationRow } from '../../features/app/RegistrationRow'
 import { ORDER_STATUS_META, formatDay, registrationSortKey } from '../../features/app/meta'
@@ -18,6 +20,7 @@ export default function MiQR() {
 
   const registrations = useStore((s) => s.getRegistrations().filter((r) => r.status === 'confirmada'))
   const orders = useStore((s) => s.getOrders())
+  const mainEvent = useStore((s) => s.getEventById(IDS.events.principal))
   const registered = registrations.length > 0
 
   const blockRegistrations = registrations
@@ -54,6 +57,11 @@ export default function MiQR() {
         <>
           <div className="mt-10 animate-rise">
             <AccreditationCard />
+            {mainEvent && (
+              <div className="mt-5 flex justify-center">
+                <AddToCalendar event={mainEvent} label="Agregar CCM 2026 al calendario" />
+              </div>
+            )}
           </div>
 
           {/* Inscripciones a bloques: día, hora y sala */}
@@ -61,7 +69,7 @@ export default function MiQR() {
             <AppSection eyebrow="Tus inscripciones">
               <div className="border-b border-line">
                 {blockRegistrations.map((r) => (
-                  <RegistrationRow key={r.id} registration={r} />
+                  <RegistrationRow key={r.id} registration={r} showCalendar />
                 ))}
               </div>
             </AppSection>

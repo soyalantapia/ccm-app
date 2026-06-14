@@ -28,6 +28,7 @@ const FotosGaleria = lazy(() => import('./pages/FotosGaleria'))
 const Contenido = lazy(() => import('./pages/Contenido'))
 const Convocatoria = lazy(() => import('./pages/Convocatoria'))
 const Sponsors = lazy(() => import('./pages/Sponsors'))
+const Stand = lazy(() => import('./pages/Stand'))
 const Legales = lazy(() => import('./pages/Legales'))
 const Inicio = lazy(() => import('./pages/app/Inicio'))
 const MiQR = lazy(() => import('./pages/app/MiQR'))
@@ -87,6 +88,8 @@ const router = createBrowserRouter(
             { path: '/contenido', element: <S><Contenido /></S> },
             { path: '/c/:slug', element: <S><Convocatoria /></S> },
             { path: '/sponsors', element: <S><Sponsors /></S> },
+            { path: '/stand', element: <S><Stand /></S> },
+            { path: '/stand/:slug', element: <S><Stand /></S> },
             { path: '/terminos', element: <S><Legales kind="terminos" /></S> },
             { path: '/privacidad', element: <S><Legales kind="privacidad" /></S> },
             { path: '/app', element: <S><Inicio /></S> },

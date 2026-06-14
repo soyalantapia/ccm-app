@@ -2,6 +2,7 @@ import { Button, Eyebrow, SectionTitle, Stat } from '../components/ui'
 import { useStore } from '../data/store'
 import type { Sponsor } from '../data/types'
 import { SponsorForm } from '../features/contenido/SponsorForm'
+import { SponsorLogo } from '../features/sponsors/SponsorLogo'
 
 /* ─── Copy estático del deck CCM 2026 ─── */
 
@@ -58,6 +59,7 @@ function scrollToForm() {
 
 export default function Sponsors() {
   const sponsors = useStore((s) => s.getSponsors())
+  const hasSponsors = sponsors.length > 0
 
   return (
     <>
@@ -166,36 +168,54 @@ export default function Sponsors() {
             ))}
           </div>
 
-          {/* Sponsors actuales — wordmarks tipográficos por nivel */}
+          {/* Muro de sponsors — lockups por nivel, cierre de pitch */}
           <div className="mt-16 md:mt-20">
-            <Eyebrow className="mb-2">Ya están adentro</Eyebrow>
-            {LEVELS.map(({ level, label }) => {
-              const group = sponsors.filter((s) => s.level === level)
-              if (group.length === 0) return null
-              return (
-                <div
-                  key={level}
-                  className="grid gap-y-4 border-t border-night-soft py-7 last:border-b md:grid-cols-12 md:items-baseline md:gap-x-8"
-                >
-                  <div className="eyebrow text-[10px] text-night-ink/50 md:col-span-3">{label}</div>
-                  <div className="flex flex-wrap items-baseline gap-x-12 gap-y-6 md:col-span-9">
-                    {group.map((s) => (
-                      <div key={s.id}>
-                        <p className="type-serif text-2xl text-night-ink md:text-3xl">{s.name}</p>
-                        <p className="eyebrow mt-1.5 flex items-center gap-2 text-[9px] text-night-ink/45">
-                          {s.industry}
-                          {s.exclusive && (
-                            <span className="rounded-sm border border-accent/40 px-2 py-0.5 text-accent">
-                              Exclusividad de rubro
-                            </span>
-                          )}
-                        </p>
+            <Eyebrow className="mb-2">Estas marcas ya confían</Eyebrow>
+            <p className="mb-10 max-w-md text-sm leading-relaxed text-night-ink/60 md:mb-12">
+              El muro de CCM 2026: cada categoría, una sola marca. Así se ve un evento que ya
+              empezó a venderse.
+            </p>
+
+            {hasSponsors ? (
+              <div className="space-y-12 md:space-y-16">
+                {LEVELS.map(({ level, label }) => {
+                  const group = sponsors.filter((s) => s.level === level)
+                  if (group.length === 0) return null
+                  const principal = level === 'Principal'
+                  return (
+                    <div key={level}>
+                      <div className="flex items-baseline gap-3 border-t border-night-soft pt-5">
+                        <span className="eyebrow text-[10px] text-accent">{label}</span>
+                        <span className="eyebrow text-[9px] text-night-ink/40">
+                          {group.length} {group.length === 1 ? 'marca' : 'marcas'}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
+                      <div
+                        className={`mt-5 grid gap-4 ${
+                          principal
+                            ? 'sm:grid-cols-2'
+                            : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3'
+                        }`}
+                      >
+                        {group.map((s) => (
+                          <SponsorLogo
+                            key={s.id}
+                            sponsor={s}
+                            variant="card"
+                            tone="night"
+                            className="animate-rise"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="border-t border-night-soft pt-7 text-sm text-night-ink/55">
+                Las primeras marcas se anuncian pronto. La exclusividad por rubro sigue libre.
+              </p>
+            )}
           </div>
         </div>
       </section>

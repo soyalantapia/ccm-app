@@ -221,4 +221,66 @@ export const seedBlocks: EventBlock[] = [
     description:
       'Última pasarela del mes: se define la lista corta de colecciones que llegan a la 14ª edición.',
   },
+
+  /* ─── Taller intensivo: Marca de autor (capacitación · 16/05) ─── */
+  {
+    id: 'blk-cap-1',
+    eventId: IDS.events.capacitacionMayo,
+    title: 'Identidad de autor: qué te hace inconfundible',
+    kind: 'Masterclass',
+    day: '16/05',
+    start: '10:00',
+    end: '11:30',
+    room: 'Sala Atelier',
+    capacity: 35,
+    seedTaken: 31,
+    speakers: ['Julieta Páez'],
+    description:
+      'Primer bloque del taller: cómo definir el ADN de una marca de autor y traducirlo en decisiones concretas de producto, paleta y relato.',
+  },
+  {
+    id: 'blk-cap-2',
+    eventId: IDS.events.capacitacionMayo,
+    title: 'Poner precio sin regalar tu trabajo',
+    kind: 'Workshop',
+    day: '16/05',
+    start: '11:45',
+    end: '13:15',
+    room: 'Sala Atelier',
+    capacity: 35,
+    seedTaken: 29,
+    speakers: ['Marcos Aguirre', 'Lucía Brizuela'],
+    description:
+      'Taller con planilla en mano: estructura de costos, margen y estrategias de precio para piezas de autor y producción a pedido.',
+  },
+  {
+    id: 'blk-cap-3',
+    eventId: IDS.events.capacitacionMayo,
+    title: 'Contar tu marca en redes (sin sonar a publicidad)',
+    kind: 'Masterclass',
+    day: '16/05',
+    start: '14:30',
+    end: '15:45',
+    room: 'Salón Principal',
+    capacity: 50,
+    seedTaken: 44,
+    speakers: ['Florencia Quiroga'],
+    description:
+      'Contenido, fotografía de producto y narrativa: cómo sostener una presencia en redes coherente con la firma sin depender de pauta.',
+  },
+  {
+    id: 'blk-cap-4',
+    eventId: IDS.events.capacitacionMayo,
+    title: 'Ficha técnica y kit de prensa que abren puertas',
+    kind: 'Workshop',
+    day: '16/05',
+    start: '16:00',
+    end: '17:00',
+    room: 'Sala Atelier',
+    capacity: 35,
+    seedTaken: 26,
+    speakers: ['Rosario Funes Castellanos'],
+    description:
+      'Cierre práctico: armado de la ficha técnica, el line sheet y el kit de prensa que marcas, compradores y medios esperan recibir.',
+  },
 ]
