@@ -24,9 +24,9 @@ function RegisterCard({ onRegister }: { onRegister: () => void }) {
   return (
     <section className="animate-rise relative mt-6 overflow-hidden rounded-md">
       <Img src="img/events/principal.jpg" alt="CCM 2026 · 14ª Edición" priority className="aspect-[16/10]" />
-      <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-night/92 via-night/45 to-night/10" />
-      <div className="absolute inset-x-0 bottom-0 p-5 md:p-7">
-        <div className="eyebrow flex items-center gap-1.5 text-[10px] text-accent">
+      <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-night/95 via-night/60 to-night/15" />
+      <div className="absolute inset-x-0 bottom-0 p-5 md:p-7 [text-shadow:0_1px_4px_rgb(0_0_0/0.55)]">
+        <div className="eyebrow flex items-center gap-1.5 text-[10px] text-night-ink [text-shadow:0_1px_4px_rgb(0_0_0/0.85)]">
           <Sparkles size={12} />
           Entrada general · gratis
         </div>

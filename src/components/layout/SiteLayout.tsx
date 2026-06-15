@@ -230,6 +230,9 @@ function Footer() {
               <Link to="/stand" className="block text-night-ink/70 transition-colors hover:text-night-ink">
                 Experiencia de stand
               </Link>
+              <Link to="/admin" className="block text-night-ink/70 transition-colors hover:text-night-ink">
+                Panel del organizador
+              </Link>
               <Link to="/terminos" className="block text-night-ink/70 transition-colors hover:text-night-ink">
                 Términos
               </Link>

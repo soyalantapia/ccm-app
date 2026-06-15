@@ -166,3 +166,19 @@ editorial, app-like; sin "AI slop"; identidad consistente pública↔admin. Fixe
 **Deuda visual menor anotada (no bloqueante):** el eyebrow "ENTRADA GENERAL · GRATIS" del card de
 Inicio queda en gold sobre la zona media del degradé de la foto (borderline); se puede reforzar el
 scrim del gradiente si se quiere AA estricto ahí.
+
+## Listo para enviar a responsables — discoverabilidad + último pulido (2026-06-15)
+
+73. **Acceso discreto al Panel del organizador** desde el footer público (`SiteLayout`, columna "CCM" →
+    "Panel del organizador" → `/admin`). Razón: el envío va a las personas responsables, que deben poder
+    explorar el admin (el corazón del pitch B2B) sin que se les diga que tipeen `/admin`. Sigue siendo
+    discreto (footer) y el gate acepta cualquier clave (demo).
+74. **Legibilidad del eyebrow sobre foto (card de Inicio)** resuelta (cierra la deuda visual de la pasada
+    anterior): el `PrimaryActionCard` tenía "ENTRADA GENERAL · GRATIS" en dorado sobre la zona clara de la
+    foto (borderline). Se pasó a **crema (`text-night-ink`) + text-shadow** y se reforzó el degradé
+    (`from-night/95 via-night/60 to-night/15`) → legible sobre cualquier zona de la foto; el dorado queda
+    reservado al CTA. Mismo principio que el badge `solid` del banner de Eventos: las etiquetas sobre foto
+    priorizan legibilidad.
+
+Quedó pendiente a propósito (cambio de build, no se toca antes del envío): **prerender/SSG de rutas
+públicas** (SEO + LCP<2,5s en frío) — los previews OG por ruta y la caché del SW ya cubren lo crítico.
