@@ -4,12 +4,14 @@ import {
   ArrowLeft,
   ArrowUpRight,
   ChevronRight,
+  Film,
   Images,
   LayoutDashboard,
   CalendarDays,
   Inbox,
   MoreHorizontal,
   Settings,
+  Store,
   Ticket,
   Users,
 } from 'lucide-react'
@@ -21,6 +23,8 @@ const SECTIONS = [
   { to: '/admin/postulaciones', label: 'Postulaciones', icon: Inbox },
   { to: '/admin/personas', label: 'Personas', icon: Users },
   { to: '/admin/galerias', label: 'Galerías y sponsors', icon: Images },
+  { to: '/admin/catalogo', label: 'Expositores', icon: Store },
+  { to: '/admin/contenido', label: 'Contenido', icon: Film },
   { to: '/admin/ordenes', label: 'Entradas y órdenes', icon: Ticket },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]
@@ -35,6 +39,8 @@ const NAV_CENTER = { to: '/admin', label: 'Panel', icon: LayoutDashboard, end: t
 const NAV_RIGHT = [{ to: '/admin/galerias', label: 'Sponsors', icon: Images }]
 const MORE = [
   { to: '/admin/postulaciones', label: 'Postulaciones', icon: Inbox },
+  { to: '/admin/catalogo', label: 'Expositores', icon: Store },
+  { to: '/admin/contenido', label: 'Contenido', icon: Film },
   { to: '/admin/ordenes', label: 'Entradas y órdenes', icon: Ticket },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]

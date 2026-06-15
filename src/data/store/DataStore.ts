@@ -42,6 +42,10 @@ export type NewBlock = Omit<EventBlock, 'id'>
 export type NewGallery = Omit<Gallery, 'id' | 'slug'> & { slug?: string }
 /** Alta de sponsor desde el admin (el store genera id). */
 export type NewSponsor = Omit<Sponsor, 'id'>
+/** Alta de expositor (catálogo) desde el admin (el store genera id + slug). */
+export type NewCatalogProfile = Omit<CatalogProfile, 'id' | 'slug'> & { slug?: string }
+/** Alta de contenido (video) desde el admin (el store genera id). */
+export type NewContent = Omit<ContentItem, 'id'>
 
 /**
  * DataStore — única puerta de acceso a datos de TODA la UI (patrón repositorio).
@@ -84,6 +88,9 @@ export interface DataStore {
   /* Catálogo */
   getCatalog(): CatalogProfile[]
   getCatalogProfile(slug: string): CatalogProfile | undefined
+  createCatalogProfile(input: NewCatalogProfile): CatalogProfile
+  updateCatalogProfile(id: string, patch: Partial<CatalogProfile>): void
+  deleteCatalogProfile(id: string): void
 
   /* Fotos */
   getGalleries(): Gallery[]
@@ -98,6 +105,9 @@ export interface DataStore {
 
   /* Contenido */
   getContents(): ContentItem[]
+  createContent(input: NewContent): ContentItem
+  updateContent(id: string, patch: Partial<ContentItem>): void
+  deleteContent(id: string): void
 
   /* Sponsors y publicidad */
   getSponsors(): Sponsor[]

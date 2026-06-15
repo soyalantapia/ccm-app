@@ -23,6 +23,8 @@ import type {
   BlockAvailability,
   DataStore,
   NewBlock,
+  NewCatalogProfile,
+  NewContent,
   NewEvent,
   NewGallery,
   NewSponsor,
@@ -55,6 +57,8 @@ const K = {
   blocksOverlay: 'blocksOverlay',
   galleriesOverlay: 'galleriesOverlay',
   sponsorsOverlay: 'sponsorsOverlay',
+  catalogOverlay: 'catalogOverlay',
+  contentsOverlay: 'contentsOverlay',
 } as const
 
 type PlanOverride = { price?: number | null; mpLink?: string }
@@ -268,11 +272,32 @@ export class LocalDataStore implements DataStore {
   /* ─── Catálogo ─── */
 
   getCatalog(): CatalogProfile[] {
-    return seedCatalog
+    return mergeOverlay(seedCatalog, K.catalogOverlay)
   }
 
   getCatalogProfile(slug: string): CatalogProfile | undefined {
-    return seedCatalog.find((p) => p.slug === slug)
+    return this.getCatalog().find((p) => p.slug === slug)
+  }
+
+  createCatalogProfile(input: NewCatalogProfile): CatalogProfile {
+    const existing = new Set(this.getCatalog().map((p) => p.slug))
+    const base = input.slug || slugify(input.name)
+    let slug = base
+    for (let i = 2; existing.has(slug); i++) slug = `${base}-${i}`
+    const profile: CatalogProfile = { ...input, id: newId('cat'), slug }
+    overlayCreate(K.catalogOverlay, profile)
+    this.track('admin_catalog_created', { profileId: profile.id })
+    return profile
+  }
+
+  updateCatalogProfile(id: string, patch: Partial<CatalogProfile>): void {
+    overlayEdit(K.catalogOverlay, id, patch)
+    this.track('admin_catalog_updated', { profileId: id })
+  }
+
+  deleteCatalogProfile(id: string): void {
+    overlayDelete(K.catalogOverlay, id)
+    this.track('admin_catalog_deleted', { profileId: id })
   }
 
   /* ─── Fotos ─── */
@@ -339,7 +364,26 @@ export class LocalDataStore implements DataStore {
   /* ─── Contenido ─── */
 
   getContents(): ContentItem[] {
-    return [...seedContents].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
+    return mergeOverlay(seedContents, K.contentsOverlay).sort((a, b) =>
+      b.publishedAt.localeCompare(a.publishedAt),
+    )
+  }
+
+  createContent(input: NewContent): ContentItem {
+    const content: ContentItem = { ...input, id: newId('vid') }
+    overlayCreate(K.contentsOverlay, content)
+    this.track('admin_content_created', { contentId: content.id })
+    return content
+  }
+
+  updateContent(id: string, patch: Partial<ContentItem>): void {
+    overlayEdit(K.contentsOverlay, id, patch)
+    this.track('admin_content_updated', { contentId: id })
+  }
+
+  deleteContent(id: string): void {
+    overlayDelete(K.contentsOverlay, id)
+    this.track('admin_content_deleted', { contentId: id })
   }
 
   /* ─── Sponsors ─── */

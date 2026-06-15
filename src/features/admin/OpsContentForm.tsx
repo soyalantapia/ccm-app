@@ -1,0 +1,177 @@
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Button, Field, Input, Select, Sheet, Textarea, toast } from '../../components/ui'
+import { store } from '../../data/store'
+import type { ContentItem } from '../../data/types'
+
+/** Plataformas/secciones del catálogo CCM. */
+const PLATFORM_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'Sin plataforma' },
+  { value: 'Moda', label: 'Moda' },
+  { value: 'Belleza', label: 'Belleza' },
+  { value: 'Arte', label: 'Arte' },
+  { value: 'Turismo', label: 'Turismo' },
+  { value: 'Gastronomía', label: 'Gastronomía' },
+  { value: 'Tecnología', label: 'Tecnología' },
+  { value: 'Sustentabilidad', label: 'Sustentabilidad' },
+]
+
+type Form = {
+  title: string
+  youtubeId: string
+  description: string
+  duration: string
+  platform: string
+  sponsorId: string
+  publishedAt: string
+}
+
+const empty: Form = {
+  title: '',
+  youtubeId: '',
+  description: '',
+  duration: '',
+  platform: '',
+  sponsorId: '',
+  publishedAt: '',
+}
+
+function fromContent(c: ContentItem): Form {
+  return {
+    title: c.title,
+    youtubeId: c.youtubeId,
+    description: c.description,
+    duration: c.duration ?? '',
+    platform: c.platform ?? '',
+    sponsorId: c.sponsorId ?? '',
+    publishedAt: c.publishedAt.slice(0, 10),
+  }
+}
+
+interface Props {
+  open: boolean
+  /** Video a editar; omitido = crear nuevo. */
+  content?: ContentItem
+  onClose: () => void
+}
+
+/** Alta y edición de videos del catálogo de Contenido (CRUD real sobre la capa local). */
+export function OpsContentForm({ open, content, onClose }: Props) {
+  const sponsorOptions = useMemo(
+    () => [
+      { value: '', label: 'Sin sponsor' },
+      ...store.getSponsors().map((s) => ({ value: s.id, label: s.name })),
+    ],
+    [],
+  )
+
+  const [f, setF] = useState<Form>(empty)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (open) {
+      setF(content ? fromContent(content) : empty)
+      setError('')
+    }
+  }, [open, content])
+
+  const set = (k: keyof Form) => (e: { target: { value: string } }) =>
+    setF((prev) => ({ ...prev, [k]: e.target.value }))
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    if (!f.title.trim() || !f.youtubeId.trim() || !f.description.trim() || !f.publishedAt.trim()) {
+      setError('Completá los campos obligatorios.')
+      return
+    }
+    const data = {
+      type: 'video' as const,
+      title: f.title.trim(),
+      description: f.description.trim(),
+      youtubeId: f.youtubeId.trim(),
+      duration: f.duration.trim() || undefined,
+      platform: f.platform || undefined,
+      sponsorId: f.sponsorId || undefined,
+      publishedAt: f.publishedAt,
+    }
+    if (content) {
+      store.updateContent(content.id, data)
+      toast('✓ Video actualizado')
+    } else {
+      store.createContent(data)
+      toast('✓ Video creado · ya aparece en Contenido')
+    }
+    onClose()
+  }
+
+  const youtubeId = f.youtubeId.trim()
+
+  return (
+    <Sheet open={open} onClose={onClose} title={content ? 'Editar video' : 'Crear video'} size="lg">
+      <form onSubmit={submit} className="space-y-4">
+        <Field label="Título" required>
+          <Input
+            value={f.title}
+            onChange={set('title')}
+            placeholder="Ej: Backstage del desfile de gala"
+            required
+          />
+        </Field>
+
+        <Field
+          label="ID de YouTube"
+          required
+          hint="El código después de v= en la URL de YouTube, ej: cPRpNqmziUs"
+        >
+          <Input value={f.youtubeId} onChange={set('youtubeId')} placeholder="cPRpNqmziUs" required />
+        </Field>
+
+        {youtubeId && (
+          <img
+            src={`https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`}
+            alt="Miniatura del video"
+            className="aspect-video w-full rounded-sm border border-line object-cover"
+          />
+        )}
+
+        <Field label="Descripción" required>
+          <Textarea
+            value={f.description}
+            onChange={set('description')}
+            rows={4}
+            placeholder="De qué se trata el video…"
+            required
+          />
+        </Field>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Duración" hint="Opcional, ej: 3:12">
+            <Input value={f.duration} onChange={set('duration')} placeholder="3:12" />
+          </Field>
+          <Field label="Fecha de publicación" required>
+            <Input type="date" value={f.publishedAt} onChange={set('publishedAt')} required />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Plataforma" hint="Opcional">
+            <Select options={PLATFORM_OPTIONS} value={f.platform} onChange={set('platform')} />
+          </Field>
+          <Field label="Sponsor" hint="Opcional">
+            <Select options={sponsorOptions} value={f.sponsorId} onChange={set('sponsorId')} />
+          </Field>
+        </div>
+
+        {error && <p className="text-xs text-danger">{error}</p>}
+
+        <div className="flex flex-col gap-2.5 pt-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="ghost" size="lg" onClick={onClose} className="sm:order-1">
+            Cancelar
+          </Button>
+          <Button type="submit" size="lg" className="sm:order-2">
+            {content ? 'Guardar cambios' : 'Crear video'}
+          </Button>
+        </div>
+      </form>
+    </Sheet>
+  )
+}

@@ -39,6 +39,8 @@ const AdminEventoDetalle = lazy(() => import('./pages/admin/AdminEventoDetalle')
 const AdminPostulaciones = lazy(() => import('./pages/admin/AdminPostulaciones'))
 const AdminPersonas = lazy(() => import('./pages/admin/AdminPersonas'))
 const AdminGalerias = lazy(() => import('./pages/admin/AdminGalerias'))
+const AdminCatalogo = lazy(() => import('./pages/admin/AdminCatalogo'))
+const AdminContenido = lazy(() => import('./pages/admin/AdminContenido'))
 const AdminOrdenes = lazy(() => import('./pages/admin/AdminOrdenes'))
 const AdminConfiguracion = lazy(() => import('./pages/admin/AdminConfiguracion'))
 
@@ -108,6 +110,8 @@ const router = createBrowserRouter(
             { path: 'postulaciones', element: <SA><AdminPostulaciones /></SA> },
             { path: 'personas', element: <SA><AdminPersonas /></SA> },
             { path: 'galerias', element: <SA><AdminGalerias /></SA> },
+            { path: 'catalogo', element: <SA><AdminCatalogo /></SA> },
+            { path: 'contenido', element: <SA><AdminContenido /></SA> },
             { path: 'ordenes', element: <SA><AdminOrdenes /></SA> },
             { path: 'configuracion', element: <SA><AdminConfiguracion /></SA> },
           ],
