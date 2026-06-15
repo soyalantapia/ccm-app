@@ -38,6 +38,10 @@ export interface PhotoDownload {
 export type NewEvent = Omit<EventItem, 'id' | 'slug'> & { slug?: string }
 /** Alta de bloque desde el admin (el store genera id). */
 export type NewBlock = Omit<EventBlock, 'id'>
+/** Alta de galería desde el admin (el store genera id + slug). */
+export type NewGallery = Omit<Gallery, 'id' | 'slug'> & { slug?: string }
+/** Alta de sponsor desde el admin (el store genera id). */
+export type NewSponsor = Omit<Sponsor, 'id'>
 
 /**
  * DataStore — única puerta de acceso a datos de TODA la UI (patrón repositorio).
@@ -84,6 +88,9 @@ export interface DataStore {
   /* Fotos */
   getGalleries(): Gallery[]
   getGallery(slug: string): Gallery | undefined
+  createGallery(input: NewGallery): Gallery
+  updateGallery(id: string, patch: Partial<Gallery>): void
+  deleteGallery(id: string): void
   getFavorites(): string[]
   toggleFavorite(photoId: string): void
   recordDownload(photoId: string, galleryId: string): void
@@ -95,6 +102,9 @@ export interface DataStore {
   /* Sponsors y publicidad */
   getSponsors(): Sponsor[]
   getSponsor(id: string): Sponsor | undefined
+  createSponsor(input: NewSponsor): Sponsor
+  updateSponsor(id: string, patch: Partial<Sponsor>): void
+  deleteSponsor(id: string): void
   getCreative(slot: AdSlot, index?: number): { sponsor: Sponsor; creative: SponsorCreative } | undefined
 
   /* Convocatorias y postulaciones */

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileText } from 'lucide-react'
+import { FileText, Pencil, Trash2 } from 'lucide-react'
 import { Badge, Button, Card } from '../../components/ui'
 import type { BadgeTone } from '../../components/ui/Badge'
 import type { Sponsor, SponsorCreative } from '../../data/types'
@@ -46,21 +46,47 @@ interface OpsSponsorCardProps {
   sponsor: Sponsor
   impressions: number
   clicks: number
+  onEdit?: () => void
+  onDelete?: () => void
 }
 
 /** Card de sponsor con creatividades por slot y métricas de impacto (PRD §10.9). */
-export function OpsSponsorCard({ sponsor, impressions, clicks }: OpsSponsorCardProps) {
+export function OpsSponsorCard({ sponsor, impressions, clicks, onEdit, onDelete }: OpsSponsorCardProps) {
   const [reportOpen, setReportOpen] = useState(false)
   return (
     <Card className="flex h-full flex-col p-5 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <div>
+        <div className="min-w-0">
           <h3 className="type-serif text-2xl text-ink">{sponsor.name}</h3>
           <p className="mt-1 text-xs text-ink-soft">{sponsor.industry}</p>
         </div>
-        <div className="flex flex-wrap justify-end gap-2">
-          <Badge tone={LEVEL_TONE[sponsor.level]}>{sponsor.level}</Badge>
-          {sponsor.exclusive && <Badge tone="accent">Exclusividad de rubro</Badge>}
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
+            <Badge tone={LEVEL_TONE[sponsor.level]}>{sponsor.level}</Badge>
+            {sponsor.exclusive && <Badge tone="accent">Exclusividad de rubro</Badge>}
+          </div>
+          {(onEdit || onDelete) && (
+            <div className="flex items-center gap-1">
+              {onEdit && (
+                <button
+                  onClick={onEdit}
+                  aria-label="Editar sponsor"
+                  className="rounded-sm p-1.5 text-ink-soft transition-colors hover:bg-ink/5 hover:text-ink"
+                >
+                  <Pencil size={14} strokeWidth={1.75} />
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  onClick={onDelete}
+                  aria-label="Eliminar sponsor"
+                  className="rounded-sm p-1.5 text-ink-soft transition-colors hover:bg-danger/10 hover:text-danger"
+                >
+                  <Trash2 size={14} strokeWidth={1.75} />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

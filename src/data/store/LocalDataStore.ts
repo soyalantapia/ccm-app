@@ -19,7 +19,15 @@ import type {
   TicketOrder,
   TicketPlan,
 } from '../types'
-import type { BlockAvailability, DataStore, NewBlock, NewEvent, PhotoDownload } from './DataStore'
+import type {
+  BlockAvailability,
+  DataStore,
+  NewBlock,
+  NewEvent,
+  NewGallery,
+  NewSponsor,
+  PhotoDownload,
+} from './DataStore'
 import { readJSON, writeJSON, newId } from '../../lib/storage'
 import { mergeOverlay, overlayCreate, overlayDelete, overlayEdit, slugify } from './overlay'
 import { track as doTrack, getLocalAnalytics } from '../../lib/track'
@@ -45,6 +53,8 @@ const K = {
   planOverrides: 'planOverrides',
   eventsOverlay: 'eventsOverlay',
   blocksOverlay: 'blocksOverlay',
+  galleriesOverlay: 'galleriesOverlay',
+  sponsorsOverlay: 'sponsorsOverlay',
 } as const
 
 type PlanOverride = { price?: number | null; mpLink?: string }
@@ -268,11 +278,32 @@ export class LocalDataStore implements DataStore {
   /* ─── Fotos ─── */
 
   getGalleries(): Gallery[] {
-    return seedGalleries
+    return mergeOverlay(seedGalleries, K.galleriesOverlay)
   }
 
   getGallery(slug: string): Gallery | undefined {
-    return seedGalleries.find((g) => g.slug === slug)
+    return this.getGalleries().find((g) => g.slug === slug)
+  }
+
+  createGallery(input: NewGallery): Gallery {
+    const existing = new Set(this.getGalleries().map((g) => g.slug))
+    const base = input.slug || slugify(input.title)
+    let slug = base
+    for (let i = 2; existing.has(slug); i++) slug = `${base}-${i}`
+    const gallery: Gallery = { ...input, id: newId('gal'), slug }
+    overlayCreate(K.galleriesOverlay, gallery)
+    this.track('admin_gallery_created', { galleryId: gallery.id })
+    return gallery
+  }
+
+  updateGallery(id: string, patch: Partial<Gallery>): void {
+    overlayEdit(K.galleriesOverlay, id, patch)
+    this.track('admin_gallery_updated', { galleryId: id })
+  }
+
+  deleteGallery(id: string): void {
+    overlayDelete(K.galleriesOverlay, id)
+    this.track('admin_gallery_deleted', { galleryId: id })
   }
 
   getFavorites(): string[] {
@@ -314,15 +345,32 @@ export class LocalDataStore implements DataStore {
   /* ─── Sponsors ─── */
 
   getSponsors(): Sponsor[] {
-    return seedSponsors
+    return mergeOverlay(seedSponsors, K.sponsorsOverlay)
   }
 
   getSponsor(id: string): Sponsor | undefined {
-    return seedSponsors.find((s) => s.id === id)
+    return this.getSponsors().find((s) => s.id === id)
+  }
+
+  createSponsor(input: NewSponsor): Sponsor {
+    const sponsor: Sponsor = { ...input, id: newId('sp') }
+    overlayCreate(K.sponsorsOverlay, sponsor)
+    this.track('admin_sponsor_created', { sponsorId: sponsor.id, level: sponsor.level })
+    return sponsor
+  }
+
+  updateSponsor(id: string, patch: Partial<Sponsor>): void {
+    overlayEdit(K.sponsorsOverlay, id, patch)
+    this.track('admin_sponsor_updated', { sponsorId: id })
+  }
+
+  deleteSponsor(id: string): void {
+    overlayDelete(K.sponsorsOverlay, id)
+    this.track('admin_sponsor_deleted', { sponsorId: id })
   }
 
   getCreative(slot: AdSlot, index = 0): { sponsor: Sponsor; creative: SponsorCreative } | undefined {
-    const withSlot = seedSponsors.flatMap((sponsor) =>
+    const withSlot = this.getSponsors().flatMap((sponsor) =>
       sponsor.creatives.filter((c) => c.slot === slot).map((creative) => ({ sponsor, creative })),
     )
     if (withSlot.length === 0) return undefined
