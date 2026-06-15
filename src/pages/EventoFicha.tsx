@@ -74,7 +74,7 @@ export default function EventoFicha() {
         </Link>
         <div className="absolute inset-x-0 bottom-0">
           <div className="mx-auto max-w-6xl animate-rise px-5 pb-10 md:pb-14">
-            <Eyebrow>{EVENT_TYPE_LABELS[event.type]}</Eyebrow>
+            <Eyebrow tone="night">{EVENT_TYPE_LABELS[event.type]}</Eyebrow>
             <h1 className="type-display mt-4 max-w-3xl text-[clamp(2.4rem,8vw,5rem)] text-balance text-night-ink">
               {event.title}
             </h1>

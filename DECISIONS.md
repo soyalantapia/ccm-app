@@ -146,3 +146,23 @@ testing resultó ser artefacto del preview (la página NO redirige; estable 3,5s
     **Límites Fase 1 / por diseño (no se tocan):** combo VIP usa mpLink del primer plan (#2);
     inscripción a bloque del principal ≠ entrada general (#3); deep-links del admin devuelven 404 de
     GH Pages y se llegan por la nav del panel (#6).
+
+## Pasada visual/UX (pixel-level) + fixes de diseño (2026-06-15)
+
+El lente visual multi-agente no pudo correr (rate-limit del servidor, 4 intentos con 0 tokens); se
+hizo la pasada con SCREENSHOTS reales (mobile 375px) recorriendo pantallas. Veredicto: diseño sólido,
+editorial, app-like; sin "AI slop"; identidad consistente pública↔admin. Fixes de diseño aplicados:
+71. **Contraste del dorado — resuelto holísticamente** (extiende #1): `Eyebrow` ahora es dual-tone —
+    `accent-strong` (4.93:1 sobre crema, AA) por defecto y `accent` (gold de marca, 4.56:1 sobre night,
+    AA) con `tone="night"`. `SectionTitle` propaga su tone; las 4 Eyebrow sobre fondo oscuro (Stand hero,
+    muro de Sponsors, ConvocatoriaBanner, hero de EventoFicha) marcadas `tone="night"`; GalasSection y
+    SponsorsStrip ya pasaban tone="night". El lead de Entradas ("gratuita", body em) pasó a accent-strong.
+    Los `<em>` de marca en TÍTULOS grandes quedan en gold (pasan AA-large). Verificado en runtime:
+    eyebrow claro 4.93:1, eyebrow oscuro 4.56:1, ambos AA.
+72. **Badge sobre fotos legible**: el tono `accent` (`bg-accent/15 text-ink`) es para fondos claros;
+    sobre la foto del banner de Eventos quedaba ilegible (tinta oscura sobre foto oscura). Nuevo tono
+    `solid` (`bg-accent text-accent-ink`, dorado sólido) aplicado al badge "Evento principal · 14ª
+    edición" del banner → legible y on-brand. Verificado por screenshot.
+**Deuda visual menor anotada (no bloqueante):** el eyebrow "ENTRADA GENERAL · GRATIS" del card de
+Inicio queda en gold sobre la zona media del degradé de la foto (borderline); se puede reforzar el
+scrim del gradiente si se quiere AA estricto ahí.

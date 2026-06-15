@@ -170,7 +170,7 @@ export default function Sponsors() {
 
           {/* Muro de sponsors — lockups por nivel, cierre de pitch */}
           <div className="mt-16 md:mt-20">
-            <Eyebrow className="mb-2">Estas marcas ya confían</Eyebrow>
+            <Eyebrow tone="night" className="mb-2">Estas marcas ya confían</Eyebrow>
             <p className="mb-10 max-w-md text-sm leading-relaxed text-night-ink/60 md:mb-12">
               El muro de CCM 2026: cada categoría, una sola marca. Así se ve un evento que ya
               empezó a venderse.

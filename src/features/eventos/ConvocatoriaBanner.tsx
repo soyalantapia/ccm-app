@@ -10,7 +10,7 @@ export function ConvocatoriaBanner() {
     <section className="bg-night">
       <div className="mx-auto max-w-6xl items-center justify-between gap-10 px-5 py-16 md:flex md:py-20">
         <div className="max-w-xl">
-          <Eyebrow>Convocatoria abierta</Eyebrow>
+          <Eyebrow tone="night">Convocatoria abierta</Eyebrow>
           <h2 className="type-display mt-4 text-[clamp(2rem,6vw,3.4rem)] text-balance text-night-ink">
             ¿Querés ser parte del <em className="text-accent">desfile</em>?
           </h2>

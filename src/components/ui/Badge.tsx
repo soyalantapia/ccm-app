@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react'
 
-export type BadgeTone = 'neutral' | 'accent' | 'success' | 'danger' | 'night' | 'outline'
+export type BadgeTone = 'neutral' | 'accent' | 'solid' | 'success' | 'danger' | 'night' | 'outline'
 
 const tones: Record<BadgeTone, string> = {
   neutral: 'bg-ink/5 text-ink-soft',
   accent: 'bg-accent/15 text-ink',
+  // Dorado sólido + tinta oscura: legible sobre fotos/fondos oscuros (no usar el tinte accent ahí).
+  solid: 'bg-accent text-accent-ink',
   success: 'bg-success/10 text-success',
   danger: 'bg-danger/10 text-danger',
   night: 'bg-night text-night-ink',

@@ -68,7 +68,7 @@ export default function Eventos() {
             className="absolute inset-0 bg-gradient-to-t from-night via-night/35 to-night/10"
           />
           <div className="absolute inset-x-0 bottom-0 p-5 md:p-10">
-            <Badge tone="accent">Evento principal · 14ª edición</Badge>
+            <Badge tone="solid">Evento principal · 14ª edición</Badge>
             <h1 className="type-display mt-3 max-w-2xl text-[clamp(2rem,7vw,4rem)] text-balance text-night-ink">
               {principal.title}
             </h1>

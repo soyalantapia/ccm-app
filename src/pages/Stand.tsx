@@ -98,7 +98,7 @@ export default function Stand() {
       {/* ─── Hero: branding del sponsor (monograma + lockup tipográfico) ─── */}
       <section className="bg-night text-night-ink">
         <div className="mx-auto max-w-6xl px-5 py-16 md:py-24">
-          <Eyebrow>Stand · CCM 2026 · Nivel {sponsor.level}</Eyebrow>
+          <Eyebrow tone="night">Stand · CCM 2026 · Nivel {sponsor.level}</Eyebrow>
 
           {/* Lockup honesto: monograma en cuadro dorado + nombre como wordmark. */}
           <div className="mt-8 flex items-center gap-5 animate-rise">
