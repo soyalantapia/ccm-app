@@ -43,6 +43,9 @@
   --color-line: var(--t-line);
   --color-accent: var(--t-accent);
   --color-accent-ink: var(--t-accent-ink);
+  /* Dorado más oscuro para TEXTO CHICO sobre superficies claras (AA ≥4.5:1 sobre
+     crema). Deriva del accent (sigue al tema). No usar sobre fondos oscuros. */
+  --color-accent-strong: color-mix(in srgb, var(--t-accent) 78%, black);
   --color-night: var(--t-night);
   --color-night-soft: var(--t-night-soft);
   --color-night-ink: var(--t-night-ink);

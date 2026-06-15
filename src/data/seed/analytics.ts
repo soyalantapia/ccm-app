@@ -203,8 +203,9 @@ function buildSeedAnalytics(): AnalyticsEvent[] {
     }
   }
 
-  // ad_impression · ~3000 — por slot S2/S3/S6 y sponsorId reales (más al Principal).
+  // ad_impression · ~3000 — por slot S1/S2/S3/S6 y sponsorId reales (más al Principal).
   const adSlots = [
+    { slot: 'S1', sponsorId: IDS.sponsors.banco, w: 12 }, // Principal (splash de apertura)
     { slot: 'S2', sponsorId: IDS.sponsors.banco, w: 50 }, // Principal
     { slot: 'S6', sponsorId: IDS.sponsors.banco, w: 18 }, // Principal (acreditación)
     { slot: 'S3', sponsorId: IDS.sponsors.beauty, w: 20 }, // Oro (galería)

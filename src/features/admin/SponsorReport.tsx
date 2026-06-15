@@ -198,8 +198,9 @@ export function SponsorReport({ sponsor, onClose }: SponsorReportProps) {
       >
         <button
           onClick={onClose}
+          autoFocus
           aria-label="Cerrar reporte"
-          className="sponsor-report-noprint fixed right-4 top-4 z-10 rounded-sm p-2.5 text-night-ink/80 transition-colors hover:bg-white/10 hover:text-white"
+          className="sponsor-report-noprint absolute right-4 top-4 z-10 rounded-sm p-2.5 text-night-ink/80 transition-colors hover:bg-white/10 hover:text-white"
         >
           <X size={22} strokeWidth={1.5} />
         </button>
@@ -215,7 +216,7 @@ export function SponsorReport({ sponsor, onClose }: SponsorReportProps) {
           {/* Encabezado con marca + dorado */}
           <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 border-b-2 border-accent pb-5">
             <div>
-              <div className="eyebrow text-accent">{config.appName}</div>
+              <div className="eyebrow text-accent-strong">{config.appName}</div>
               <h2 className="type-display mt-2 text-[clamp(1.6rem,5vw,2.4rem)] leading-none text-ink">
                 Reporte de Impacto
               </h2>
@@ -245,8 +246,8 @@ export function SponsorReport({ sponsor, onClose }: SponsorReportProps) {
             <Figure value={metrics.reach.toLocaleString('es-AR')} label="Alcance estimado" />
           </section>
           <p className="mt-2 text-[11px] leading-relaxed text-ink-soft/80">
-            <em className="text-accent">Alcance estimado</em> = dispositivos únicos que vieron al menos
-            una pieza del sponsor (impresiones únicas por <em className="text-accent">deviceId</em>).
+            <em className="text-accent-strong">Alcance estimado</em> = dispositivos únicos que vieron al menos
+            una pieza del sponsor (impresiones únicas por <em className="text-accent-strong">deviceId</em>).
           </p>
 
           {/* Desglose por slot */}
@@ -278,7 +279,7 @@ export function SponsorReport({ sponsor, onClose }: SponsorReportProps) {
                       <td className="py-2.5 text-right text-ink">
                         {row.clicks.toLocaleString('es-AR')}
                       </td>
-                      <td className="py-2.5 text-right text-accent">{ctr(row.impressions, row.clicks)}</td>
+                      <td className="py-2.5 text-right text-accent-strong">{ctr(row.impressions, row.clicks)}</td>
                     </tr>
                   ))
                 )}
@@ -303,7 +304,7 @@ export function SponsorReport({ sponsor, onClose }: SponsorReportProps) {
 
           {/* Cierre con la frase del deck */}
           <footer className="mt-8 border-t border-line pt-4">
-            <p className="eyebrow text-accent">Reporte Técnico de Impacto · CCM {config.year}</p>
+            <p className="eyebrow text-accent-strong">Reporte Técnico de Impacto · CCM {config.year}</p>
             <p className="mt-2 text-[11px] text-ink-soft/80">
               Datos propios, medidos en la plataforma · Generado el {formatDate(new Date().toISOString())}.
             </p>

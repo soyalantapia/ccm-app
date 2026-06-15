@@ -122,3 +122,27 @@ Se hace por etapas. **Base + Eventos/Bloques (Etapa 1):**
 
 **Etapa 3 — Catálogo (expositores) + Contenido (videos): cierra "todo editable":**
 69. **Catálogo + Contenido CRUD real + pantallas admin nuevas** (no existían). Store: `createCatalogProfile/updateCatalogProfile/deleteCatalogProfile` (id+slug auto) y `createContent/updateContent/deleteContent`; `getCatalog/getCatalogProfile/getContents` mergean overlay. Pantallas NUEVAS `AdminCatalogo` y `AdminContenido` (+ rutas `/admin/catalogo` y `/admin/contenido` en App.tsx, y entradas en el sidebar y en el sheet "Más" del admin con íconos Store/Film). Formularios `OpsCatalogForm` (rol/plataforma/ciudad/bio + **retrato del pool de personas** + Instagram + verificado + participaEn por comas + **portfolio del pool de fotos**) y `OpsContentForm` (título/youtubeId con **preview de miniatura de YouTube**/descripción/duración/plataforma/sponsor opcional/fecha), creados en paralelo por agentes. Trackea `admin_catalog_*` y `admin_content_*`. Verificado: 7/7 tests de store + ambas pantallas y formularios renderizan (Expositores con 12 perfiles + retrato preview; Contenido con 3 miniaturas YT). **Con esto el admin queda 100% gestionable** (eventos, bloques, galerías, sponsors, expositores y contenido), todo revertible con "Reiniciar la demo".
+
+## Auditoría total post-CRUD — verificación + fixes (2026-06-15)
+
+Auditoría (diseño/UX/función/completitud) corrida con verificación determinística en runtime
+(el lente visual multi-agente quedó pendiente por throttling del servidor). Resultado: circuito
+completo OK, **0 bug bloqueante**. Verificado: CRUD de las 6 entidades end-to-end (crear en admin →
+aparece en la app pública: listado + ficha `/p/:slug`, `/eventos`, `/contenido`, `/catalogo`),
+regresión del overlay 12/12 (IDS, interstitial S1, editar/borrar semilla, resiliencia a refs rotas,
+"Reiniciar demo" revierte), integridad de datos 0 issues, 0 overflow horizontal en 375px (13 públicas
++ 9 admin), sin colores hardcodeados, sin itálicas, sin controles muertos. La "deriva a home" en
+testing resultó ser artefacto del preview (la página NO redirige; estable 3,5s) — no es bug.
+70. **Fixes aplicados:**
+    - Contraste (#1): nuevo token `--color-accent-strong` (color-mix 78% accent + negro, **4.93:1 sobre
+      crema**, AA texto chico, sigue al tema) aplicado al texto chico del Reporte de Impacto (documento
+      sobre marfil). El `accent` de marca se mantiene para fondos/texto grande/superficies oscuras
+      (donde ya pasa AA; oscurecerlo global rompería el dorado sobre noche).
+    - Foco del Reporte (#4): `autoFocus` en el botón Cerrar → el foco entra al diálogo al abrir
+      (verificado: activeElement = "Cerrar reporte"). Trap/Escape/restitución ya andaban.
+    - Reporte completo (#5): se sembró el slot **S1 (splash)** del sponsor Principal en analytics.ts
+      → el Reporte muestra el espacio premium poblado de entrada (≈275 impr / 9,1% CTR).
+    - `video_complete`: reconciliado en PRD §13 (declarado pero no emitido; documentado, fase siguiente).
+    **Límites Fase 1 / por diseño (no se tocan):** combo VIP usa mpLink del primer plan (#2);
+    inscripción a bloque del principal ≠ entrada general (#3); deep-links del admin devuelven 404 de
+    GH Pages y se llegan por la nav del panel (#6).
