@@ -1,4 +1,5 @@
 import type {
+  AdCampaign,
   AnalyticsEvent,
   Application,
   ApplicationStatus,
@@ -23,6 +24,7 @@ import type {
   BlockAvailability,
   DataStore,
   NewBlock,
+  NewCampaign,
   NewCatalogProfile,
   NewContent,
   NewEvent,
@@ -59,7 +61,21 @@ const K = {
   sponsorsOverlay: 'sponsorsOverlay',
   catalogOverlay: 'catalogOverlay',
   contentsOverlay: 'contentsOverlay',
+  campaigns: 'campaigns',
 } as const
+
+/** Una campaña autogestionada se presenta como sponsor sintético en los slots. */
+function campaignSponsor(c: AdCampaign): Sponsor {
+  return {
+    id: c.id,
+    name: c.brand,
+    industry: 'Autogestión',
+    level: 'Plata',
+    exclusive: false,
+    tagline: c.tagline || 'Espacio autogestionado',
+    creatives: [{ slot: c.slot, headline: c.headline, ...(c.cta ? { cta: c.cta } : {}) }],
+  }
+}
 
 type PlanOverride = { price?: number | null; mpLink?: string }
 type AppOverride = { status: ApplicationStatus; decidedAt: string }
@@ -393,7 +409,11 @@ export class LocalDataStore implements DataStore {
   }
 
   getSponsor(id: string): Sponsor | undefined {
-    return this.getSponsors().find((s) => s.id === id)
+    const sponsor = this.getSponsors().find((s) => s.id === id)
+    if (sponsor) return sponsor
+    // Campañas autogestionadas: se resuelven como sponsor sintético (para medirlas).
+    const campaign = this.getCampaigns().find((c) => c.id === id)
+    return campaign ? campaignSponsor(campaign) : undefined
   }
 
   createSponsor(input: NewSponsor): Sponsor {
@@ -414,11 +434,41 @@ export class LocalDataStore implements DataStore {
   }
 
   getCreative(slot: AdSlot, index = 0): { sponsor: Sponsor; creative: SponsorCreative } | undefined {
+    // Prioridad: una campaña autogestionada comprada para este slot ocupa el espacio.
+    const campaign = this.getActiveCampaign(slot)
+    if (campaign && index === 0) {
+      const sponsor = campaignSponsor(campaign)
+      return { sponsor, creative: sponsor.creatives[0] }
+    }
     const withSlot = this.getSponsors().flatMap((sponsor) =>
       sponsor.creatives.filter((c) => c.slot === slot).map((creative) => ({ sponsor, creative })),
     )
     if (withSlot.length === 0) return undefined
     return withSlot[index % withSlot.length]
+  }
+
+  /* ─── Publicidad autogestionada (self-serve) ─── */
+
+  createCampaign(input: NewCampaign): AdCampaign {
+    const campaign: AdCampaign = { ...input, id: newId('camp'), ts: new Date().toISOString() }
+    writeJSON(K.campaigns, [...this.getCampaigns(), campaign])
+    this.track('ad_campaign_purchased', {
+      campaignId: campaign.id,
+      slot: campaign.slot,
+      hours: campaign.hours,
+      total: campaign.total,
+    })
+    return campaign
+  }
+
+  getCampaigns(): AdCampaign[] {
+    return readJSON<AdCampaign[]>(K.campaigns, [])
+  }
+
+  getActiveCampaign(slot: AdSlot): AdCampaign | undefined {
+    // La última campaña comprada para el slot (en la demo se considera activa).
+    const forSlot = this.getCampaigns().filter((c) => c.slot === slot)
+    return forSlot.length ? forSlot[forSlot.length - 1] : undefined
   }
 
   /* ─── Convocatorias ─── */

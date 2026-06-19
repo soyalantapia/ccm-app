@@ -1,4 +1,4 @@
-import { Button, Eyebrow, SectionTitle, Stat } from '../components/ui'
+import { Button, ButtonLink, Eyebrow, SectionTitle, Stat } from '../components/ui'
 import { useStore } from '../data/store'
 import type { Sponsor } from '../data/types'
 import { SponsorForm } from '../features/contenido/SponsorForm'
@@ -75,14 +75,18 @@ export default function Sponsors() {
           lead="Moda, belleza, turismo, arte, gastronomía, tecnología y sustentabilidad: siete plataformas con audiencia propia y una sola marca por rubro. Stands y activaciones, charlas y masterclasses, experiencias de marca y una base segmentada que sigue trabajando después del evento."
         />
 
-        <div className="mt-10 flex flex-wrap items-center gap-5 md:mt-12">
+        <div className="mt-10 flex flex-wrap items-center gap-3 md:mt-12">
           <Button size="lg" onClick={scrollToForm}>
             Quiero ser sponsor
           </Button>
-          <span className="text-[13px] text-ink-soft">
-            La exclusividad por rubro se reserva por orden de llegada.
-          </span>
+          <ButtonLink to="/publicidad" variant="outline" size="lg">
+            Comprá tu espacio en 1 minuto
+          </ButtonLink>
         </div>
+        <p className="mt-3 text-[13px] text-ink-soft">
+          ¿Una marca chica o una promo puntual? Autogestionás tu banner, elegís cuántas horas corre y
+          pagás con QR — sin pasar por ventas. La exclusividad por rubro se reserva por orden de llegada.
+        </p>
 
         {/* Qué compra una marca — ruled list editorial */}
         <div className="mt-14 border-t border-line md:mt-20">

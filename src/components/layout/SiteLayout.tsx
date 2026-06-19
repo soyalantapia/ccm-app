@@ -224,6 +224,9 @@ function Footer() {
               <Link to="/sponsors" className="block text-night-ink/70 transition-colors hover:text-night-ink">
                 Quiero ser sponsor
               </Link>
+              <Link to="/publicidad" className="block text-night-ink/70 transition-colors hover:text-night-ink">
+                Publicitá en CCM
+              </Link>
               <Link to="/c/camino-a-ccm" className="block text-night-ink/70 transition-colors hover:text-night-ink">
                 Postulate
               </Link>

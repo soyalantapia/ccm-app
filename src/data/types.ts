@@ -172,6 +172,22 @@ export interface Sponsor {
   creatives: SponsorCreative[]
 }
 
+/**
+ * Campaña publicitaria autogestionada: una marca compra un espacio (slot) por
+ * una cantidad de horas, paga (mock QR/Mercado Pago) y su aviso entra en vivo.
+ */
+export interface AdCampaign {
+  id: string
+  slot: AdSlot
+  brand: string
+  headline: string
+  cta?: string
+  tagline?: string
+  hours: number
+  total: number
+  ts: string
+}
+
 /* ─── Contenido ─── */
 
 export interface ContentItem {

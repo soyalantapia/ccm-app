@@ -1,4 +1,5 @@
 import type {
+  AdCampaign,
   AnalyticsEvent,
   Application,
   ApplicationStatus,
@@ -46,6 +47,8 @@ export type NewSponsor = Omit<Sponsor, 'id'>
 export type NewCatalogProfile = Omit<CatalogProfile, 'id' | 'slug'> & { slug?: string }
 /** Alta de contenido (video) desde el admin (el store genera id). */
 export type NewContent = Omit<ContentItem, 'id'>
+/** Compra de espacio publicitario autogestionado (el store genera id + ts). */
+export type NewCampaign = Omit<AdCampaign, 'id' | 'ts'>
 
 /**
  * DataStore — única puerta de acceso a datos de TODA la UI (patrón repositorio).
@@ -116,6 +119,11 @@ export interface DataStore {
   updateSponsor(id: string, patch: Partial<Sponsor>): void
   deleteSponsor(id: string): void
   getCreative(slot: AdSlot, index?: number): { sponsor: Sponsor; creative: SponsorCreative } | undefined
+
+  /* Publicidad autogestionada (self-serve) */
+  createCampaign(input: NewCampaign): AdCampaign
+  getCampaigns(): AdCampaign[]
+  getActiveCampaign(slot: AdSlot): AdCampaign | undefined
 
   /* Convocatorias y postulaciones */
   getConvocatoria(slug: string): Convocatoria | undefined
