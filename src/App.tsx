@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, type ReactNode } from 'react'
+import { Suspense, useEffect, type ReactNode } from 'react'
 import {
   Outlet,
   RouterProvider,
@@ -9,41 +9,43 @@ import SiteLayout from './components/layout/SiteLayout'
 import AdminLayout from './components/layout/AdminLayout'
 import { ScrollManager } from './components/layout/ScrollManager'
 import { UpdatePrompt } from './components/layout/UpdatePrompt'
+import { RouteError } from './components/layout/RouteError'
 import { ProfileSheetProvider } from './components/profile/ProfileSheetProvider'
 import { InstallBanner } from './components/layout/InstallBanner'
 import { AdminPending, PagePending, ToastHost } from './components/ui'
+import { lazyWithReload } from './lib/lazyWithReload'
 import { track } from './lib/track'
 import NotFound from './pages/NotFound'
 
 // Landing is the entry route: imported eagerly so the first paint skips a
 // lazy-chunk round trip (mobile LCP). Everything else stays code-split.
 import Landing from './pages/Landing'
-const Entradas = lazy(() => import('./pages/Entradas'))
-const Eventos = lazy(() => import('./pages/Eventos'))
-const EventoFicha = lazy(() => import('./pages/EventoFicha'))
-const Catalogo = lazy(() => import('./pages/Catalogo'))
-const CatalogoPerfil = lazy(() => import('./pages/CatalogoPerfil'))
-const Fotos = lazy(() => import('./pages/Fotos'))
-const FotosGaleria = lazy(() => import('./pages/FotosGaleria'))
-const Contenido = lazy(() => import('./pages/Contenido'))
-const Convocatoria = lazy(() => import('./pages/Convocatoria'))
-const Sponsors = lazy(() => import('./pages/Sponsors'))
-const Publicidad = lazy(() => import('./pages/Publicidad'))
-const Stand = lazy(() => import('./pages/Stand'))
-const Legales = lazy(() => import('./pages/Legales'))
-const Inicio = lazy(() => import('./pages/app/Inicio'))
-const MiQR = lazy(() => import('./pages/app/MiQR'))
-const Perfil = lazy(() => import('./pages/app/Perfil'))
-const Dashboard = lazy(() => import('./pages/admin/Dashboard'))
-const AdminEventos = lazy(() => import('./pages/admin/AdminEventos'))
-const AdminEventoDetalle = lazy(() => import('./pages/admin/AdminEventoDetalle'))
-const AdminPostulaciones = lazy(() => import('./pages/admin/AdminPostulaciones'))
-const AdminPersonas = lazy(() => import('./pages/admin/AdminPersonas'))
-const AdminGalerias = lazy(() => import('./pages/admin/AdminGalerias'))
-const AdminCatalogo = lazy(() => import('./pages/admin/AdminCatalogo'))
-const AdminContenido = lazy(() => import('./pages/admin/AdminContenido'))
-const AdminOrdenes = lazy(() => import('./pages/admin/AdminOrdenes'))
-const AdminConfiguracion = lazy(() => import('./pages/admin/AdminConfiguracion'))
+const Entradas = lazyWithReload(() => import('./pages/Entradas'))
+const Eventos = lazyWithReload(() => import('./pages/Eventos'))
+const EventoFicha = lazyWithReload(() => import('./pages/EventoFicha'))
+const Catalogo = lazyWithReload(() => import('./pages/Catalogo'))
+const CatalogoPerfil = lazyWithReload(() => import('./pages/CatalogoPerfil'))
+const Fotos = lazyWithReload(() => import('./pages/Fotos'))
+const FotosGaleria = lazyWithReload(() => import('./pages/FotosGaleria'))
+const Contenido = lazyWithReload(() => import('./pages/Contenido'))
+const Convocatoria = lazyWithReload(() => import('./pages/Convocatoria'))
+const Sponsors = lazyWithReload(() => import('./pages/Sponsors'))
+const Publicidad = lazyWithReload(() => import('./pages/Publicidad'))
+const Stand = lazyWithReload(() => import('./pages/Stand'))
+const Legales = lazyWithReload(() => import('./pages/Legales'))
+const Inicio = lazyWithReload(() => import('./pages/app/Inicio'))
+const MiQR = lazyWithReload(() => import('./pages/app/MiQR'))
+const Perfil = lazyWithReload(() => import('./pages/app/Perfil'))
+const Dashboard = lazyWithReload(() => import('./pages/admin/Dashboard'))
+const AdminEventos = lazyWithReload(() => import('./pages/admin/AdminEventos'))
+const AdminEventoDetalle = lazyWithReload(() => import('./pages/admin/AdminEventoDetalle'))
+const AdminPostulaciones = lazyWithReload(() => import('./pages/admin/AdminPostulaciones'))
+const AdminPersonas = lazyWithReload(() => import('./pages/admin/AdminPersonas'))
+const AdminGalerias = lazyWithReload(() => import('./pages/admin/AdminGalerias'))
+const AdminCatalogo = lazyWithReload(() => import('./pages/admin/AdminCatalogo'))
+const AdminContenido = lazyWithReload(() => import('./pages/admin/AdminContenido'))
+const AdminOrdenes = lazyWithReload(() => import('./pages/admin/AdminOrdenes'))
+const AdminConfiguracion = lazyWithReload(() => import('./pages/admin/AdminConfiguracion'))
 
 /** Suspense de página pública/app: skeleton con forma de página. */
 function S({ children }: { children: ReactNode }) {
@@ -76,6 +78,9 @@ const router = createBrowserRouter(
   [
     {
       element: <Root />,
+      // Atrapa fallos de carga de chunk tras un deploy y errores de render,
+      // mostrando una recuperación de un toque en vez del overlay crudo.
+      errorElement: <RouteError />,
       children: [
         {
           element: <SiteLayout />,

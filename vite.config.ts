@@ -82,6 +82,10 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: '/ccm-app/index.html',
+        // El fallback a index.html es solo para navegaciones: nunca para los
+        // chunks/asset. Si un asset se pide durante la propagación de un deploy,
+        // que vaya a la red (y lo recupere [[lazyWithReload]]), no que reciba HTML.
+        navigateFallbackDenylist: [/^\/ccm-app\/assets\//],
         // Shell offline: JS/CSS/fonts/icons precached. Photos are runtime-cached
         // (CacheFirst) so the install stays light but viewed images work offline.
         globPatterns: ['**/*.{js,css,html,woff2,svg}', 'icons/*.png'],
