@@ -2,6 +2,11 @@ import { lazy, type ComponentType } from 'react'
 
 const RELOAD_FLAG = 'ccm:chunk-reload'
 
+// Guarda en memoria por carga de página: evita recargar dos veces si fallan
+// dos chunks a la vez. Se reinicia con cada navegación, por eso NO alcanza
+// como única defensa contra loops (ver writeReloadFlag).
+let reloadedThisLoad = false
+
 // `any` acá es deliberado: replica la firma de `React.lazy` para preservar la
 // inferencia de props del componente (p. ej. Legales recibe `kind`).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -25,15 +30,21 @@ export async function loadOrReload<T>(
     const canReload =
       typeof window !== 'undefined' &&
       window.navigator.onLine !== false &&
+      !reloadedThisLoad &&
       !readReloadFlag()
-    if (canReload) {
-      writeReloadFlag()
+    // Solo recargamos si pudimos PERSISTIR la marca (writeReloadFlag devuelve
+    // true). Si sessionStorage no está disponible no podríamos recordar el
+    // reintento tras recargar → loop infinito; en ese caso preferimos mandar el
+    // error al errorElement (recuperación de un toque) antes que un storm.
+    if (canReload && writeReloadFlag()) {
+      reloadedThisLoad = true
       reload()
       // La página se está recargando; devolvemos una promesa que nunca resuelve
       // para no renderizar nada en el ínterin.
       return new Promise<{ default: T }>(() => {})
     }
-    // Ya reintentamos (o estamos offline): que el error llegue al errorElement.
+    // Ya reintentamos, estamos offline, o no podemos recordar el reintento:
+    // que el error llegue al errorElement.
     throw err
   }
 }
@@ -65,12 +76,13 @@ function readReloadFlag(): boolean {
   }
 }
 
-function writeReloadFlag(): void {
+/** Devuelve true si pudo persistir la marca (clave para no entrar en loop). */
+function writeReloadFlag(): boolean {
   try {
     sessionStorage.setItem(RELOAD_FLAG, '1')
+    return true
   } catch {
-    /* sin sessionStorage no podemos guardar la marca; igual recargamos una vez
-       por carga de página, que es el caso común */
+    return false
   }
 }
 

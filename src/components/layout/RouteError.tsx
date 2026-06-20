@@ -1,6 +1,6 @@
 import { useRouteError } from 'react-router-dom'
 import { Heart, RefreshCw } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /**
  * Pantalla de error de ruta (errorElement). Atrapa fallos de carga de chunks
@@ -19,29 +19,44 @@ export function RouteError() {
       message,
     )
   const [working, setWorking] = useState(false)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+
+  // Anunciamos el error a tecnología asistiva moviendo el foco al título.
+  useEffect(() => {
+    headingRef.current?.focus()
+  }, [])
 
   async function hardRefresh() {
     setWorking(true)
-    try {
-      const regs = (await navigator.serviceWorker?.getRegistrations?.()) ?? []
-      await Promise.all(regs.map((r) => r.unregister()))
-      const keys = (await window.caches?.keys?.()) ?? []
-      await Promise.all(keys.map((k) => window.caches.delete(k)))
-    } catch {
-      /* si falla la limpieza igual recargamos */
+    // Sin conexión NO purgamos el SW/caches: ese cache ES el shell offline y
+    // borrarlo dejaría la app muerta hasta reconectar. Online sí, para garantizar
+    // que se tome el build nuevo.
+    if (navigator.onLine !== false) {
+      try {
+        const regs = (await navigator.serviceWorker?.getRegistrations?.()) ?? []
+        await Promise.all(regs.map((r) => r.unregister()))
+        const keys = (await window.caches?.keys?.()) ?? []
+        await Promise.all(keys.map((k) => window.caches.delete(k)))
+      } catch {
+        /* si falla la limpieza igual recargamos */
+      }
     }
     window.location.reload()
   }
 
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-bg px-6 text-center">
+    <main
+      role="alert"
+      aria-live="assertive"
+      className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-bg px-6 text-center"
+    >
       <div className="flex items-center gap-2">
         <span className="type-display text-4xl text-ink">CCM</span>
         <Heart aria-hidden size={14} strokeWidth={0} className="fill-accent" />
       </div>
 
       <div className="max-w-sm space-y-2">
-        <h1 className="type-serif text-2xl text-ink">
+        <h1 ref={headingRef} tabIndex={-1} className="type-serif text-2xl text-ink outline-none">
           {isChunk ? 'Salió una versión nueva' : 'Algo salió mal'}
         </h1>
         <p className="text-sm leading-relaxed text-ink-soft">
