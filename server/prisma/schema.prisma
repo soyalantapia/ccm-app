@@ -1,0 +1,618 @@
+// Schema de CCM — canon = work-agent/backend/04-modelo-de-datos.md
+// Traducción 1:1 del dominio (src/data/types.ts) a Postgres.
+// NOTA: el índice único parcial de AdCampaign ("una activa por slot") NO se expresa
+// en Prisma; se crea por SQL crudo en una migración (ver más abajo y doc 04 §1).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────
+//  ENUMS
+// ─────────────────────────────────────────────────────────
+
+enum EventType {
+  principal
+  camino
+  capacitacion
+}
+
+enum RegistrationStatus {
+  confirmada
+  cancelada
+}
+
+enum PlanDay {
+  sabado
+  domingo
+  combo
+}
+
+enum PlanKind {
+  general
+  vip
+}
+
+enum OrderStatus {
+  iniciada
+  redirigida_mp
+  confirmada
+  cancelada
+}
+
+enum SponsorLevel {
+  Principal
+  Oro
+  Plata
+}
+
+enum AdSlot {
+  S1
+  S2
+  S3
+  S4
+  S6 // S5 no existe en el dominio: hueco intencional, no agregar
+}
+
+enum MembershipTier {
+  free
+  socio
+}
+
+enum ApplicationStatus {
+  preinscripta
+  aceptada
+  rechazada
+}
+
+enum CampaignStatus {
+  pendiente_pago // orden creada, esperando confirmación de MP
+  activa
+  expirada
+  rechazada
+}
+
+// Rol del panel admin (canon 9). STAFF = personal de puerta (solo escanea QR).
+enum AdminRole {
+  OWNER
+  EDITOR
+  STAFF
+  VIEWER
+}
+
+// Tipo de recurso que paga una fila Payment (canon 7).
+enum PaymentKind {
+  ticket_order
+  membership
+  ad_campaign
+}
+
+// Estado del cobro en MP (independiente del estado de negocio del recurso).
+enum PaymentStatus {
+  pending
+  approved
+  rejected
+  refunded
+}
+
+enum ProfileFieldKey {
+  firstName
+  lastName
+  email
+  profession
+  phone
+  dni
+  city
+  instagram
+}
+
+// ─────────────────────────────────────────────────────────
+//  IDENTIDAD / PERFIL
+// ─────────────────────────────────────────────────────────
+
+// Device = única entidad raíz del usuario (canon 6). No hay tabla DeviceProfile:
+// el tipo TS DeviceProfile se serializa desde Device + ProfileField en el repo.
+model Device {
+  id        String   @id @default(cuid())
+  publicId  String   @unique
+  createdAt DateTime @default(now())
+
+  consentTerms    DateTime?
+  consentNews     DateTime?
+  consentSponsors DateTime?
+
+  fields        ProfileField[]
+  registrations Registration[]
+  orders        TicketOrder[]
+  membership    Membership?
+  tickets       Ticket[]
+  favorites     PhotoFavorite[]
+  downloads     PhotoDownload[]
+  applications  Application[]
+  analytics     AnalyticsEvent[]
+  payments      Payment[]
+
+  @@index([createdAt])
+}
+
+// Captura progresiva de PII (canon 4). Un valor por (device, key).
+model ProfileField {
+  id         String          @id @default(cuid())
+  deviceId   String
+  key        ProfileFieldKey
+  value      String
+  source     String
+  capturedAt DateTime        @default(now())
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, key])
+  @@index([key, value])
+}
+
+// ─────────────────────────────────────────────────────────
+//  EVENTOS, BLOQUES E INSCRIPCIONES
+// ─────────────────────────────────────────────────────────
+
+model Event {
+  id          String    @id // ej. "ev-principal-2026"
+  slug        String    @unique
+  type        EventType
+  title       String
+  subtitle    String?
+  dateLabel   String
+  startDate   DateTime
+  timeLabel   String?
+  venue       String
+  address     String
+  mapsUrl     String
+  description String    @db.Text
+  cover       String
+  price       Int?
+  past        Boolean   @default(false)
+  socioOnly   Boolean   @default(false) // gate a nivel EVENTO (canon 17); el bloque lo hereda
+
+  blocks        EventBlock[]
+  registrations Registration[]
+  sponsors      EventSponsor[]
+  convocatorias Convocatoria[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type, startDate])
+  @@index([past])
+}
+
+// EventItem.sponsorIds[] → tabla puente.
+model EventSponsor {
+  eventId   String
+  sponsorId String
+
+  event   Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  sponsor Sponsor @relation(fields: [sponsorId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, sponsorId])
+}
+
+model EventBlock {
+  id          String   @id
+  eventId     String
+  title       String
+  kind        String
+  day         String
+  start       String
+  end         String
+  room        String
+  capacity    Int
+  seedTaken   Int      @default(0) // baseline del cupo; real = seedTaken + count(confirmadas)
+  speakers    String[]
+  description String?  @db.Text
+
+  event         Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  registrations Registration[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([eventId])
+}
+
+model Registration {
+  id       String             @id // "reg_..."
+  deviceId String
+  eventId  String
+  blockId  String?
+  status   RegistrationStatus @default(confirmada)
+  ts       DateTime           @default(now())
+
+  device Device      @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  event  Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  block  EventBlock? @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, eventId, blockId])
+  @@index([blockId, status])
+  @@index([eventId, status])
+}
+
+// ─────────────────────────────────────────────────────────
+//  ENTRADAS, PLANES Y ÓRDENES
+// ─────────────────────────────────────────────────────────
+
+model TicketPlan {
+  id            String   @id // PlanId
+  name          String
+  tagline       String
+  price         Int? // null = precio pendiente 🔶
+  serviceCharge Int      @default(0)
+  mpLink        String?
+  perks         String[]
+  featured      Boolean  @default(false)
+  day           PlanDay
+  kind          PlanKind
+  preventa      Boolean  @default(false)
+
+  orders TicketOrder[]
+
+  updatedAt DateTime @updatedAt
+}
+
+model TicketOrder {
+  id         String      @id // "ord_..."
+  deviceId   String?
+  planId     String
+  status     OrderStatus @default(iniciada)
+  qty        Int         @default(1)
+  total      Int // congelado al crear = (price + serviceCharge) * qty
+  buyerName  String?
+  buyerEmail String?
+  ts         DateTime    @default(now())
+
+  // La plomería MP vive en Payment (kind='ticket_order'), no acá (canon 7).
+  device  Device?    @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  plan    TicketPlan @relation(fields: [planId], references: [id])
+  tickets Ticket[]
+
+  @@index([status, ts])
+  @@index([planId])
+  @@index([buyerEmail])
+}
+
+// Acreditación: estado de uso del QR en puerta. El QR es un JWT firmado con
+// ACCREDITATION_TOKEN_SECRET; esta fila guarda el jti + check-in (canon 11). Doc 13.
+model Ticket {
+  id          String    @id @default(cuid())
+  deviceId    String
+  orderId     String? // null si entrada GRATIS (Registration confirmada, sin pago)
+  jornada     String
+  qrToken     String    @unique // jti del JWT
+  checkedIn   Boolean   @default(false)
+  checkedInAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  device Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  order  TicketOrder? @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, jornada]) // una entrada por jornada
+  @@index([checkedIn])
+}
+
+// ─────────────────────────────────────────────────────────
+//  CATÁLOGO (EXPOSITORES)
+// ─────────────────────────────────────────────────────────
+
+model CatalogProfile {
+  id             String   @id // "cat-..."
+  slug           String   @unique
+  name           String
+  role           String
+  platform       String
+  city           String
+  bio            String   @db.Text
+  photo          String
+  instagram      String?
+  verified       Boolean  @default(false)
+  participatesIn String[]
+
+  portfolio PortfolioPiece[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+  @@index([platform])
+}
+
+model PortfolioPiece {
+  id        String  @id @default(cuid())
+  profileId String
+  image     String
+  title     String
+  caption   String?
+  order     Int     @default(0)
+
+  profile CatalogProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, order])
+}
+
+// ─────────────────────────────────────────────────────────
+//  FOTOS (GALERÍAS, FAVORITOS, DESCARGAS)
+// ─────────────────────────────────────────────────────────
+
+model Gallery {
+  id         String @id // "gal-..."
+  slug       String @unique
+  title      String
+  eventLabel String
+  date       String
+  cover      String
+  sponsorId  String
+
+  // onDelete: Restrict (canon 16): no se borra un Sponsor con galerías.
+  sponsor Sponsor @relation(fields: [sponsorId], references: [id], onDelete: Restrict)
+  photos  Photo[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sponsorId])
+}
+
+model Photo {
+  id        String @id // "ph-..."
+  galleryId String
+  src       String
+  alt       String
+  order     Int    @default(0)
+
+  gallery   Gallery         @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  favorites PhotoFavorite[]
+  downloads PhotoDownload[]
+
+  @@index([galleryId, order])
+}
+
+model PhotoFavorite {
+  deviceId String
+  photoId  String
+  ts       DateTime @default(now())
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  photo  Photo  @relation(fields: [photoId], references: [id], onDelete: Cascade)
+
+  @@id([deviceId, photoId])
+}
+
+model PhotoDownload {
+  id        String   @id @default(cuid())
+  deviceId  String
+  photoId   String
+  galleryId String
+  sponsorId String // desnormalizado: a qué sponsor le suma esta descarga
+  ts        DateTime @default(now())
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  photo  Photo  @relation(fields: [photoId], references: [id], onDelete: Cascade)
+
+  @@index([sponsorId, ts])
+  @@index([galleryId])
+}
+
+// ─────────────────────────────────────────────────────────
+//  SPONSORS Y PUBLICIDAD
+// ─────────────────────────────────────────────────────────
+
+model Sponsor {
+  id        String       @id // "sp-..."
+  name      String
+  industry  String
+  level     SponsorLevel
+  exclusive Boolean      @default(false) // exclusividad de rubro (D20)
+  tagline   String
+
+  creatives SponsorCreative[]
+  galleries Gallery[]
+  events    EventSponsor[]
+  contents  ContentItem[]     @relation("ContentSponsor")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([level])
+  @@index([industry])
+}
+
+model SponsorCreative {
+  id        String  @id @default(cuid())
+  sponsorId String
+  slot      AdSlot
+  headline  String
+  sub       String?
+  cta       String?
+  order     Int     @default(0)
+
+  sponsor Sponsor @relation(fields: [sponsorId], references: [id], onDelete: Cascade)
+
+  @@index([slot, sponsorId])
+}
+
+// Publicidad autogestionada (self-serve). Vigencia: startsAt/expiresAt + status (canon 8).
+// "Una activa por slot" se garantiza con un índice único PARCIAL en SQL crudo
+// (migración manual): CREATE UNIQUE INDEX one_active_per_slot ON "AdCampaign"(slot) WHERE status = 'activa';
+model AdCampaign {
+  id        String         @id // "camp_..."
+  slot      AdSlot
+  brand     String
+  headline  String
+  cta       String?
+  tagline   String?
+  status    CampaignStatus @default(pendiente_pago)
+
+  hours     Int // lo comprado (trazabilidad/factura)
+  startsAt  DateTime? // se setea al confirmar el pago
+  expiresAt DateTime? // = startsAt + hours
+
+  total Int
+  ts    DateTime @default(now())
+
+  @@index([slot, status, expiresAt])
+}
+
+// ─────────────────────────────────────────────────────────
+//  CONTENIDO (VIDEOS)
+// ─────────────────────────────────────────────────────────
+
+model ContentItem {
+  id          String   @id // "ct-..."
+  type        String   @default("video")
+  title       String
+  description String   @db.Text
+  youtubeId   String
+  duration    String?
+  platform    String?
+  sponsorId   String?
+  publishedAt DateTime
+  socioOnly   Boolean  @default(false)
+
+  sponsor Sponsor? @relation("ContentSponsor", fields: [sponsorId], references: [id], onDelete: SetNull)
+
+  @@index([publishedAt])
+  @@index([socioOnly])
+}
+
+// ─────────────────────────────────────────────────────────
+//  MEMBRESÍA (SOCIO CCM)
+// ─────────────────────────────────────────────────────────
+
+model Membership {
+  id        String         @id @default(cuid()) // PK propia (canon 7) para Payment.resourceId
+  deviceId  String         @unique
+  tier      MembershipTier @default(free)
+  since     DateTime?
+  paid      Int            @default(0)
+  expiresAt DateTime? // 🔶 perpetua vs por-edición vs anual
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([tier])
+}
+
+// ─────────────────────────────────────────────────────────
+//  PAGOS (MERCADO PAGO) — tabla polimórfica (canon 7)
+// ─────────────────────────────────────────────────────────
+
+model Payment {
+  id         String        @id @default(cuid())
+  kind       PaymentKind
+  resourceId String // TicketOrder.id | Membership.id | AdCampaign.id (sin FK formal)
+  deviceId   String?
+
+  mpPreferenceId String?
+  mpPaymentId    String?       @unique // idempotencia del webhook
+  externalRef    String?
+  amount         Int
+  status         PaymentStatus @default(pending)
+  raw            Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  device Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([kind, resourceId])
+  @@index([status])
+  @@index([deviceId])
+}
+
+// ─────────────────────────────────────────────────────────
+//  CONVOCATORIAS Y POSTULACIONES
+// ─────────────────────────────────────────────────────────
+
+model Convocatoria {
+  id       String   @id // "conv-..."
+  slug     String   @unique
+  title    String
+  intro    String   @db.Text
+  deadline DateTime
+  eventId  String
+
+  event        Event               @relation(fields: [eventId], references: [id])
+  fields       ConvocatoriaField[]
+  applications Application[]
+
+  @@index([eventId])
+}
+
+model ConvocatoriaField {
+  id             String   @id @default(cuid())
+  convocatoriaId String
+  key            String
+  label          String
+  type           String
+  required       Boolean  @default(false)
+  options        String[]
+  placeholder    String?
+  help           String?
+  showIfKey      String?
+  showIfEquals   String?
+  order          Int      @default(0)
+
+  convocatoria Convocatoria @relation(fields: [convocatoriaId], references: [id], onDelete: Cascade)
+
+  @@unique([convocatoriaId, key])
+  @@index([convocatoriaId, order])
+}
+
+model Application {
+  id             String            @id // "app_..."
+  convocatoriaId String
+  deviceId       String?
+  status         ApplicationStatus @default(preinscripta)
+  data           Json
+  fromSeed       Boolean           @default(false)
+  ts             DateTime          @default(now())
+  decidedAt      DateTime?
+
+  convocatoria Convocatoria @relation(fields: [convocatoriaId], references: [id], onDelete: Cascade)
+  device       Device?      @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([convocatoriaId, status])
+  @@index([status, ts])
+}
+
+// ─────────────────────────────────────────────────────────
+//  ANALYTICS (ALTO VOLUMEN)
+// ─────────────────────────────────────────────────────────
+
+model AnalyticsEvent {
+  id       String   @id @default(cuid())
+  event    String // taxonomía canónica (doc 05)
+  deviceId String?
+  payload  Json?
+  seed     Boolean  @default(false)
+  ts       DateTime @default(now())
+
+  device Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([event, ts])
+  @@index([ts])
+  @@index([deviceId])
+}
+
+// ─────────────────────────────────────────────────────────
+//  ADMIN (ORGANIZADOR)
+// ─────────────────────────────────────────────────────────
+
+model AdminUser {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String?
+  role      AdminRole @default(EDITOR) // canon 9
+  createdAt DateTime  @default(now())
+  lastLogin DateTime?
+}
