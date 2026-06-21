@@ -11,6 +11,7 @@ import { EVENT_TYPE_ORDER, EVENT_TYPE_TABS } from '../features/eventos/eventMeta
 export default function Eventos() {
   const events = useStore((s) => s.getEvents())
   const registrations = useStore((s) => s.getRegistrations())
+  const isSocio = useStore((s) => s.isSocio())
   const vipFrom = useStore(
     (s) => s.getPlans().find((p) => p.kind === 'vip' && p.price !== null)?.price ?? null,
   )
@@ -118,6 +119,7 @@ export default function Eventos() {
               key={event.id}
               event={event}
               registered={registeredEventIds.has(event.id)}
+              locked={!!event.socioOnly && !isSocio}
             />
           ))}
         </div>

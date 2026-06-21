@@ -10,6 +10,7 @@ import { config } from '../../config'
 const NAV = [
   { to: '/eventos', label: 'Eventos' },
   { to: '/entradas', label: 'Entradas' },
+  { to: '/membresia', label: 'Membresías' },
   { to: '/catalogo', label: 'Catálogo' },
   { to: '/fotos', label: 'Fotos' },
   { to: '/contenido', label: 'Contenido' },
@@ -221,6 +222,9 @@ function Footer() {
             </div>
             <div className="space-y-2.5">
               <div className="eyebrow text-[9px] text-accent">CCM</div>
+              <Link to="/membresia" className="block text-night-ink/70 transition-colors hover:text-night-ink">
+                Hacete Socio
+              </Link>
               <Link to="/sponsors" className="block text-night-ink/70 transition-colors hover:text-night-ink">
                 Quiero ser sponsor
               </Link>

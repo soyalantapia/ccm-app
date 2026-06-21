@@ -17,6 +17,8 @@ const NOISE_EVENTS = new Set<string>([
   'photo_view',
   'profile_view',
   'content_view',
+  'content_locked_view',
+  'membership_view',
   'stand_view',
   'ad_impression',
   'ad_skip',

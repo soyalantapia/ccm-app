@@ -46,6 +46,8 @@ export interface EventItem {
   price?: number | null
   sponsorIds?: string[]
   past?: boolean
+  /** Capacitación/evento reservado a la membresía Socio CCM (niveles de suscripción). */
+  socioOnly?: boolean
 }
 
 export interface EventBlock {
@@ -200,6 +202,20 @@ export interface ContentItem {
   platform?: string
   sponsorId?: string
   publishedAt: string
+  /** Contenido exclusivo para la membresía Socio CCM. */
+  socioOnly?: boolean
+}
+
+/* ─── Membresía / niveles de suscripción ─── */
+
+export type MembershipTier = 'free' | 'socio'
+
+export interface Membership {
+  tier: MembershipTier
+  /** ISO de alta de la membresía (vacío en el nivel gratis). */
+  since: string
+  /** Total abonado (demo) — alimenta ingresos por membresías en el panel. */
+  paid: number
 }
 
 /* ─── Convocatorias y postulaciones ─── */

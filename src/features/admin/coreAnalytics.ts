@@ -5,6 +5,7 @@ import {
   CalendarDays,
   CalendarPlus,
   CalendarX,
+  Crown,
   Download,
   Eye,
   Heart,
@@ -21,7 +22,7 @@ import {
 } from 'lucide-react'
 import type { AnalyticsEvent, PlanId, ProfileFieldKey } from '../../data/types'
 import type { DataStore } from '../../data/store'
-import { PROFILE_FIELD_LABELS } from './coreFormat'
+import { PROFILE_FIELD_LABELS, formatMoney } from './coreFormat'
 
 function str(value: unknown): string | undefined {
   return typeof value === 'string' && value ? value : undefined
@@ -103,6 +104,10 @@ export function describeAnalyticsEvent(
       return { icon: Play, label: 'Video reproducido' }
     case 'content_view':
       return { icon: Play, label: 'Contenido visto' }
+    case 'membership_purchased': {
+      const total = typeof p.total === 'number' ? p.total : 0
+      return { icon: Crown, label: `Nuevo Socio CCM · ${formatMoney(total)}` }
+    }
     case 'application_submitted':
       return { icon: Inbox, label: 'Nueva postulación · Camino a CCM 2026' }
     case 'application_accepted':

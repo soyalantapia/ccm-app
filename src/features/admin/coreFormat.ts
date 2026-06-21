@@ -99,3 +99,8 @@ export function percent(taken: number, capacity: number): number {
   if (capacity <= 0) return 0
   return Math.min(100, Math.round((taken / capacity) * 100))
 }
+
+/** "$ 891.000" — moneda AR sin decimales. */
+export function formatMoney(value: number): string {
+  return value.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
+}

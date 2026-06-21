@@ -10,6 +10,7 @@ import type {
   EventBlock,
   EventItem,
   Gallery,
+  Membership,
   OrderStatus,
   PlanId,
   ProfileFieldKey,
@@ -62,6 +63,7 @@ const K = {
   catalogOverlay: 'catalogOverlay',
   contentsOverlay: 'contentsOverlay',
   campaigns: 'campaigns',
+  membership: 'membership',
 } as const
 
 /** Una campaña autogestionada se presenta como sponsor sintético en los slots. */
@@ -100,6 +102,23 @@ export class LocalDataStore implements DataStore {
 
   saveConsents(consents: { terms?: boolean; news?: boolean; sponsors?: boolean }): void {
     identity.saveConsents(consents)
+  }
+
+  /* ─── Membresía (niveles de suscripción) ─── */
+
+  getMembership(): Membership {
+    return readJSON<Membership>(K.membership, { tier: 'free', since: '', paid: 0 })
+  }
+
+  isSocio(): boolean {
+    return this.getMembership().tier === 'socio'
+  }
+
+  becomeSocio(paid: number): Membership {
+    const membership: Membership = { tier: 'socio', since: new Date().toISOString(), paid }
+    writeJSON(K.membership, membership)
+    this.track('membership_purchased', { tier: 'socio', total: paid })
+    return membership
   }
 
   /* ─── Eventos ─── */

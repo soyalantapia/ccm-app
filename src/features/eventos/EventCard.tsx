@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, CalendarDays, MapPin } from 'lucide-react'
+import { ArrowRight, CalendarDays, Lock, MapPin } from 'lucide-react'
 import { Badge, Img } from '../../components/ui'
 import type { EventItem } from '../../data/types'
 import { EVENT_TYPE_LABELS } from './eventMeta'
@@ -8,13 +8,15 @@ interface EventCardProps {
   event: EventItem
   /** Inscripto al evento o a alguno de sus bloques. */
   registered: boolean
+  /** Capacitación solo-Socios y el usuario aún no es Socio. */
+  locked?: boolean
 }
 
 /**
  * Card autocontenida del listado /eventos: una unidad cerrada con borde completo.
  * Meta arriba (tipo + fecha), foto, y bloque de info dentro de la misma card.
  */
-export function EventCard({ event, registered }: EventCardProps) {
+export function EventCard({ event, registered, locked = false }: EventCardProps) {
   return (
     <Link
       to={`/eventos/${event.slug}`}
@@ -22,7 +24,14 @@ export function EventCard({ event, registered }: EventCardProps) {
     >
       {/* Fila de meta: chip de tipo + fecha bien visible → "esto es un evento distinto" */}
       <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-        <Badge tone="accent">{EVENT_TYPE_LABELS[event.type]}</Badge>
+        <div className="flex items-center gap-2">
+          <Badge tone="accent">{EVENT_TYPE_LABELS[event.type]}</Badge>
+          {locked && (
+            <Badge tone="night">
+              <Lock size={10} /> Solo Socios
+            </Badge>
+          )}
+        </div>
         <span className="eyebrow flex items-center gap-1.5 text-ink-soft">
           <CalendarDays size={12} className="text-accent" />
           {event.dateLabel}
@@ -49,6 +58,10 @@ export function EventCard({ event, registered }: EventCardProps) {
         <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
           {registered ? (
             <Badge tone="success">Ya estás inscripto</Badge>
+          ) : locked ? (
+            <span className="eyebrow flex items-center gap-1.5 text-accent-strong">
+              <Lock size={11} /> Hacete Socio
+            </span>
           ) : (
             <span className="eyebrow text-ink-soft">Cupo limitado</span>
           )}

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Star } from 'lucide-react'
 import { AdBanner, Badge, Button, EmptyState, SectionTitle } from '../../components/ui'
 import { store, useStore } from '../../data/store'
 import { IDS } from '../../data/ids'
@@ -21,6 +22,7 @@ export default function MiQR() {
   const registrations = useStore((s) => s.getRegistrations().filter((r) => r.status === 'confirmada'))
   const orders = useStore((s) => s.getOrders())
   const mainEvent = useStore((s) => s.getEventById(IDS.events.principal))
+  const isSocio = useStore((s) => s.isSocio())
   const registered = registrations.length > 0
 
   const blockRegistrations = registrations
@@ -56,6 +58,13 @@ export default function MiQR() {
       ) : (
         <>
           <div className="mt-10 animate-rise">
+            {isSocio && (
+              <div className="mb-3 flex justify-center">
+                <Badge tone="solid">
+                  <Star size={11} /> Acceso VIP · Socio CCM
+                </Badge>
+              </div>
+            )}
             <AccreditationCard />
             {mainEvent && (
               <div className="mt-5 flex justify-center">

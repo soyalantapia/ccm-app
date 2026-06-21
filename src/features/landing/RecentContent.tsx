@@ -3,11 +3,17 @@ import { ArrowUpRight } from 'lucide-react'
 import { SectionTitle, YouTubeEmbed } from '../../components/ui'
 import { useStore } from '../../data/store'
 
-/** Contenido reciente (PRD §6.1.9) — últimos videos, siempre embebidos (D3). */
+/** Contenido reciente (PRD §6.1.9) — últimos videos, siempre embebidos (D3).
+ *  El contenido exclusivo (socioOnly) no se muestra en la landing pública a quien
+ *  no es Socio: el gate vive en el archivo /contenido, acá solo va lo abierto. */
 export function RecentContent() {
-  const videos = useStore((s) =>
-    [...s.getContents()].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)).slice(0, 3),
-  )
+  const videos = useStore((s) => {
+    const socio = s.isSocio()
+    return [...s.getContents()]
+      .filter((c) => socio || !c.socioOnly)
+      .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
+      .slice(0, 3)
+  })
 
   if (videos.length === 0) return null
 

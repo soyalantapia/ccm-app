@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
-import { Check, Minus, UserRound } from 'lucide-react'
-import { Badge, Eyebrow, Stat } from '../../components/ui'
+import { Check, Minus, Star, UserRound } from 'lucide-react'
+import { Badge, ButtonLink, Eyebrow, Stat } from '../../components/ui'
 import { store, useStore } from '../../data/store'
 import { IDS } from '../../data/ids'
 import { FIELD_META } from '../../lib/profileRequest'
@@ -21,6 +21,7 @@ export default function Perfil() {
   )
   const downloadsCount = useStore((s) => s.getDownloads().length)
   const favoritesCount = useStore((s) => s.getFavorites().length)
+  const isSocio = useStore((s) => s.isSocio())
 
   const first = profile.fields.firstName?.value
   const last = profile.fields.lastName?.value
@@ -62,6 +63,38 @@ export default function Perfil() {
       <div className="mt-10 md:mt-12">
         <ProfileCompleteCard />
       </div>
+
+      {/* Tu membresía (niveles de suscripción) */}
+      <AppSection eyebrow="Tu membresía">
+        {isSocio ? (
+          <div className="flex items-center gap-4 rounded-md border border-accent/40 bg-accent/5 p-4">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink">
+              <Star size={20} strokeWidth={2} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="type-serif text-lg text-ink">Socio CCM</p>
+              <p className="text-xs leading-relaxed text-ink-soft">
+                Capacitaciones, zona VIP, contenido exclusivo y descuentos desbloqueados.
+              </p>
+            </div>
+            <ButtonLink to="/membresia" variant="ghost" size="sm" className="shrink-0">
+              Beneficios
+            </ButtonLink>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="type-serif text-lg text-ink">Estás en el nivel Gratis</p>
+              <p className="text-xs leading-relaxed text-ink-soft">
+                Hacete Socio y desbloqueá capacitaciones, zona VIP, contenido exclusivo y descuentos.
+              </p>
+            </div>
+            <ButtonLink to="/membresia" size="sm" className="shrink-0">
+              Hacerme Socio
+            </ButtonLink>
+          </div>
+        )}
+      </AppSection>
 
       {/* Tus datos — progressive profiling (ver / corregir cada dato) */}
       <AppSection eyebrow="Tus datos">

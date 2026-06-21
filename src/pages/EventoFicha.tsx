@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowUpRight, CalendarDays, ChevronLeft, Clock, MapPin } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, Check, ChevronLeft, Clock, Lock, MapPin } from 'lucide-react'
 import { ButtonLink, EmptyState, Eyebrow, Img, SectionTitle } from '../components/ui'
 import { store, useStore } from '../data/store'
 import type { EventBlock } from '../data/types'
@@ -9,6 +9,38 @@ import { EventCta } from '../features/eventos/EventCta'
 import { ConvocatoriaBanner } from '../features/eventos/ConvocatoriaBanner'
 import { PrincipalBody } from '../features/eventos/PrincipalBody'
 import { EVENT_TYPE_LABELS, blockSortKey, dayLabel } from '../features/eventos/eventMeta'
+import { formatMoney } from '../features/tickets/format'
+import { SOCIO_PLAN, SOCIO_PRICE } from '../features/membresia/plans'
+
+/** Candado de capacitación premium: bloquea la inscripción hasta hacerse Socio. */
+function SocioGate() {
+  return (
+    <div className="rounded-lg border-2 border-accent bg-night p-6 text-night-ink md:p-8">
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-accent-ink">
+          <Lock size={16} />
+        </span>
+        <p className="eyebrow text-[10px] text-accent">Capacitación premium · solo Socios</p>
+      </div>
+      <h3 className="type-serif mt-4 text-2xl text-night-ink">Esta capacitación es para Socios CCM</h3>
+      <p className="mt-2 max-w-md text-sm leading-relaxed text-night-ink/70">
+        Con la membresía Socio accedés a todos los talleres premium del año, zona VIP, contenido
+        exclusivo y descuentos con los expositores.
+      </p>
+      <ul className="mt-5 grid gap-2 sm:grid-cols-2">
+        {SOCIO_PLAN.benefits.map((b) => (
+          <li key={b.title} className="flex items-center gap-2 text-sm text-night-ink/85">
+            <Check size={14} strokeWidth={2.5} className="shrink-0 text-accent" />
+            {b.title}
+          </li>
+        ))}
+      </ul>
+      <ButtonLink to="/membresia" size="lg" className="mt-7">
+        Hacerme Socio · {formatMoney(SOCIO_PRICE)}
+      </ButtonLink>
+    </div>
+  )
+}
 
 /**
  * Ficha /eventos/:slug. El evento principal usa el layout completo de expo
@@ -18,6 +50,7 @@ import { EVENT_TYPE_LABELS, blockSortKey, dayLabel } from '../features/eventos/e
 export default function EventoFicha() {
   const { slug } = useParams<{ slug: string }>()
   const events = useStore((s) => s.getEvents())
+  const isSocio = useStore((s) => s.isSocio())
   const event = events.find((e) => e.slug === slug)
 
   const eventId = event?.id
@@ -43,6 +76,7 @@ export default function EventoFicha() {
   }
 
   const isPrincipal = event.type === 'principal'
+  const locked = !isPrincipal && !!event.socioOnly && !isSocio
 
   /* Bloques ordenados por día + hora, agrupados por día (solo no-principal). */
   const sortedBlocks = isPrincipal
@@ -128,12 +162,13 @@ export default function EventoFicha() {
                 {event.description}
               </p>
               <div className="mt-8">
-                <EventCta key={event.id} event={event} />
+                {locked ? <SocioGate /> : <EventCta key={event.id} event={event} />}
               </div>
             </div>
           </section>
 
-          {/* Grilla de bloques con cupo en vivo */}
+          {/* Grilla de bloques con cupo en vivo (oculta tras el candado) */}
+          {!locked && (
           <section className="mx-auto max-w-6xl px-5 pb-16 md:pb-24">
             <SectionTitle
               eyebrow="Inscripción por bloque"
@@ -161,6 +196,7 @@ export default function EventoFicha() {
               </div>
             )}
           </section>
+          )}
 
           {/* Convocatoria asociada (solo Caminos) */}
           {event.type === 'camino' && <ConvocatoriaBanner />}

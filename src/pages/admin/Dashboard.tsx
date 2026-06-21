@@ -8,7 +8,7 @@ import { CoreOccupancyBar } from '../../features/admin/CoreOccupancyBar'
 import { CoreLiveFeed, isSignal } from '../../features/admin/CoreLiveFeed'
 import { LiveSimulator } from '../../features/admin/LiveSimulator'
 import { downloadAnalyticsCsv } from '../../features/admin/coreAnalytics'
-import { ORDER_STATUSES, ORDER_STATUS_META, formatRelative, percent } from '../../features/admin/coreFormat'
+import { ORDER_STATUSES, ORDER_STATUS_META, formatMoney, formatRelative, percent } from '../../features/admin/coreFormat'
 
 export default function Dashboard() {
   const analytics = useStore((s) => s.getAnalytics())
@@ -25,9 +25,18 @@ export default function Dashboard() {
   const count = (name: string) => analytics.filter((e) => e.event === name).length
   const seedOrders = analytics.filter((e) => e.seed && e.event === 'ticket_order_created').length
 
+  /* Membresías Socio CCM: count + ingresos sumando el payload `total` de cada compra
+     (seed + demo usan el mismo evento `membership_purchased`). */
+  const registrados = count('user_created')
+  const socios = count('membership_purchased')
+  const ingresoSocios = analytics
+    .filter((e) => e.event === 'membership_purchased')
+    .reduce((sum, e) => sum + (typeof e.payload?.total === 'number' ? e.payload.total : 0), 0)
+
   const stats = [
-    { label: 'Registrados', value: count('user_created') },
+    { label: 'Registrados', value: registrados },
     { label: 'Inscripciones', value: count('registration_created') - count('registration_cancelled') },
+    { label: 'Socios CCM', value: socios },
     { label: 'Descargas de fotos', value: count('photo_download') },
     { label: 'Órdenes VIP', value: orders.length + seedOrders },
     { label: 'Postulaciones', value: applications.length },
@@ -82,7 +91,7 @@ export default function Dashboard() {
       />
 
       {/* Cifras propias — el argumento de venta (PRD §10.1) */}
-      <div className="mt-10 grid grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-3 lg:grid-cols-5">
+      <div className="mt-10 grid grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-3 lg:grid-cols-6">
         {stats.map((s) => (
           <div key={s.label} className="border-t border-line pt-5">
             <Stat value={s.value} label={s.label} />
@@ -160,6 +169,23 @@ export default function Dashboard() {
                 </tbody>
               </table>
             )}
+          </CorePanel>
+
+          {/* Membresías Socio CCM — conversión a pago + ingreso recurrente */}
+          <CorePanel
+            title="Membresías · Socio CCM"
+            note="El modelo es volumen + datos; la membresía suma ingreso recurrente"
+          >
+            <div className="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-3">
+              <Stat value={socios} label="Socios activos" />
+              <Stat value={formatMoney(ingresoSocios)} label="Ingreso membresías" tone="accent" />
+              <Stat value={`${percent(socios, registrados)}%`} label="Conversión a Socio" />
+            </div>
+            <p className="mt-5 border-t border-line pt-4 text-[12px] leading-relaxed text-ink-soft">
+              {socios} de {registrados} registrados pasaron a Socio CCM. Cada alta queda medida
+              first-party con el evento <code className="text-ink">membership_purchased</code> — la
+              misma fila que ves entrar en vivo cuando alguien se hace Socio desde la app.
+            </p>
           </CorePanel>
 
           {/* Sponsors — cada impresión queda medida */}

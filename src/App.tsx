@@ -31,6 +31,7 @@ const Contenido = lazyWithReload(() => import('./pages/Contenido'))
 const Convocatoria = lazyWithReload(() => import('./pages/Convocatoria'))
 const Sponsors = lazyWithReload(() => import('./pages/Sponsors'))
 const Publicidad = lazyWithReload(() => import('./pages/Publicidad'))
+const Membresia = lazyWithReload(() => import('./pages/Membresia'))
 const Stand = lazyWithReload(() => import('./pages/Stand'))
 const Legales = lazyWithReload(() => import('./pages/Legales'))
 const Inicio = lazyWithReload(() => import('./pages/app/Inicio'))
@@ -97,6 +98,7 @@ const router = createBrowserRouter(
             { path: '/c/:slug', element: <S><Convocatoria /></S> },
             { path: '/sponsors', element: <S><Sponsors /></S> },
             { path: '/publicidad', element: <S><Publicidad /></S> },
+            { path: '/membresia', element: <S><Membresia /></S> },
             { path: '/stand', element: <S><Stand /></S> },
             { path: '/stand/:slug', element: <S><Stand /></S> },
             { path: '/terminos', element: <S><Legales kind="terminos" /></S> },

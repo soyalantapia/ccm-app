@@ -1,5 +1,6 @@
 import type { AnalyticsEvent, PlanId } from '../types'
 import { IDS } from '../ids'
+import { SOCIO_PRICE } from '../../features/membresia/plans'
 
 /**
  * Históricos seed para que el dashboard admin no nazca vacío y respalde el pitch
@@ -257,6 +258,15 @@ function buildSeedAnalytics(): AnalyticsEvent[] {
       event('application_submitted', offset(i % 18 === 0), {
         convocatoriaId: IDS.convocatoria.camino,
       }),
+    )
+  }
+
+  // membership_purchased · ~90 socios (membresía Socio CCM) — MISMO nombre y payload
+  // que el evento en vivo (LocalDataStore.becomeSocio), para que el KPI «Socios» y los
+  // ingresos por membresías agreguen seed + demo de forma uniforme. `total` = SOCIO_PRICE.
+  for (let i = 0, n = N(90); i < n; i++) {
+    out.push(
+      event('membership_purchased', offset(i % 14 === 0), { tier: 'socio', total: SOCIO_PRICE }),
     )
   }
 

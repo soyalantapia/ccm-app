@@ -10,6 +10,7 @@ import type {
   EventBlock,
   EventItem,
   Gallery,
+  Membership,
   OrderStatus,
   PlanId,
   ProfileFieldKey,
@@ -60,6 +61,11 @@ export interface DataStore {
   getProfile(): DeviceProfile
   saveProfileFields(values: Partial<Record<ProfileFieldKey, string>>, source: string): void
   saveConsents(consents: { terms?: boolean; news?: boolean; sponsors?: boolean }): void
+
+  /* Membresía (niveles de suscripción) */
+  getMembership(): Membership
+  isSocio(): boolean
+  becomeSocio(paid: number): Membership
 
   /* Eventos e inscripciones */
   getEvents(): EventItem[]

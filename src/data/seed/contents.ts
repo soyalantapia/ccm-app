@@ -27,6 +27,8 @@ export const seedContents: ContentItem[] = [
     platform: 'Belleza',
     sponsorId: IDS.sponsors.beauty,
     publishedAt: '2025-09-28',
+    // Backstage que no sale al público: reservado a la membresía Socio CCM.
+    socioOnly: true,
   },
   {
     id: 'vid-03',
