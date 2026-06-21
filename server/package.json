@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Backend de CCM (Córdoba Corazón de Moda) — Fase 1. Implementa el contrato DataStore contra una API real.",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
