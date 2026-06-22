@@ -1,9 +1,18 @@
 import { LocalDataStore } from './LocalDataStore'
-import type { BlockAvailability } from './DataStore'
+import type { BlockAvailability, PhotoDownload } from './DataStore'
 import { createApi, type ApiClient } from '../../lib/api'
 import { bus } from '../../lib/bus'
 import { hydrateFromRemote } from '../../lib/identity'
-import type { DeviceProfile, ProfileFieldKey, EventItem, EventBlock, Registration } from '../types'
+import type {
+  DeviceProfile,
+  ProfileFieldKey,
+  EventItem,
+  EventBlock,
+  Registration,
+  CatalogProfile,
+  Gallery,
+  ContentItem,
+} from '../types'
 
 interface BufferedEvent {
   event: string
@@ -33,12 +42,20 @@ export class RemoteDataStore extends LocalDataStore {
   private availInflight = new Set<string>()
   private tmpSeq = 0
 
+  // Caché de Fase E (catálogo / galerías / contenido / favoritos / descargas).
+  private catalog?: CatalogProfile[]
+  private galleries?: Gallery[]
+  private contents?: ContentItem[]
+  private favorites?: string[]
+  private downloads?: PhotoDownload[]
+
   constructor(apiBase: string) {
     super()
     this.api = createApi(apiBase)
     this.hydrateProfile()
     this.hydrateEvents()
     this.hydrateRegistrations()
+    this.hydrateContent()
     if (typeof window !== 'undefined') {
       const flush = () => this.flush()
       window.addEventListener('pagehide', flush)
@@ -222,6 +239,65 @@ export class RemoteDataStore extends LocalDataStore {
   override saveConsents(consents: { terms?: boolean; news?: boolean; sponsors?: boolean }): void {
     super.saveConsents(consents)
     this.api.patch('/me/consents', consents).catch(() => {})
+  }
+
+  /* ─── Fase E: catálogo / galerías / contenido / favoritos / descargas ─── */
+
+  private hydrateContent(): void {
+    this.api.get<CatalogProfile[]>('/catalog').then((c) => { this.catalog = c; bus.emit('catalog') }).catch(() => {})
+    this.api.get<Gallery[]>('/galleries').then((g) => { this.galleries = g; bus.emit('galleries') }).catch(() => {})
+    this.api.get<ContentItem[]>('/contents').then((c) => { this.contents = c; bus.emit('contents') }).catch(() => {})
+    this.api.get<string[]>('/favorites').then((f) => { this.favorites = f; bus.emit('favorites') }).catch(() => {})
+    this.api.get<PhotoDownload[]>('/downloads').then((d) => { this.downloads = d; bus.emit('downloads') }).catch(() => {})
+  }
+
+  override getCatalog(): CatalogProfile[] {
+    return this.catalog ?? super.getCatalog()
+  }
+  override getCatalogProfile(slug: string): CatalogProfile | undefined {
+    return this.catalog ? this.catalog.find((c) => c.slug === slug) : super.getCatalogProfile(slug)
+  }
+  override getGalleries(): Gallery[] {
+    return this.galleries ?? super.getGalleries()
+  }
+  override getGallery(slug: string): Gallery | undefined {
+    return this.galleries ? this.galleries.find((g) => g.slug === slug) : super.getGallery(slug)
+  }
+  override getContents(): ContentItem[] {
+    return this.contents ?? super.getContents()
+  }
+  override getFavorites(): string[] {
+    return this.favorites ?? super.getFavorites()
+  }
+  override getDownloads(): PhotoDownload[] {
+    return this.downloads ?? super.getDownloads()
+  }
+
+  override toggleFavorite(photoId: string): void {
+    if (!this.favorites) {
+      super.toggleFavorite(photoId)
+      return
+    }
+    if (this.favorites.includes(photoId)) {
+      this.favorites = this.favorites.filter((p) => p !== photoId)
+      this.api.del(`/favorites/${photoId}`).catch(() => {})
+    } else {
+      this.favorites = [...this.favorites, photoId]
+      this.api.put(`/favorites/${photoId}`).catch(() => {})
+    }
+    bus.emit('favorites')
+  }
+
+  override recordDownload(photoId: string, galleryId: string): void {
+    if (!this.downloads) {
+      super.recordDownload(photoId, galleryId)
+      return
+    }
+    const sponsorId = this.galleries?.find((g) => g.id === galleryId)?.sponsorId ?? ''
+    this.downloads = [{ photoId, galleryId, sponsorId, ts: new Date().toISOString() }, ...this.downloads]
+    this.track('photo_download', { photoId, galleryId, sponsorId }) // → local + analytics backend
+    bus.emit('downloads')
+    this.api.post('/downloads', { photoId, galleryId }).catch(() => {})
   }
 
   private scheduleFlush(): void {
