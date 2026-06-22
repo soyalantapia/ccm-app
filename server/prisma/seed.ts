@@ -12,6 +12,9 @@ import { PrismaClient } from '@prisma/client'
 import { seedSponsors } from '../../src/data/seed/sponsors'
 import { seedEvents } from '../../src/data/seed/events'
 import { seedBlocks } from '../../src/data/seed/blocks'
+import { seedCatalog } from '../../src/data/seed/catalog'
+import { seedGalleries } from '../../src/data/seed/galleries'
+import { seedContents } from '../../src/data/seed/contents'
 import { seedPlans } from '../../src/config/plans'
 
 const prisma = new PrismaClient()
@@ -66,11 +69,48 @@ async function main() {
     await prisma.eventBlock.upsert({ where: { id: b.id }, create: { id: b.id, ...data }, update: data })
   }
 
+  // ── Catálogo de expositores (+ portfolio) ──
+  for (const c of seedCatalog) {
+    const data = {
+      slug: c.slug, name: c.name, role: c.role, platform: c.platform, city: c.city,
+      bio: c.bio, photo: c.photo, instagram: c.instagram ?? null, verified: c.verified, participatesIn: c.participatesIn,
+    }
+    await prisma.catalogProfile.upsert({ where: { id: c.id }, create: { id: c.id, ...data }, update: data })
+    await prisma.portfolioPiece.deleteMany({ where: { profileId: c.id } })
+    await prisma.portfolioPiece.createMany({
+      data: c.portfolio.map((p, i) => ({ id: p.id, profileId: c.id, image: p.image, title: p.title, caption: p.caption ?? null, order: i })),
+    })
+  }
+
+  // ── Galerías (+ fotos) ──
+  for (const g of seedGalleries) {
+    const data = { slug: g.slug, title: g.title, eventLabel: g.eventLabel, date: g.date, cover: g.cover, sponsorId: g.sponsorId }
+    await prisma.gallery.upsert({ where: { id: g.id }, create: { id: g.id, ...data }, update: data })
+    await prisma.photo.deleteMany({ where: { galleryId: g.id } })
+    await prisma.photo.createMany({
+      data: g.photos.map((p, i) => ({ id: p.id, galleryId: g.id, src: p.src, alt: p.alt, order: i })),
+    })
+  }
+
+  // ── Contenido (videos) ──
+  for (const ct of seedContents) {
+    const data = {
+      type: ct.type, title: ct.title, description: ct.description, youtubeId: ct.youtubeId,
+      duration: ct.duration ?? null, platform: ct.platform ?? null, sponsorId: ct.sponsorId ?? null,
+      publishedAt: new Date(ct.publishedAt), socioOnly: ct.socioOnly ?? false,
+    }
+    await prisma.contentItem.upsert({ where: { id: ct.id }, create: { id: ct.id, ...data }, update: data })
+  }
+
   const counts = {
     sponsors: await prisma.sponsor.count(),
     plans: await prisma.ticketPlan.count(),
     events: await prisma.event.count(),
     blocks: await prisma.eventBlock.count(),
+    catalog: await prisma.catalogProfile.count(),
+    galleries: await prisma.gallery.count(),
+    photos: await prisma.photo.count(),
+    contents: await prisma.contentItem.count(),
   }
   console.log('[seed] OK', counts)
 }

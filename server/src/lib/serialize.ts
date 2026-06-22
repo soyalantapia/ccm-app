@@ -1,11 +1,36 @@
-import type { Device, ProfileField, AnalyticsEvent, Event, EventBlock, Registration } from '@prisma/client'
+import type {
+  Device,
+  ProfileField,
+  AnalyticsEvent,
+  Event,
+  EventBlock,
+  Registration,
+  CatalogProfile,
+  PortfolioPiece,
+  Gallery,
+  Photo,
+  ContentItem,
+  PhotoDownload,
+} from '@prisma/client'
 import type {
   DeviceProfile,
   AnalyticsEvent as DomainAnalyticsEvent,
   EventItem,
   EventBlock as DomainEventBlock,
   Registration as DomainRegistration,
+  CatalogProfile as DomainCatalogProfile,
+  Gallery as DomainGallery,
+  ContentItem as DomainContentItem,
 } from '@domain/types'
+
+// PhotoDownload del front vive en DataStore.ts (no en types.ts) y ese archivo no
+// resuelve bajo NodeNext; replico su shape acá (es estable).
+interface DomainPhotoDownload {
+  photoId: string
+  galleryId: string
+  sponsorId: string
+  ts: string
+}
 
 /**
  * Serializa Device + sus ProfileField al shape `DeviceProfile` del front (canon 6:
@@ -86,6 +111,62 @@ export function toRegistration(r: Registration): DomainRegistration {
     ts: r.ts.toISOString(),
     status: r.status,
   }
+}
+
+export function toCatalogProfile(
+  c: CatalogProfile & { portfolio?: PortfolioPiece[] },
+): DomainCatalogProfile {
+  return {
+    id: c.id,
+    slug: c.slug,
+    name: c.name,
+    role: c.role,
+    platform: c.platform,
+    city: c.city,
+    bio: c.bio,
+    photo: c.photo,
+    ...(c.instagram ? { instagram: c.instagram } : {}),
+    verified: c.verified,
+    participatesIn: c.participatesIn,
+    portfolio: (c.portfolio ?? []).map((p) => ({
+      id: p.id,
+      image: p.image,
+      title: p.title,
+      ...(p.caption ? { caption: p.caption } : {}),
+    })),
+  }
+}
+
+export function toGallery(g: Gallery & { photos?: Photo[] }): DomainGallery {
+  return {
+    id: g.id,
+    slug: g.slug,
+    title: g.title,
+    eventLabel: g.eventLabel,
+    date: g.date,
+    cover: g.cover,
+    sponsorId: g.sponsorId,
+    photos: (g.photos ?? []).map((p) => ({ id: p.id, src: p.src, alt: p.alt })),
+  }
+}
+
+export function toContentItem(c: ContentItem): DomainContentItem {
+  return {
+    id: c.id,
+    type: 'video',
+    title: c.title,
+    description: c.description,
+    youtubeId: c.youtubeId,
+    ...(c.duration ? { duration: c.duration } : {}),
+    ...(c.platform ? { platform: c.platform } : {}),
+    ...(c.sponsorId ? { sponsorId: c.sponsorId } : {}),
+    publishedAt: c.publishedAt.toISOString().slice(0, 10),
+    socioOnly: c.socioOnly,
+  }
+}
+
+export function toPhotoDownload(d: PhotoDownload): DomainPhotoDownload {
+  return { photoId: d.photoId, galleryId: d.galleryId, sponsorId: d.sponsorId, ts: d.ts.toISOString() }
 }
 
 /** Serializa una fila AnalyticsEvent (con su device incluido) al shape del dominio. */
