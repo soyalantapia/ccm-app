@@ -21,6 +21,22 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     })
     return
   }
+  // Errores conocidos de Prisma (P2025 no encontrado, P2002 único, P2003 FK).
+  if (err && typeof err === 'object' && 'code' in err && typeof (err as { code: unknown }).code === 'string') {
+    const code = (err as { code: string }).code
+    if (code === 'P2025') {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Recurso no encontrado' } })
+      return
+    }
+    if (code === 'P2002') {
+      res.status(409).json({ error: { code: 'DUPLICATE', message: 'Ya existe un recurso con esa clave' } })
+      return
+    }
+    if (code === 'P2003') {
+      res.status(409).json({ error: { code: 'FK_CONSTRAINT', message: 'Referencia inválida o con dependientes' } })
+      return
+    }
+  }
   // No filtrar internals ni PII al cliente; loguear server-side (sin payloads crudos).
   console.error('[error]', err instanceof Error ? err.stack : err)
   res.status(500).json({ error: { code: 'INTERNAL', message: 'Error interno' } })

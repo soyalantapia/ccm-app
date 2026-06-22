@@ -8,6 +8,7 @@ import { eventsRouter } from './routes/events.js'
 import { registrationsRouter } from './routes/registrations.js'
 import { catalogRouter } from './routes/catalog.js'
 import { photosRouter } from './routes/photos.js'
+import { adminRouter } from './routes/admin.js'
 import { deviceContext } from './middlewares/device.js'
 import { errorHandler, notFoundHandler } from './middlewares/error.js'
 
@@ -29,7 +30,8 @@ export function createApp() {
   v1.use(registrationsRouter) // Fase B: /registrations
   v1.use(catalogRouter) // Fase E: /catalog, /galleries, /contents
   v1.use(photosRouter) // Fase E: /favorites, /downloads
-  // TODO(fases C/D/F/G/H): orders, memberships, sponsors/ads, admin ...
+  v1.use(adminRouter) // Fase G: /admin/events|blocks|contents (CRUD, requireAdmin)
+  // TODO(fases C/D/F + resto G): orders, memberships, sponsors/galleries/catalog CRUD, applications ...
   app.use('/api/v1', v1)
 
   app.use(notFoundHandler)

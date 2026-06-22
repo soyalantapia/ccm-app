@@ -19,6 +19,9 @@ const schema = z.object({
   ADMIN_TOKEN_SECRET: z.string().optional(),
   ACCREDITATION_TOKEN_SECRET: z.string().optional(),
   OTP_PEPPER: z.string().optional(),
+  // Fase G (auth temporal del organizador): shared secret Bearer hasta que entre el
+  // login OTP por email (RESEND). El front lo manda en Authorization: Bearer <token>.
+  ADMIN_TOKEN: z.string().optional(),
 
   RESEND_API_KEY: z.string().optional(),
   ADMIN_BOOTSTRAP_EMAIL: z.string().email().optional(),
