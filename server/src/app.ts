@@ -4,6 +4,8 @@ import { corsOrigins } from './lib/env.js'
 import { healthRouter } from './routes/health.js'
 import { meRouter } from './routes/me.js'
 import { analyticsRouter } from './routes/analytics.js'
+import { eventsRouter } from './routes/events.js'
+import { registrationsRouter } from './routes/registrations.js'
 import { deviceContext } from './middlewares/device.js'
 import { errorHandler, notFoundHandler } from './middlewares/error.js'
 
@@ -21,7 +23,9 @@ export function createApp() {
   v1.use(deviceContext)
   v1.use(meRouter) // Fase A: /me, /me/fields, /me/consents
   v1.use(analyticsRouter) // Fase A: /analytics, /admin/analytics
-  // TODO(fases B→H): events, registrations, orders, memberships, ...
+  v1.use(eventsRouter) // Fase B: /events, /events/:slug, /events/:id/blocks, /blocks/:id/availability
+  v1.use(registrationsRouter) // Fase B: /registrations
+  // TODO(fases C→H): orders, memberships, catalog, galleries, sponsors, admin ...
   app.use('/api/v1', v1)
 
   app.use(notFoundHandler)

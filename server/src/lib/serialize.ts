@@ -1,5 +1,11 @@
-import type { Device, ProfileField, AnalyticsEvent } from '@prisma/client'
-import type { DeviceProfile, AnalyticsEvent as DomainAnalyticsEvent } from '@domain/types'
+import type { Device, ProfileField, AnalyticsEvent, Event, EventBlock, Registration } from '@prisma/client'
+import type {
+  DeviceProfile,
+  AnalyticsEvent as DomainAnalyticsEvent,
+  EventItem,
+  EventBlock as DomainEventBlock,
+  Registration as DomainRegistration,
+} from '@domain/types'
 
 /**
  * Serializa Device + sus ProfileField al shape `DeviceProfile` del front (canon 6:
@@ -28,6 +34,57 @@ export function toDeviceProfile(
     createdAt: device.createdAt.toISOString(),
     fields: fieldMap,
     consents,
+  }
+}
+
+/** Event row (+ sus sponsorIds vía EventSponsor) → EventItem del dominio. */
+export function toEventItem(ev: Event & { sponsors?: { sponsorId: string }[] }): EventItem {
+  const sponsorIds = ev.sponsors?.map((s) => s.sponsorId) ?? []
+  return {
+    id: ev.id,
+    slug: ev.slug,
+    type: ev.type,
+    title: ev.title,
+    ...(ev.subtitle ? { subtitle: ev.subtitle } : {}),
+    dateLabel: ev.dateLabel,
+    startDate: ev.startDate.toISOString().slice(0, 10), // 'YYYY-MM-DD' como el seed
+    ...(ev.timeLabel ? { timeLabel: ev.timeLabel } : {}),
+    venue: ev.venue,
+    address: ev.address,
+    mapsUrl: ev.mapsUrl,
+    description: ev.description,
+    cover: ev.cover,
+    ...(ev.price != null ? { price: ev.price } : {}),
+    ...(sponsorIds.length ? { sponsorIds } : {}),
+    past: ev.past,
+    socioOnly: ev.socioOnly,
+  }
+}
+
+export function toEventBlock(b: EventBlock): DomainEventBlock {
+  return {
+    id: b.id,
+    eventId: b.eventId,
+    title: b.title,
+    kind: b.kind,
+    day: b.day,
+    start: b.start,
+    end: b.end,
+    room: b.room,
+    capacity: b.capacity,
+    seedTaken: b.seedTaken,
+    speakers: b.speakers,
+    ...(b.description ? { description: b.description } : {}),
+  }
+}
+
+export function toRegistration(r: Registration): DomainRegistration {
+  return {
+    id: r.id,
+    eventId: r.eventId,
+    ...(r.blockId ? { blockId: r.blockId } : {}),
+    ts: r.ts.toISOString(),
+    status: r.status,
   }
 }
 
