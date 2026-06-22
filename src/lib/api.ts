@@ -7,7 +7,9 @@ import { getDeviceId } from './identity'
  */
 export interface ApiClient {
   get<T>(path: string): Promise<T>
+  post<T>(path: string, body: unknown): Promise<T>
   patch<T>(path: string, body: unknown): Promise<T>
+  del(path: string): Promise<void>
   postBatch(path: string, body: unknown): Promise<void>
 }
 
@@ -29,7 +31,9 @@ export function createApi(apiBase: string): ApiClient {
 
   return {
     get: (p) => call('GET', p),
+    post: (p, b) => call('POST', p, b),
     patch: (p, b) => call('PATCH', p, b),
+    del: (p) => call<void>('DELETE', p).then(() => undefined),
     postBatch: (p, b) => call<void>('POST', p, b).then(() => undefined),
   }
 }
