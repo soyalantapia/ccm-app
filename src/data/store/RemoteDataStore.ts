@@ -1,5 +1,14 @@
 import { LocalDataStore } from './LocalDataStore'
-import type { BlockAvailability, PhotoDownload, NewEvent, NewBlock, NewContent } from './DataStore'
+import type {
+  BlockAvailability,
+  PhotoDownload,
+  NewEvent,
+  NewBlock,
+  NewContent,
+  NewSponsor,
+  NewGallery,
+  NewCatalogProfile,
+} from './DataStore'
 import { slugify } from './overlay'
 import { newId } from '../../lib/storage'
 import { createApi, type ApiClient } from '../../lib/api'
@@ -14,6 +23,12 @@ import type {
   CatalogProfile,
   Gallery,
   ContentItem,
+  Sponsor,
+  TicketPlan,
+  Convocatoria,
+  Application,
+  PlanId,
+  ApplicationStatus,
 } from '../types'
 
 interface BufferedEvent {
@@ -50,6 +65,12 @@ export class RemoteDataStore extends LocalDataStore {
   private contents?: ContentItem[]
   private favorites?: string[]
   private downloads?: PhotoDownload[]
+  // Resto de Fase G: sponsors / planes / convocatorias / postulaciones.
+  private sponsors?: Sponsor[]
+  private plans?: TicketPlan[]
+  private applications?: Application[]
+  private convocatorias = new Map<string, Convocatoria>()
+  private convoInflight = new Set<string>()
 
   constructor(apiBase: string) {
     super()
@@ -251,6 +272,142 @@ export class RemoteDataStore extends LocalDataStore {
     this.api.get<ContentItem[]>('/contents').then((c) => { this.contents = c; bus.emit('contents') }).catch(() => {})
     this.api.get<string[]>('/favorites').then((f) => { this.favorites = f; bus.emit('favorites') }).catch(() => {})
     this.api.get<PhotoDownload[]>('/downloads').then((d) => { this.downloads = d; bus.emit('downloads') }).catch(() => {})
+    this.api.get<Sponsor[]>('/sponsors').then((s) => { this.sponsors = s; bus.emit('sponsors') }).catch(() => {})
+    this.api.get<TicketPlan[]>('/plans').then((p) => { this.plans = p; bus.emit('plans') }).catch(() => {})
+  }
+
+  /* ─── Resto Fase G: sponsors / planes / convocatorias / postulaciones ─── */
+
+  private refetch<T>(path: string, set: (v: T) => void, key: string): void {
+    this.api.get<T>(path).then((v) => { set(v); bus.emit(key) }).catch(() => {})
+  }
+
+  override getSponsors(): Sponsor[] {
+    return this.sponsors ?? super.getSponsors()
+  }
+  override getSponsor(id: string): Sponsor | undefined {
+    return this.sponsors ? this.sponsors.find((s) => s.id === id) : super.getSponsor(id)
+  }
+  override getPlans(): TicketPlan[] {
+    return this.plans ?? super.getPlans()
+  }
+  override getPlan(id: PlanId): TicketPlan | undefined {
+    return this.plans ? this.plans.find((p) => p.id === id) : super.getPlan(id)
+  }
+  override getConvocatoria(slug: string): Convocatoria | undefined {
+    const cached = this.convocatorias.get(slug)
+    if (cached) return cached
+    if (!this.convoInflight.has(slug)) {
+      this.convoInflight.add(slug)
+      this.api.get<Convocatoria>(`/convocatorias/${slug}`)
+        .then((cv) => { this.convocatorias.set(slug, cv); this.convoInflight.delete(slug); bus.emit('convocatoria') })
+        .catch(() => this.convoInflight.delete(slug))
+    }
+    return super.getConvocatoria(slug)
+  }
+  override getApplications(): Application[] {
+    return this.applications ?? super.getApplications()
+  }
+
+  override submitApplication(convocatoriaId: string, data: Record<string, string>): Application {
+    if (!this.events) return super.submitApplication(convocatoriaId, data)
+    const app: Application = { id: newId('app'), convocatoriaId, ts: new Date().toISOString(), status: 'preinscripta', data }
+    if (this.applications) this.applications = [app, ...this.applications]
+    this.track('application_submitted', { convocatoriaId, applicationId: app.id })
+    bus.emit('applications')
+    this.api.post('/applications', { convocatoriaId, data }).catch(() => {})
+    return app
+  }
+  override decideApplication(applicationId: string, status: Exclude<ApplicationStatus, 'preinscripta'>): void {
+    if (!this.applications) {
+      // hidratar bajo demanda (el admin abrió postulaciones)
+      this.refetch<Application[]>('/admin/applications', (v) => (this.applications = v), 'applications')
+    }
+    if (this.applications) this.applications = this.applications.map((a) => (a.id === applicationId ? { ...a, status, decidedAt: new Date().toISOString() } : a))
+    bus.emit('applications')
+    this.api.patch(`/admin/applications/${applicationId}`, { status }).then(() => this.refetch<Application[]>('/admin/applications', (v) => (this.applications = v), 'applications')).catch(() => {})
+  }
+
+  override createSponsor(input: NewSponsor): Sponsor {
+    if (!this.sponsors) return super.createSponsor(input)
+    const sponsor: Sponsor = { ...input, id: newId('sp') }
+    this.sponsors = [...this.sponsors, sponsor]
+    this.track('admin_sponsor_created', { sponsorId: sponsor.id, level: sponsor.level })
+    bus.emit('sponsors')
+    this.api.post('/admin/sponsors', sponsor).then(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors')).catch(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors'))
+    return sponsor
+  }
+  override updateSponsor(id: string, patch: Partial<Sponsor>): void {
+    if (!this.sponsors) return super.updateSponsor(id, patch)
+    this.sponsors = this.sponsors.map((s) => (s.id === id ? { ...s, ...patch } : s))
+    this.track('admin_sponsor_updated', { sponsorId: id })
+    bus.emit('sponsors')
+    this.api.patch(`/admin/sponsors/${id}`, patch).then(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors')).catch(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors'))
+  }
+  override deleteSponsor(id: string): void {
+    if (!this.sponsors) return super.deleteSponsor(id)
+    const prev = this.sponsors
+    this.sponsors = this.sponsors.filter((s) => s.id !== id)
+    this.track('admin_sponsor_deleted', { sponsorId: id })
+    bus.emit('sponsors')
+    this.api.del(`/admin/sponsors/${id}`).catch(() => { this.sponsors = prev; bus.emit('sponsors') })
+  }
+
+  override createGallery(input: NewGallery): Gallery {
+    if (!this.galleries) return super.createGallery(input)
+    const gallery: Gallery = { ...input, id: newId('gal'), slug: input.slug || slugify(input.title) }
+    this.galleries = [...this.galleries, gallery]
+    this.track('admin_gallery_created', { galleryId: gallery.id })
+    bus.emit('galleries')
+    this.api.post('/admin/galleries', gallery).then(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries')).catch(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries'))
+    return gallery
+  }
+  override updateGallery(id: string, patch: Partial<Gallery>): void {
+    if (!this.galleries) return super.updateGallery(id, patch)
+    this.galleries = this.galleries.map((g) => (g.id === id ? { ...g, ...patch } : g))
+    this.track('admin_gallery_updated', { galleryId: id })
+    bus.emit('galleries')
+    this.api.patch(`/admin/galleries/${id}`, patch).then(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries')).catch(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries'))
+  }
+  override deleteGallery(id: string): void {
+    if (!this.galleries) return super.deleteGallery(id)
+    const prev = this.galleries
+    this.galleries = this.galleries.filter((g) => g.id !== id)
+    this.track('admin_gallery_deleted', { galleryId: id })
+    bus.emit('galleries')
+    this.api.del(`/admin/galleries/${id}`).catch(() => { this.galleries = prev; bus.emit('galleries') })
+  }
+
+  override createCatalogProfile(input: NewCatalogProfile): CatalogProfile {
+    if (!this.catalog) return super.createCatalogProfile(input)
+    const profile: CatalogProfile = { ...input, id: newId('cat'), slug: input.slug || slugify(input.name) }
+    this.catalog = [...this.catalog, profile]
+    this.track('admin_catalog_created', { profileId: profile.id })
+    bus.emit('catalog')
+    this.api.post('/admin/catalog', profile).then(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog')).catch(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog'))
+    return profile
+  }
+  override updateCatalogProfile(id: string, patch: Partial<CatalogProfile>): void {
+    if (!this.catalog) return super.updateCatalogProfile(id, patch)
+    this.catalog = this.catalog.map((c) => (c.id === id ? { ...c, ...patch } : c))
+    this.track('admin_catalog_updated', { profileId: id })
+    bus.emit('catalog')
+    this.api.patch(`/admin/catalog/${id}`, patch).then(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog')).catch(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog'))
+  }
+  override deleteCatalogProfile(id: string): void {
+    if (!this.catalog) return super.deleteCatalogProfile(id)
+    const prev = this.catalog
+    this.catalog = this.catalog.filter((c) => c.id !== id)
+    this.track('admin_catalog_deleted', { profileId: id })
+    bus.emit('catalog')
+    this.api.del(`/admin/catalog/${id}`).catch(() => { this.catalog = prev; bus.emit('catalog') })
+  }
+
+  override updatePlan(id: PlanId, patch: { price?: number | null; mpLink?: string }): void {
+    if (!this.plans) return super.updatePlan(id, patch)
+    this.plans = this.plans.map((p) => (p.id === id ? { ...p, ...patch } : p))
+    bus.emit('plans')
+    this.api.patch(`/admin/plans/${id}`, patch).then(() => this.refetch('/plans', (v: TicketPlan[]) => (this.plans = v), 'plans')).catch(() => this.refetch('/plans', (v: TicketPlan[]) => (this.plans = v), 'plans'))
   }
 
   override getCatalog(): CatalogProfile[] {
