@@ -11,6 +11,11 @@ import type {
   Photo,
   ContentItem,
   PhotoDownload,
+  Sponsor,
+  SponsorCreative,
+  Convocatoria,
+  ConvocatoriaField,
+  Application,
 } from '@prisma/client'
 import type {
   DeviceProfile,
@@ -21,6 +26,9 @@ import type {
   CatalogProfile as DomainCatalogProfile,
   Gallery as DomainGallery,
   ContentItem as DomainContentItem,
+  Sponsor as DomainSponsor,
+  Convocatoria as DomainConvocatoria,
+  Application as DomainApplication,
 } from '@domain/types'
 
 // PhotoDownload del front vive en DataStore.ts (no en types.ts) y ese archivo no
@@ -167,6 +175,58 @@ export function toContentItem(c: ContentItem): DomainContentItem {
 
 export function toPhotoDownload(d: PhotoDownload): DomainPhotoDownload {
   return { photoId: d.photoId, galleryId: d.galleryId, sponsorId: d.sponsorId, ts: d.ts.toISOString() }
+}
+
+export function toSponsor(s: Sponsor & { creatives?: SponsorCreative[] }): DomainSponsor {
+  return {
+    id: s.id,
+    name: s.name,
+    industry: s.industry,
+    level: s.level,
+    exclusive: s.exclusive,
+    tagline: s.tagline,
+    creatives: (s.creatives ?? []).map((c) => ({
+      slot: c.slot,
+      headline: c.headline,
+      ...(c.sub ? { sub: c.sub } : {}),
+      ...(c.cta ? { cta: c.cta } : {}),
+    })),
+  }
+}
+
+export function toConvocatoria(
+  cv: Convocatoria & { fields?: ConvocatoriaField[] },
+): DomainConvocatoria {
+  return {
+    id: cv.id,
+    slug: cv.slug,
+    title: cv.title,
+    intro: cv.intro,
+    deadline: cv.deadline.toISOString().slice(0, 10),
+    eventId: cv.eventId,
+    fields: (cv.fields ?? []).map((f) => ({
+      key: f.key,
+      label: f.label,
+      type: f.type as DomainConvocatoria['fields'][number]['type'],
+      required: f.required,
+      ...(f.options.length ? { options: f.options } : {}),
+      ...(f.placeholder ? { placeholder: f.placeholder } : {}),
+      ...(f.help ? { help: f.help } : {}),
+      ...(f.showIfKey && f.showIfEquals ? { showIf: { key: f.showIfKey, equals: f.showIfEquals } } : {}),
+    })),
+  }
+}
+
+export function toApplication(a: Application): DomainApplication {
+  return {
+    id: a.id,
+    convocatoriaId: a.convocatoriaId,
+    ts: a.ts.toISOString(),
+    status: a.status,
+    data: a.data as Record<string, string>,
+    ...(a.fromSeed ? { fromSeed: a.fromSeed } : {}),
+    ...(a.decidedAt ? { decidedAt: a.decidedAt.toISOString() } : {}),
+  }
 }
 
 /** Serializa una fila AnalyticsEvent (con su device incluido) al shape del dominio. */

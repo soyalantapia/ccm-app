@@ -32,8 +32,8 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
       res.status(409).json({ error: { code: 'DUPLICATE', message: 'Ya existe un recurso con esa clave' } })
       return
     }
-    if (code === 'P2003') {
-      res.status(409).json({ error: { code: 'FK_CONSTRAINT', message: 'Referencia inválida o con dependientes' } })
+    if (code === 'P2003' || code === 'P2014') {
+      res.status(409).json({ error: { code: 'FK_CONSTRAINT', message: 'No se puede borrar: tiene dependientes (ej. galerías)' } })
       return
     }
   }

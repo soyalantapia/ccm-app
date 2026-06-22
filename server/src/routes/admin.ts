@@ -2,7 +2,8 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { requireAdmin } from '../middlewares/admin.js'
 import * as admin from '../services/adminService.js'
-import type { EventItem, EventBlock, ContentItem } from '@domain/types'
+import * as applicationService from '../services/applicationService.js'
+import type { EventItem, EventBlock, ContentItem, Sponsor, Gallery, CatalogProfile, PlanId } from '@domain/types'
 
 export const adminRouter = Router()
 
@@ -72,6 +73,69 @@ adminRouter.patch('/admin/contents/:id', route<Partial<ContentItem>>((b, id) => 
 adminRouter.delete('/admin/contents/:id', async (req, res, next) => {
   try {
     await admin.deleteContent(req.params.id)
+    res.status(204).end()
+  } catch (err) {
+    next(err)
+  }
+})
+
+/* ─── Helpers compactos para el resto del CRUD ─── */
+type Handler = import('express').RequestHandler
+const create = <T>(fn: (b: T) => Promise<unknown>): Handler => (req, res, next) => {
+  try {
+    hasId.parse(req.body)
+    fn(req.body as T).then((x) => res.status(201).json(x)).catch(next)
+  } catch (err) {
+    next(err)
+  }
+}
+const del = (fn: (id: string) => Promise<void>): Handler => async (req, res, next) => {
+  try {
+    await fn(req.params.id)
+    res.status(204).end()
+  } catch (err) {
+    next(err)
+  }
+}
+
+/* ─── Sponsors ─── */
+adminRouter.post('/admin/sponsors', create<Sponsor>((b) => admin.createSponsor(b)))
+adminRouter.patch('/admin/sponsors/:id', route<Partial<Sponsor>>((b, id) => admin.updateSponsor(id, b)))
+adminRouter.delete('/admin/sponsors/:id', del((id) => admin.deleteSponsor(id)))
+
+/* ─── Galerías ─── */
+adminRouter.post('/admin/galleries', create<Gallery>((b) => admin.createGallery(b)))
+adminRouter.patch('/admin/galleries/:id', route<Partial<Gallery>>((b, id) => admin.updateGallery(id, b)))
+adminRouter.delete('/admin/galleries/:id', del((id) => admin.deleteGallery(id)))
+
+/* ─── Catálogo ─── */
+adminRouter.post('/admin/catalog', create<CatalogProfile>((b) => admin.createCatalogProfile(b)))
+adminRouter.patch('/admin/catalog/:id', route<Partial<CatalogProfile>>((b, id) => admin.updateCatalogProfile(id, b)))
+adminRouter.delete('/admin/catalog/:id', del((id) => admin.deleteCatalogProfile(id)))
+
+/* ─── Planes (precio / mpLink) ─── */
+adminRouter.patch('/admin/plans/:id', async (req, res, next) => {
+  try {
+    await admin.updatePlan(req.params.id as PlanId, req.body)
+    res.status(204).end()
+  } catch (err) {
+    next(err)
+  }
+})
+
+/* ─── Postulaciones ─── */
+adminRouter.get('/admin/applications', async (_req, res, next) => {
+  try {
+    res.json(await applicationService.getApplications())
+  } catch (err) {
+    next(err)
+  }
+})
+const decideSchema = z.object({ status: z.enum(['aceptada', 'rechazada']) })
+adminRouter.patch('/admin/applications/:id', async (req, res, next) => {
+  try {
+    const { status } = decideSchema.parse(req.body)
+    await applicationService.decideApplication(req.params.id, status)
     res.status(204).end()
   } catch (err) {
     next(err)

@@ -15,6 +15,8 @@ import { seedBlocks } from '../../src/data/seed/blocks'
 import { seedCatalog } from '../../src/data/seed/catalog'
 import { seedGalleries } from '../../src/data/seed/galleries'
 import { seedContents } from '../../src/data/seed/contents'
+import { seedConvocatorias } from '../../src/data/seed/convocatorias'
+import { seedApplications } from '../../src/data/seed/applications'
 import { seedPlans } from '../../src/config/plans'
 
 const prisma = new PrismaClient()
@@ -102,6 +104,26 @@ async function main() {
     await prisma.contentItem.upsert({ where: { id: ct.id }, create: { id: ct.id, ...data }, update: data })
   }
 
+  // ── Convocatorias (+ fields) ──
+  for (const cv of seedConvocatorias) {
+    const data = { slug: cv.slug, title: cv.title, intro: cv.intro, deadline: new Date(cv.deadline), eventId: cv.eventId }
+    await prisma.convocatoria.upsert({ where: { id: cv.id }, create: { id: cv.id, ...data }, update: data })
+    await prisma.convocatoriaField.deleteMany({ where: { convocatoriaId: cv.id } })
+    await prisma.convocatoriaField.createMany({
+      data: cv.fields.map((f, i) => ({
+        convocatoriaId: cv.id, key: f.key, label: f.label, type: f.type, required: f.required,
+        options: f.options ?? [], placeholder: f.placeholder ?? null, help: f.help ?? null,
+        showIfKey: f.showIf?.key ?? null, showIfEquals: f.showIf?.equals ?? null, order: i,
+      })),
+    })
+  }
+
+  // ── Postulaciones (históricas del seed, fromSeed) ──
+  for (const a of seedApplications) {
+    const data = { convocatoriaId: a.convocatoriaId, status: a.status, data: a.data as object, fromSeed: true, ts: new Date(a.ts), decidedAt: a.decidedAt ? new Date(a.decidedAt) : null }
+    await prisma.application.upsert({ where: { id: a.id }, create: { id: a.id, ...data }, update: data })
+  }
+
   const counts = {
     sponsors: await prisma.sponsor.count(),
     plans: await prisma.ticketPlan.count(),
@@ -111,6 +133,8 @@ async function main() {
     galleries: await prisma.gallery.count(),
     photos: await prisma.photo.count(),
     contents: await prisma.contentItem.count(),
+    convocatorias: await prisma.convocatoria.count(),
+    applications: await prisma.application.count(),
   }
   console.log('[seed] OK', counts)
 }
