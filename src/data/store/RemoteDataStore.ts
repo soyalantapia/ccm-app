@@ -1,5 +1,7 @@
 import { LocalDataStore } from './LocalDataStore'
-import type { BlockAvailability, PhotoDownload } from './DataStore'
+import type { BlockAvailability, PhotoDownload, NewEvent, NewBlock, NewContent } from './DataStore'
+import { slugify } from './overlay'
+import { newId } from '../../lib/storage'
 import { createApi, type ApiClient } from '../../lib/api'
 import { bus } from '../../lib/bus'
 import { hydrateFromRemote } from '../../lib/identity'
@@ -298,6 +300,103 @@ export class RemoteDataStore extends LocalDataStore {
     this.track('photo_download', { photoId, galleryId, sponsorId }) // → local + analytics backend
     bus.emit('downloads')
     this.api.post('/downloads', { photoId, galleryId }).catch(() => {})
+  }
+
+  /* ─── Fase G: CRUD del organizador (auth Bearer en /admin/*) ─── */
+
+  private uniqueSlug(base: string): string {
+    const existing = new Set((this.events ?? []).map((e) => e.slug))
+    let slug = base
+    for (let i = 2; existing.has(slug); i++) slug = `${base}-${i}`
+    return slug
+  }
+  private refetchContents(): void {
+    this.api.get<ContentItem[]>('/contents').then((c) => { this.contents = c; bus.emit('contents') }).catch(() => {})
+  }
+
+  override createEvent(input: NewEvent): EventItem {
+    if (!this.events) return super.createEvent(input)
+    const event: EventItem = { ...input, id: newId('ev'), slug: input.slug || this.uniqueSlug(slugify(input.title)) }
+    this.events = [...this.events, event]
+    this.track('admin_event_created', { eventId: event.id, type: event.type })
+    bus.emit('events')
+    this.api.post('/admin/events', event).then(() => this.hydrateEvents()).catch(() => this.hydrateEvents())
+    return event
+  }
+  override updateEvent(id: string, patch: Partial<EventItem>): void {
+    if (!this.events) return super.updateEvent(id, patch)
+    this.events = this.events.map((e) => (e.id === id ? { ...e, ...patch } : e))
+    this.track('admin_event_updated', { eventId: id })
+    bus.emit('events')
+    this.api.patch(`/admin/events/${id}`, patch).then(() => this.hydrateEvents()).catch(() => this.hydrateEvents())
+  }
+  override deleteEvent(id: string): void {
+    if (!this.events) return super.deleteEvent(id)
+    const prev = this.events
+    this.events = this.events.filter((e) => e.id !== id)
+    this.blocksByEvent.delete(id)
+    this.track('admin_event_deleted', { eventId: id })
+    bus.emit('events')
+    this.api.del(`/admin/events/${id}`).catch(() => {
+      this.events = prev // revertir si el server rechaza (ej. 409 con inscripciones)
+      bus.emit('events')
+    })
+  }
+
+  override createBlock(input: NewBlock): EventBlock {
+    if (!this.events) return super.createBlock(input)
+    const block: EventBlock = { ...input, id: newId('blk') }
+    this.blocksByEvent.set(block.eventId, [...(this.blocksByEvent.get(block.eventId) ?? []), block])
+    this.blocksById.set(block.id, block)
+    this.track('admin_block_created', { blockId: block.id, eventId: block.eventId })
+    bus.emit('blocks')
+    this.api.post('/admin/blocks', block).then(() => this.hydrateEvents()).catch(() => this.hydrateEvents())
+    return block
+  }
+  override updateBlock(id: string, patch: Partial<EventBlock>): void {
+    if (!this.events) return super.updateBlock(id, patch)
+    const cur = this.blocksById.get(id)
+    if (cur) {
+      const next = { ...cur, ...patch }
+      this.blocksById.set(id, next)
+      this.blocksByEvent.set(next.eventId, (this.blocksByEvent.get(next.eventId) ?? []).map((b) => (b.id === id ? next : b)))
+    }
+    this.track('admin_block_updated', { blockId: id })
+    bus.emit('blocks')
+    this.api.patch(`/admin/blocks/${id}`, patch).then(() => this.hydrateEvents()).catch(() => this.hydrateEvents())
+  }
+  override deleteBlock(id: string): void {
+    if (!this.events) return super.deleteBlock(id)
+    const cur = this.blocksById.get(id)
+    this.blocksById.delete(id)
+    if (cur) this.blocksByEvent.set(cur.eventId, (this.blocksByEvent.get(cur.eventId) ?? []).filter((b) => b.id !== id))
+    this.track('admin_block_deleted', { blockId: id })
+    bus.emit('blocks')
+    this.api.del(`/admin/blocks/${id}`).catch(() => this.hydrateEvents())
+  }
+
+  override createContent(input: NewContent): ContentItem {
+    if (!this.contents) return super.createContent(input)
+    const content: ContentItem = { ...input, id: newId('vid') }
+    this.contents = [content, ...this.contents]
+    this.track('admin_content_created', { contentId: content.id })
+    bus.emit('contents')
+    this.api.post('/admin/contents', content).then(() => this.refetchContents()).catch(() => this.refetchContents())
+    return content
+  }
+  override updateContent(id: string, patch: Partial<ContentItem>): void {
+    if (!this.contents) return super.updateContent(id, patch)
+    this.contents = this.contents.map((c) => (c.id === id ? { ...c, ...patch } : c))
+    this.track('admin_content_updated', { contentId: id })
+    bus.emit('contents')
+    this.api.patch(`/admin/contents/${id}`, patch).then(() => this.refetchContents()).catch(() => this.refetchContents())
+  }
+  override deleteContent(id: string): void {
+    if (!this.contents) return super.deleteContent(id)
+    this.contents = this.contents.filter((c) => c.id !== id)
+    this.track('admin_content_deleted', { contentId: id })
+    bus.emit('contents')
+    this.api.del(`/admin/contents/${id}`).catch(() => this.refetchContents())
   }
 
   private scheduleFlush(): void {

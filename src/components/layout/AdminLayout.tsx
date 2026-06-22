@@ -50,8 +50,10 @@ function AdminGate({ onUnlock }: { onUnlock: () => void }) {
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    // Demo: cualquier clave habilita el panel (la auth real llega en Fase 1).
+    // Demo (sin backend): cualquier clave habilita el panel. Con backend (Fase G), la
+    // clave ES el ADMIN_TOKEN: se guarda y viaja como Bearer en las escrituras /admin/*.
     sessionStorage.setItem('ccm:admin', '1')
+    sessionStorage.setItem('ccm:admin-token', key)
     onUnlock()
   }
 

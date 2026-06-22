@@ -18,12 +18,18 @@ export function createApi(apiBase: string): ApiClient {
   const base = apiBase.replace(/\/+$/, '') + '/api/v1'
 
   async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Device-Id': getDeviceId(),
+    }
+    // Auth del organizador (Fase G): token Bearer en las rutas /admin/*.
+    if (path.startsWith('/admin')) {
+      const token = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('ccm:admin-token') : null
+      if (token) headers.Authorization = `Bearer ${token}`
+    }
     const res = await fetch(base + path, {
       method,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Device-Id': getDeviceId(),
-      },
+      headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
     })
     if (!res.ok) throw new Error(`API ${method} ${path} → ${res.status}`)
