@@ -90,6 +90,20 @@ export function saveConsents(consents: { terms?: boolean; news?: boolean; sponso
   writeJSON(KEY, profile)
 }
 
+/**
+ * Fase A: fusiona el perfil traído del backend en el local. Conserva el deviceId
+ * y createdAt locales (la clave del device no cambia); el server es la fuente de
+ * verdad de los campos y consentimientos persistidos, así que pisan a los locales.
+ */
+export function hydrateFromRemote(remote: DeviceProfile): void {
+  const local = getProfile()
+  writeJSON(KEY, {
+    ...local,
+    fields: { ...local.fields, ...remote.fields },
+    consents: { ...local.consents, ...remote.consents },
+  })
+}
+
 export function fieldValue(key: ProfileFieldKey): string | undefined {
   return getProfile().fields[key]?.value
 }

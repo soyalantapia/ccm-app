@@ -11,8 +11,9 @@ export async function getProfile(deviceId: string): Promise<DeviceProfile> {
 }
 
 /**
- * Captura progresiva de datos (PRD §7). Upsert por (deviceId, key) + un evento
- * `profile_field_captured` por campo (paridad con LocalDataStore.saveProfileFields).
+ * Captura progresiva de datos (PRD §7). Upsert por (deviceId, key). NO genera el
+ * evento `profile_field_captured` acá: la analítica entra solo por POST /analytics
+ * (el front lo trackea), para no duplicar y mantener una única fuente de eventos.
  */
 export async function saveFields(
   deviceId: string,
@@ -24,20 +25,15 @@ export async function saveFields(
     string,
   ][]
 
-  await prisma.$transaction([
-    ...entries.map(([key, value]) =>
+  await prisma.$transaction(
+    entries.map(([key, value]) =>
       prisma.profileField.upsert({
         where: { deviceId_key: { deviceId, key } },
         create: { deviceId, key, value, source },
         update: { value, source, capturedAt: new Date() },
       }),
     ),
-    ...entries.map(([key]) =>
-      prisma.analyticsEvent.create({
-        data: { event: 'profile_field_captured', deviceId, payload: { field: key, source } },
-      }),
-    ),
-  ])
+  )
 
   return getProfile(deviceId)
 }
