@@ -6,9 +6,9 @@
     "lib": ["ES2023"],
     "types": ["node"],
     "outDir": "dist",
-    "baseUrl": ".",
     "paths": {
       // Canon 15: el backend NO duplica tipos. Importa el dominio del front.
+      // Sin baseUrl (deprecado en TS6): los paths resuelven relativo a este tsconfig.
       "@domain/types": ["../src/data/types.ts"]
     },
     "strict": true,

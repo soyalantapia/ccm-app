@@ -4,7 +4,9 @@
 // en Prisma; se crea por SQL crudo en una migración (ver más abajo y doc 04 §1).
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // native = plataforma de build; debian-openssl-3.0.x = runtime en Railway (node:22-slim).
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
