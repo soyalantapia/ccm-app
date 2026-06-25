@@ -3,14 +3,15 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, CalendarDays, MapPin, Ticket } from 'lucide-react'
 import { Badge, EmptyState, Eyebrow, Img, SectionTitle, Tabs } from '../components/ui'
 import { store, useStore } from '../data/store'
+import { useEvents, useRegistrations } from '../data/queries'
 import { EventCard } from '../features/eventos/EventCard'
 import { formatMoney } from '../features/tickets/format'
 import { EVENT_TYPE_ORDER, EVENT_TYPE_TABS } from '../features/eventos/eventMeta'
 
 /** Listado /eventos: banner del evento principal + Caminos y capacitaciones. */
 export default function Eventos() {
-  const events = useStore((s) => s.getEvents())
-  const registrations = useStore((s) => s.getRegistrations())
+  const events = useEvents()
+  const registrations = useRegistrations()
   const isSocio = useStore((s) => s.isSocio())
   const vipFrom = useStore(
     (s) => s.getPlans().find((p) => p.kind === 'vip' && p.price !== null)?.price ?? null,

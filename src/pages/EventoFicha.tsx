@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowUpRight, CalendarDays, Check, ChevronLeft, Clock, Lock, MapPin } from 'lucide-react'
 import { ButtonLink, EmptyState, Eyebrow, Img, SectionTitle } from '../components/ui'
 import { store, useStore } from '../data/store'
+import { useEvents } from '../data/queries'
 import type { EventBlock } from '../data/types'
 import { BlockRow } from '../features/eventos/BlockRow'
 import { EventCta } from '../features/eventos/EventCta'
@@ -49,7 +50,7 @@ function SocioGate() {
  */
 export default function EventoFicha() {
   const { slug } = useParams<{ slug: string }>()
-  const events = useStore((s) => s.getEvents())
+  const events = useEvents()
   const isSocio = useStore((s) => s.isSocio())
   const event = events.find((e) => e.slug === slug)
 

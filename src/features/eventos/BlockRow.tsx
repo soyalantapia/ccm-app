@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Badge, Button, toast } from '../../components/ui'
-import { store, useStore } from '../../data/store'
+import { store } from '../../data/store'
+import { useAvailability, useRegistrations } from '../../data/queries'
 import { requireProfile } from '../../lib/profileRequest'
 import type { EventBlock } from '../../data/types'
 
@@ -10,11 +11,9 @@ import type { EventBlock } from '../../data/types'
  * Renderizar SIEMPRE con key={block.id} (la reactividad del selector depende del remount).
  */
 export function BlockRow({ block }: { block: EventBlock }) {
-  const availability = useStore((s) => s.blockAvailability(block.id))
-  const registration = useStore((s) =>
-    s
-      .getRegistrations()
-      .find((r) => r.status === 'confirmada' && r.eventId === block.eventId && r.blockId === block.id),
+  const availability = useAvailability(block.id)
+  const registration = useRegistrations().find(
+    (r) => r.status === 'confirmada' && r.eventId === block.eventId && r.blockId === block.id,
   )
 
   /* block_view (PRD §13): se emite una sola vez al entrar el bloque en viewport. */
