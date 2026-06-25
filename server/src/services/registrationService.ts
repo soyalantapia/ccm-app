@@ -65,7 +65,11 @@ export async function register(
       })
     }
 
-    // Inscripción a nivel evento (sin bloque, sin cupo).
+    // Inscripción a nivel evento (sin bloque, sin cupo). Lock de la fila del Event para
+    // serializar dos POST concurrentes del mismo device: el @@unique(deviceId,eventId,blockId)
+    // NO protege acá porque en Postgres dos NULL son distintos en un índice único → sin lock,
+    // dos requests en carrera crean DOS inscripciones (y dos QR) para el mismo evento.
+    await tx.$queryRaw`SELECT id FROM "Event" WHERE id = ${eventId} FOR UPDATE`
     const existing = await tx.registration.findFirst({ where: { deviceId, eventId, blockId: null } })
     if (existing?.status === 'confirmada') {
       throw conflict('ALREADY_REGISTERED', 'Ya estás inscripto a este evento')

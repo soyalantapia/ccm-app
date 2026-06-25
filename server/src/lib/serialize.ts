@@ -16,6 +16,7 @@ import type {
   Convocatoria,
   ConvocatoriaField,
   Application,
+  Membership,
 } from '@prisma/client'
 import type {
   DeviceProfile,
@@ -29,6 +30,7 @@ import type {
   Sponsor as DomainSponsor,
   Convocatoria as DomainConvocatoria,
   Application as DomainApplication,
+  Membership as DomainMembership,
 } from '@domain/types'
 
 // PhotoDownload del front vive en DataStore.ts (no en types.ts) y ese archivo no
@@ -214,6 +216,15 @@ export function toConvocatoria(
       ...(f.help ? { help: f.help } : {}),
       ...(f.showIfKey && f.showIfEquals ? { showIf: { key: f.showIfKey, equals: f.showIfEquals } } : {}),
     })),
+  }
+}
+
+/** Membership → shape del dominio. `since` nullable en DB → '' (el dominio lo pide string). */
+export function toMembership(m: Membership): DomainMembership {
+  return {
+    tier: m.tier,
+    since: m.since ? m.since.toISOString() : '',
+    paid: m.paid,
   }
 }
 

@@ -24,6 +24,12 @@ export async function getApplications(): Promise<Application[]> {
   return rows.map(toApplication)
 }
 
+/** Las postulaciones del PROPIO device (para "Mis postulaciones" en el Perfil). */
+export async function getDeviceApplications(deviceId: string): Promise<Application[]> {
+  const rows = await prisma.application.findMany({ where: { deviceId }, orderBy: { ts: 'desc' } })
+  return rows.map(toApplication)
+}
+
 /** Admin: aceptar/rechazar. Solo desde 'preinscripta' (decideApplication del dominio). */
 export async function decideApplication(id: string, status: 'aceptada' | 'rechazada'): Promise<void> {
   await prisma.application.update({ where: { id }, data: { status, decidedAt: new Date() } })

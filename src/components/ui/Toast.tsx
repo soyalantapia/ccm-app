@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, Info } from 'lucide-react'
+import { bus } from '../../lib/bus'
 
 type ToastTone = 'success' | 'info'
 
@@ -48,8 +49,16 @@ export function ToastHost() {
       setItems((prev) => [...prev, { id, message, tone, action, duration }])
       setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), duration)
     }
+    // El backend rechazó una inscripción optimista (cupo lleno o evento solo-socios):
+    // avisamos en vez de dejar el "Inscripción confirmada ✓" como una mentira silenciosa.
+    const off = bus.on((key) => {
+      if (key === 'registration:rejected') {
+        toast('No pudimos confirmar tu lugar — puede que se haya llenado o sea solo para Socios.', 'info')
+      }
+    })
     return () => {
       push = () => {}
+      off()
     }
   }, [])
 

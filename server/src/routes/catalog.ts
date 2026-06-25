@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
+import { requireDevice } from '../middlewares/device.js'
 import * as catalogService from '../services/catalogService.js'
 import * as applicationService from '../services/applicationService.js'
 
@@ -70,6 +71,15 @@ catalogRouter.get('/plans', async (_req, res, next) => {
 catalogRouter.get('/convocatorias/:slug', async (req, res, next) => {
   try {
     res.json(await catalogService.getConvocatoria(req.params.slug))
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** GET /api/v1/applications — postulaciones del PROPIO device ("Mis postulaciones"). */
+catalogRouter.get('/applications', requireDevice, async (req, res, next) => {
+  try {
+    res.json(await applicationService.getDeviceApplications(req.deviceId!))
   } catch (err) {
     next(err)
   }
