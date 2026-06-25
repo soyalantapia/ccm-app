@@ -445,8 +445,8 @@ model SponsorCreative {
 }
 
 // Publicidad autogestionada (self-serve). Vigencia: startsAt/expiresAt + status (canon 8).
-// "Una activa por slot" se garantiza con un índice único PARCIAL en SQL crudo
-// (migración manual): CREATE UNIQUE INDEX one_active_per_slot ON "AdCampaign"(slot) WHERE status = 'activa';
+// "Una activa por slot" se garantiza con un índice único PARCIAL en SQL crudo (no expresable
+// en el datamodel). Creado en la migración prisma/migrations/1_one_active_per_slot.
 model AdCampaign {
   id        String         @id // "camp_..."
   slot      AdSlot
