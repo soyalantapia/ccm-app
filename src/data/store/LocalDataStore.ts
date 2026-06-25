@@ -20,6 +20,8 @@ import type {
   SponsorCreative,
   TicketOrder,
   TicketPlan,
+  Benefit,
+  NewBenefit,
 } from '../types'
 import type {
   BlockAvailability,
@@ -47,6 +49,7 @@ import { seedContents } from '../seed/contents'
 import { seedConvocatorias } from '../seed/convocatorias'
 import { seedApplications } from '../seed/applications'
 import { seedAnalytics } from '../seed/analytics'
+import { seedBenefits } from '../seed/benefits'
 
 const K = {
   registrations: 'registrations',
@@ -64,6 +67,7 @@ const K = {
   contentsOverlay: 'contentsOverlay',
   campaigns: 'campaigns',
   membership: 'membership',
+  benefitsOverlay: 'benefitsOverlay',
 } as const
 
 /** Una campaña autogestionada se presenta como sponsor sintético en los slots. */
@@ -450,6 +454,33 @@ export class LocalDataStore implements DataStore {
   deleteSponsor(id: string): void {
     overlayDelete(K.sponsorsOverlay, id)
     this.track('admin_sponsor_deleted', { sponsorId: id })
+  }
+
+  /* ─── Beneficios (descuentos para registrados) ─── */
+
+  getBenefits(): Benefit[] {
+    const registered = this.getRegistrations().some((r) => r.status === 'confirmada')
+    return mergeOverlay(seedBenefits, K.benefitsOverlay)
+      .filter((b) => b.active)
+      .sort((a, b) => a.order - b.order)
+      .map((b) => (registered ? b : { ...b, code: undefined }))
+  }
+
+  createBenefit(input: NewBenefit): Benefit {
+    const benefit: Benefit = { ...input, id: newId('ben') }
+    overlayCreate(K.benefitsOverlay, benefit)
+    this.track('admin_benefit_created', { benefitId: benefit.id, category: benefit.category })
+    return benefit
+  }
+
+  updateBenefit(id: string, patch: Partial<Benefit>): void {
+    overlayEdit(K.benefitsOverlay, id, patch)
+    this.track('admin_benefit_updated', { benefitId: id })
+  }
+
+  deleteBenefit(id: string): void {
+    overlayDelete(K.benefitsOverlay, id)
+    this.track('admin_benefit_deleted', { benefitId: id })
   }
 
   getCreative(slot: AdSlot, index = 0): { sponsor: Sponsor; creative: SponsorCreative } | undefined {

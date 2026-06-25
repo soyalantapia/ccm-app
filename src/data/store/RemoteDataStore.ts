@@ -28,6 +28,8 @@ import type {
   Convocatoria,
   Application,
   Membership,
+  Benefit,
+  NewBenefit,
   PlanId,
   ApplicationStatus,
 } from '../types'
@@ -71,6 +73,7 @@ export class RemoteDataStore extends LocalDataStore {
   private plans?: TicketPlan[]
   private applications?: Application[]
   private membership?: Membership
+  private benefits?: Benefit[]
   private convocatorias = new Map<string, Convocatoria>()
   private convoInflight = new Set<string>()
 
@@ -88,6 +91,7 @@ export class RemoteDataStore extends LocalDataStore {
       this.hydrateDeviceContent()
       this.hydrateMembership()
       this.hydrateApplications()
+      this.hydrateBenefits()
     })
     if (typeof window !== 'undefined') {
       const flush = () => this.flush()
@@ -365,6 +369,45 @@ export class RemoteDataStore extends LocalDataStore {
       .then((server) => { this.membership = server; bus.emit('membership') })
       .catch(() => {})
     return optimistic
+  }
+
+  /* ─── Beneficios (descuentos para registrados) ─── */
+
+  /** Si hay token de admin en sesión, trae TODOS (incl. inactivos + códigos) para editar;
+   *  si no, la lista pública (solo activos; código solo si el device está registrado). */
+  private benefitsPath(): string {
+    const hasAdmin = typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('ccm:admin-token')
+    return hasAdmin ? '/admin/benefits' : '/benefits'
+  }
+  private hydrateBenefits(): void {
+    this.api.get<Benefit[]>(this.benefitsPath()).then((b) => { this.benefits = b; bus.emit('benefits') }).catch(() => {})
+  }
+  override getBenefits(): Benefit[] {
+    return this.benefits ?? super.getBenefits()
+  }
+  override createBenefit(input: NewBenefit): Benefit {
+    if (!this.benefits) return super.createBenefit(input)
+    const benefit: Benefit = { ...input, id: newId('ben') }
+    this.benefits = [...this.benefits, benefit].sort((a, b) => a.order - b.order)
+    this.track('admin_benefit_created', { benefitId: benefit.id, category: benefit.category })
+    bus.emit('benefits')
+    this.api.post('/admin/benefits', benefit).then(() => this.hydrateBenefits()).catch(() => this.hydrateBenefits())
+    return benefit
+  }
+  override updateBenefit(id: string, patch: Partial<Benefit>): void {
+    if (!this.benefits) return super.updateBenefit(id, patch)
+    this.benefits = this.benefits.map((b) => (b.id === id ? { ...b, ...patch } : b)).sort((a, b) => a.order - b.order)
+    this.track('admin_benefit_updated', { benefitId: id })
+    bus.emit('benefits')
+    this.api.patch(`/admin/benefits/${id}`, patch).then(() => this.hydrateBenefits()).catch(() => this.hydrateBenefits())
+  }
+  override deleteBenefit(id: string): void {
+    if (!this.benefits) return super.deleteBenefit(id)
+    const prev = this.benefits
+    this.benefits = this.benefits.filter((b) => b.id !== id)
+    this.track('admin_benefit_deleted', { benefitId: id })
+    bus.emit('benefits')
+    this.api.del(`/admin/benefits/${id}`).catch(() => { this.benefits = prev; bus.emit('benefits') })
   }
 
   override submitApplication(convocatoriaId: string, data: Record<string, string>): Application {

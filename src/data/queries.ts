@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { store } from './store'
 import type { BlockAvailability } from './store'
-import type { EventItem, EventBlock, Registration } from './types'
+import type { EventItem, EventBlock, Registration, Benefit } from './types'
 
 /**
  * Hooks de lectura reactiva sobre el DataStore, vía TanStack Query (migración async).
@@ -42,4 +42,10 @@ export function useRegistrations(): Registration[] {
 }
 export function useIsRegistered(eventId: string, blockId?: string): boolean {
   return useStoreQuery(['registrations', eventId, blockId ?? null], () => store.isRegistered(eventId, blockId))
+}
+
+/* ─── Beneficios ─── */
+
+export function useBenefits(): Benefit[] {
+  return useStoreQuery(['benefits'], () => store.getBenefits())
 }

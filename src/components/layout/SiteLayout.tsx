@@ -11,6 +11,7 @@ const NAV = [
   { to: '/eventos', label: 'Eventos' },
   { to: '/entradas', label: 'Entradas' },
   { to: '/membresia', label: 'Membresías' },
+  { to: '/beneficios', label: 'Beneficios' },
   { to: '/catalogo', label: 'Catálogo' },
   { to: '/fotos', label: 'Fotos' },
   { to: '/contenido', label: 'Contenido' },

@@ -7,6 +7,7 @@ import { healthRouter } from './routes/health.js'
 import { devicesRouter } from './routes/devices.js'
 import { meRouter } from './routes/me.js'
 import { membershipsRouter } from './routes/memberships.js'
+import { benefitsRouter } from './routes/benefits.js'
 import { analyticsRouter } from './routes/analytics.js'
 import { eventsRouter } from './routes/events.js'
 import { registrationsRouter } from './routes/registrations.js'
@@ -60,6 +61,7 @@ export function createApp() {
   v1.use(deviceContext)
   v1.use(meRouter) // Fase A: /me, /me/fields, /me/consents
   v1.use(membershipsRouter) // Fase D (parcial): /memberships/me, POST /memberships
+  v1.use(benefitsRouter) // Beneficios: /benefits (códigos gated) + /admin/benefits
   v1.use(analyticsRouter) // Fase A: /analytics, /admin/analytics
   v1.use(eventsRouter) // Fase B: /events, /events/:slug, /events/:id/blocks, /blocks/:id/availability
   v1.use(registrationsRouter) // Fase B: /registrations

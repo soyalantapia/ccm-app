@@ -206,6 +206,29 @@ export interface ContentItem {
   socioOnly?: boolean
 }
 
+/* ─── Beneficios (descuentos para registrados) ─── */
+
+export type BenefitCategory = 'hotel' | 'spa' | 'gastronomia' | 'entradas' | 'suscripcion' | 'otro'
+
+export interface Benefit {
+  id: string
+  partner: string
+  category: BenefitCategory
+  title: string
+  description: string
+  /** Código de descuento. Solo presente si el device está registrado (lo decide el backend). */
+  code?: string
+  discountLabel?: string
+  url?: string
+  logo?: string
+  validUntil?: string
+  order: number
+  active: boolean
+}
+
+/** Alta de beneficio desde el admin (el store genera el id). */
+export type NewBenefit = Omit<Benefit, 'id'>
+
 /* ─── Membresía / niveles de suscripción ─── */
 
 export type MembershipTier = 'free' | 'socio'

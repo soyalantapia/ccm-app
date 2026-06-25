@@ -20,6 +20,8 @@ import type {
   SponsorCreative,
   TicketOrder,
   TicketPlan,
+  Benefit,
+  NewBenefit,
 } from '../types'
 
 export interface BlockAvailability {
@@ -130,6 +132,12 @@ export interface DataStore {
   createCampaign(input: NewCampaign): AdCampaign
   getCampaigns(): AdCampaign[]
   getActiveCampaign(slot: AdSlot): AdCampaign | undefined
+
+  /* Beneficios (descuentos para registrados) */
+  getBenefits(): Benefit[]
+  createBenefit(input: NewBenefit): Benefit
+  updateBenefit(id: string, patch: Partial<Benefit>): void
+  deleteBenefit(id: string): void
 
   /* Convocatorias y postulaciones */
   getConvocatoria(slug: string): Convocatoria | undefined

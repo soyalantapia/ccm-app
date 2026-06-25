@@ -17,6 +17,7 @@ import { seedGalleries } from '../../src/data/seed/galleries'
 import { seedContents } from '../../src/data/seed/contents'
 import { seedConvocatorias } from '../../src/data/seed/convocatorias'
 import { seedApplications } from '../../src/data/seed/applications'
+import { seedBenefits } from '../../src/data/seed/benefits'
 import { seedPlans } from '../../src/config/plans'
 
 const prisma = new PrismaClient()
@@ -124,8 +125,20 @@ async function main() {
     await prisma.application.upsert({ where: { id: a.id }, create: { id: a.id, ...data }, update: data })
   }
 
+  // ── Beneficios (descuentos para registrados) ──
+  for (const b of seedBenefits) {
+    const data = {
+      partner: b.partner, category: b.category, title: b.title, description: b.description,
+      code: b.code ?? null, discountLabel: b.discountLabel ?? null, url: b.url ?? null,
+      logo: b.logo ?? null, validUntil: b.validUntil ? new Date(b.validUntil) : null,
+      order: b.order, active: b.active,
+    }
+    await prisma.benefit.upsert({ where: { id: b.id }, create: { id: b.id, ...data }, update: data })
+  }
+
   const counts = {
     sponsors: await prisma.sponsor.count(),
+    benefits: await prisma.benefit.count(),
     plans: await prisma.ticketPlan.count(),
     events: await prisma.event.count(),
     blocks: await prisma.eventBlock.count(),

@@ -32,6 +32,7 @@ const Convocatoria = lazyWithReload(() => import('./pages/Convocatoria'))
 const Sponsors = lazyWithReload(() => import('./pages/Sponsors'))
 const Publicidad = lazyWithReload(() => import('./pages/Publicidad'))
 const Membresia = lazyWithReload(() => import('./pages/Membresia'))
+const Beneficios = lazyWithReload(() => import('./pages/Beneficios'))
 const Stand = lazyWithReload(() => import('./pages/Stand'))
 const Legales = lazyWithReload(() => import('./pages/Legales'))
 const Inicio = lazyWithReload(() => import('./pages/app/Inicio'))
@@ -45,6 +46,7 @@ const AdminPersonas = lazyWithReload(() => import('./pages/admin/AdminPersonas')
 const AdminGalerias = lazyWithReload(() => import('./pages/admin/AdminGalerias'))
 const AdminCatalogo = lazyWithReload(() => import('./pages/admin/AdminCatalogo'))
 const AdminContenido = lazyWithReload(() => import('./pages/admin/AdminContenido'))
+const AdminBeneficios = lazyWithReload(() => import('./pages/admin/AdminBeneficios'))
 const AdminOrdenes = lazyWithReload(() => import('./pages/admin/AdminOrdenes'))
 const AdminConfiguracion = lazyWithReload(() => import('./pages/admin/AdminConfiguracion'))
 
@@ -99,6 +101,7 @@ const router = createBrowserRouter(
             { path: '/sponsors', element: <S><Sponsors /></S> },
             { path: '/publicidad', element: <S><Publicidad /></S> },
             { path: '/membresia', element: <S><Membresia /></S> },
+            { path: '/beneficios', element: <S><Beneficios /></S> },
             { path: '/stand', element: <S><Stand /></S> },
             { path: '/stand/:slug', element: <S><Stand /></S> },
             { path: '/terminos', element: <S><Legales kind="terminos" /></S> },
@@ -121,6 +124,7 @@ const router = createBrowserRouter(
             { path: 'galerias', element: <SA><AdminGalerias /></SA> },
             { path: 'catalogo', element: <SA><AdminCatalogo /></SA> },
             { path: 'contenido', element: <SA><AdminContenido /></SA> },
+            { path: 'beneficios', element: <SA><AdminBeneficios /></SA> },
             { path: 'ordenes', element: <SA><AdminOrdenes /></SA> },
             { path: 'configuracion', element: <SA><AdminConfiguracion /></SA> },
           ],

@@ -17,6 +17,7 @@ import type {
   ConvocatoriaField,
   Application,
   Membership,
+  Benefit,
 } from '@prisma/client'
 import type {
   DeviceProfile,
@@ -31,6 +32,8 @@ import type {
   Convocatoria as DomainConvocatoria,
   Application as DomainApplication,
   Membership as DomainMembership,
+  Benefit as DomainBenefit,
+  BenefitCategory,
 } from '@domain/types'
 
 // PhotoDownload del front vive en DataStore.ts (no en types.ts) y ese archivo no
@@ -216,6 +219,27 @@ export function toConvocatoria(
       ...(f.help ? { help: f.help } : {}),
       ...(f.showIfKey && f.showIfEquals ? { showIf: { key: f.showIfKey, equals: f.showIfEquals } } : {}),
     })),
+  }
+}
+
+/**
+ * Benefit → shape del dominio. `withCode` decide si se incluye el código (solo a registrados);
+ * sin él, se omite (queda undefined) y la UI muestra "registrate para verlo".
+ */
+export function toBenefit(b: Benefit, withCode: boolean): DomainBenefit {
+  return {
+    id: b.id,
+    partner: b.partner,
+    category: b.category as BenefitCategory,
+    title: b.title,
+    description: b.description,
+    ...(withCode && b.code ? { code: b.code } : {}),
+    ...(b.discountLabel ? { discountLabel: b.discountLabel } : {}),
+    ...(b.url ? { url: b.url } : {}),
+    ...(b.logo ? { logo: b.logo } : {}),
+    ...(b.validUntil ? { validUntil: b.validUntil.toISOString().slice(0, 10) } : {}),
+    order: b.order,
+    active: b.active,
   }
 }
 

@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   ChevronRight,
   Film,
+  Gift,
   Images,
   LayoutDashboard,
   CalendarDays,
@@ -25,6 +26,7 @@ const SECTIONS = [
   { to: '/admin/galerias', label: 'Galerías y sponsors', icon: Images },
   { to: '/admin/catalogo', label: 'Expositores', icon: Store },
   { to: '/admin/contenido', label: 'Contenido', icon: Film },
+  { to: '/admin/beneficios', label: 'Beneficios', icon: Gift },
   { to: '/admin/ordenes', label: 'Entradas y órdenes', icon: Ticket },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]
@@ -41,6 +43,7 @@ const MORE = [
   { to: '/admin/postulaciones', label: 'Postulaciones', icon: Inbox },
   { to: '/admin/catalogo', label: 'Expositores', icon: Store },
   { to: '/admin/contenido', label: 'Contenido', icon: Film },
+  { to: '/admin/beneficios', label: 'Beneficios', icon: Gift },
   { to: '/admin/ordenes', label: 'Entradas y órdenes', icon: Ticket },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]

@@ -489,6 +489,33 @@ model ContentItem {
 }
 
 // ─────────────────────────────────────────────────────────
+//  BENEFICIOS (descuentos para registrados) — canon: feedback Gastón
+// ─────────────────────────────────────────────────────────
+
+// Beneficio para usuarios registrados (hotel, spa, gastronomía, entradas, suscripción…).
+// El `code` se sirve SOLO a devices con inscripción confirmada (gate en benefitService).
+// Low-stakes por decisión de negocio: sin límite de usos ni anti-fraude (Gastón).
+model Benefit {
+  id            String    @id // "ben-..."
+  partner       String // "Hotel Quinto Centenario"
+  category      String // hotel | spa | gastronomia | entradas | suscripcion | otro
+  title         String // "25% en alojamiento"
+  description   String    @db.Text
+  code          String? // código de descuento (revelado solo a registrados)
+  discountLabel String? // "25% OFF" / "2x1"
+  url           String? // dónde canjear (link / wa.me / formulario)
+  logo          String?
+  validUntil    DateTime?
+  order         Int       @default(0)
+  active        Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active, order])
+}
+
+// ─────────────────────────────────────────────────────────
 //  MEMBRESÍA (SOCIO CCM)
 // ─────────────────────────────────────────────────────────
 
