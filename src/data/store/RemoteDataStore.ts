@@ -13,7 +13,7 @@ import { slugify } from './overlay'
 import { newId } from '../../lib/storage'
 import { createApi, type ApiClient } from '../../lib/api'
 import { bus } from '../../lib/bus'
-import { hydrateFromRemote } from '../../lib/identity'
+import { hydrateFromRemote, getDeviceToken, setDeviceCredentials } from '../../lib/identity'
 import type {
   DeviceProfile,
   ProfileFieldKey,
@@ -27,6 +27,7 @@ import type {
   TicketPlan,
   Convocatoria,
   Application,
+  Membership,
   PlanId,
   ApplicationStatus,
 } from '../types'
@@ -69,22 +70,42 @@ export class RemoteDataStore extends LocalDataStore {
   private sponsors?: Sponsor[]
   private plans?: TicketPlan[]
   private applications?: Application[]
+  private membership?: Membership
   private convocatorias = new Map<string, Convocatoria>()
   private convoInflight = new Set<string>()
 
   constructor(apiBase: string) {
     super()
     this.api = createApi(apiBase)
-    this.hydrateProfile()
+    // Hidratación PÚBLICA: arranca ya (no necesita identidad).
     this.hydrateEvents()
-    this.hydrateRegistrations()
-    this.hydrateContent()
+    this.hydratePublicContent()
+    // Hidratación del DEVICE: primero asegura el token firmado (POST /devices si falta),
+    // recién después pide /me, /registrations, /favorites, /downloads (requireDevice).
+    void this.ensureDeviceToken().then(() => {
+      this.hydrateProfile()
+      this.hydrateRegistrations()
+      this.hydrateDeviceContent()
+      this.hydrateMembership()
+      this.hydrateApplications()
+    })
     if (typeof window !== 'undefined') {
       const flush = () => this.flush()
       window.addEventListener('pagehide', flush)
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') flush()
       })
+    }
+  }
+
+  /** Asegura la identidad: si no hay token guardado, lo pide al backend (POST /devices). */
+  private async ensureDeviceToken(): Promise<void> {
+    if (getDeviceToken()) return
+    try {
+      const res = await this.api.post<{ deviceId: string; token: string }>('/devices', {})
+      setDeviceCredentials(res.deviceId, res.token)
+    } catch {
+      /* sin token (backend caído): las rutas device-scoped quedan en local hasta el próximo arranque */
     }
   }
 
@@ -212,10 +233,12 @@ export class RemoteDataStore extends LocalDataStore {
         bus.emit('registrations')
       })
       .catch(() => {
-        // 409 lleno / ya inscripto → revertir el provisional
+        // 409 lleno / ya inscripto / 403 socio → revertir el provisional y AVISAR (antes el
+        // rechazo era silencioso: el usuario veía "confirmada ✓" pero quedaba afuera).
         this.regs = (this.regs ?? []).filter((r) => r.id !== provisional.id)
         this.refreshAvailability(blockId)
         bus.emit('registrations')
+        bus.emit('registration:rejected', { eventId, ...(blockId ? { blockId } : {}) })
       })
 
     return provisional
@@ -266,14 +289,19 @@ export class RemoteDataStore extends LocalDataStore {
 
   /* ─── Fase E: catálogo / galerías / contenido / favoritos / descargas ─── */
 
-  private hydrateContent(): void {
+  /** Contenido PÚBLICO (no requiere identidad): catálogo, galerías, contenidos, sponsors, planes. */
+  private hydratePublicContent(): void {
     this.api.get<CatalogProfile[]>('/catalog').then((c) => { this.catalog = c; bus.emit('catalog') }).catch(() => {})
     this.api.get<Gallery[]>('/galleries').then((g) => { this.galleries = g; bus.emit('galleries') }).catch(() => {})
     this.api.get<ContentItem[]>('/contents').then((c) => { this.contents = c; bus.emit('contents') }).catch(() => {})
-    this.api.get<string[]>('/favorites').then((f) => { this.favorites = f; bus.emit('favorites') }).catch(() => {})
-    this.api.get<PhotoDownload[]>('/downloads').then((d) => { this.downloads = d; bus.emit('downloads') }).catch(() => {})
     this.api.get<Sponsor[]>('/sponsors').then((s) => { this.sponsors = s; bus.emit('sponsors') }).catch(() => {})
     this.api.get<TicketPlan[]>('/plans').then((p) => { this.plans = p; bus.emit('plans') }).catch(() => {})
+  }
+
+  /** Contenido del DEVICE (requireDevice): favoritos y descargas. Corre tras tener el token. */
+  private hydrateDeviceContent(): void {
+    this.api.get<string[]>('/favorites').then((f) => { this.favorites = f; bus.emit('favorites') }).catch(() => {})
+    this.api.get<PhotoDownload[]>('/downloads').then((d) => { this.downloads = d; bus.emit('downloads') }).catch(() => {})
   }
 
   /* ─── Resto Fase G: sponsors / planes / convocatorias / postulaciones ─── */
@@ -305,17 +333,54 @@ export class RemoteDataStore extends LocalDataStore {
     }
     return super.getConvocatoria(slug)
   }
+  /** Postulaciones del PROPIO device (GET /applications). Antes nunca se hidrataban → el
+   *  Perfil y la convocatoria mostraban el seed local en vez de las reales. */
+  private hydrateApplications(): void {
+    this.api.get<Application[]>('/applications').then((a) => { this.applications = a; bus.emit('applications') }).catch(() => {})
+  }
+
   override getApplications(): Application[] {
     return this.applications ?? super.getApplications()
   }
 
+  /* ─── Membresía (Fase D parcial): persiste server-side, antes solo en localStorage ─── */
+
+  private hydrateMembership(): void {
+    this.api.get<Membership>('/memberships/me').then((m) => { this.membership = m; bus.emit('membership') }).catch(() => {})
+  }
+
+  override getMembership(): Membership {
+    return this.membership ?? super.getMembership()
+  }
+  override isSocio(): boolean {
+    return this.membership ? this.membership.tier === 'socio' : super.isSocio()
+  }
+  override becomeSocio(paid: number): Membership {
+    const optimistic: Membership = { tier: 'socio', since: new Date().toISOString(), paid }
+    this.membership = optimistic
+    this.track('membership_purchased', { tier: 'socio', total: paid })
+    bus.emit('membership')
+    this.api
+      .post<Membership>('/memberships', { paid })
+      .then((server) => { this.membership = server; bus.emit('membership') })
+      .catch(() => {})
+    return optimistic
+  }
+
   override submitApplication(convocatoriaId: string, data: Record<string, string>): Application {
-    if (!this.events) return super.submitApplication(convocatoriaId, data)
     const app: Application = { id: newId('app'), convocatoriaId, ts: new Date().toISOString(), status: 'preinscripta', data }
-    if (this.applications) this.applications = [app, ...this.applications]
+    // Cachea SIEMPRE (antes, si applications no estaba hidratado, la postulación se perdía de
+    // la vista del usuario). Reconcilia el id local con el del server (espeja register()).
+    this.applications = [app, ...(this.applications ?? [])]
     this.track('application_submitted', { convocatoriaId, applicationId: app.id })
     bus.emit('applications')
-    this.api.post('/applications', { convocatoriaId, data }).catch(() => {})
+    this.api
+      .post<Application>('/applications', { convocatoriaId, data })
+      .then((server) => {
+        this.applications = (this.applications ?? []).map((a) => (a.id === app.id ? server : a))
+        bus.emit('applications')
+      })
+      .catch(() => {})
     return app
   }
   override decideApplication(applicationId: string, status: Exclude<ApplicationStatus, 'preinscripta'>): void {

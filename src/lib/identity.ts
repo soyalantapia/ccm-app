@@ -67,6 +67,26 @@ export function getDeviceId(): string {
   return getProfile().deviceId
 }
 
+/* ─── Identidad server-side (auth de device endurecida) ───
+ * El backend EMITE la identidad en POST /devices y devuelve un token firmado (HMAC).
+ * El front lo guarda acá y lo manda en X-Device-Token (lib/api.ts). Antes la identidad
+ * era el UUID auto-declarado en X-Device-Id, que cualquiera podía suplantar; ahora hace
+ * falta el token firmado por el server. El deviceId local de arriba sigue valiendo solo
+ * para el LocalDataStore (demo offline). */
+const TOKEN_KEY = 'device-token'
+const SERVER_ID_KEY = 'server-device-id'
+
+/** Token de device emitido por el backend. null hasta que POST /devices responde. */
+export function getDeviceToken(): string | null {
+  return readJSON<string | null>(TOKEN_KEY, null)
+}
+
+/** Guarda { deviceId (publicId del server), token firmado } que devolvió POST /devices. */
+export function setDeviceCredentials(deviceId: string, token: string): void {
+  writeJSON(SERVER_ID_KEY, deviceId)
+  writeJSON(TOKEN_KEY, token)
+}
+
 export function saveProfileFields(
   values: Partial<Record<ProfileFieldKey, string>>,
   source: string,

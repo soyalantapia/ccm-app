@@ -1,37 +1,32 @@
 import type { RequestHandler } from 'express'
-import { prisma } from '../lib/prisma.js'
 import { unauthorized } from '../lib/errors.js'
+import { verifyDeviceToken } from '../lib/deviceToken.js'
 
 /**
- * Identidad por device (canon 6 / doc 06). El front manda su UUID en el header
- * `X-Device-Id` (lib/identity.ts). En el primer contacto hacemos UPSERT del Device
- * (publicId = ese UUID) y dejamos en req el id interno + el publicId.
+ * Identidad por device (canon 6 / doc 06). La identidad la EMITE el server en POST /devices
+ * (token HMAC firmado, ver lib/deviceToken.ts). El front lo manda en `X-Device-Token`.
+ * Acá solo VERIFICAMOS la firma (constant-time, sin tocar la DB) y, si es válida, dejamos
+ * en req el id interno + el publicId. Un header inventado/ajeno NO autentica nada: cierra la
+ * suplantación que existía cuando se confiaba ciegamente en X-Device-Id.
  *
- * deviceContext: upsert si vino el header (no falla si falta — para rutas públicas).
- * requireDevice: además exige el header (400 si falta) — para /me y escrituras del device.
+ * deviceContext: setea la identidad si el token es válido (no falla si falta — rutas públicas).
+ * requireDevice: además exige identidad válida (401) — para /me y escrituras del device.
  */
-export const deviceContext: RequestHandler = async (req, _res, next) => {
-  try {
-    const publicId = req.header('x-device-id')?.trim()
-    if (publicId) {
-      const device = await prisma.device.upsert({
-        where: { publicId },
-        create: { publicId },
-        update: {},
-        select: { id: true, publicId: true },
-      })
-      req.deviceId = device.id
-      req.devicePublicId = device.publicId
+export const deviceContext: RequestHandler = (req, _res, next) => {
+  const token = req.header('x-device-token')?.trim()
+  if (token) {
+    const identity = verifyDeviceToken(token)
+    if (identity) {
+      req.deviceId = identity.deviceId
+      req.devicePublicId = identity.publicId
     }
-    next()
-  } catch (err) {
-    next(err)
   }
+  next()
 }
 
 export const requireDevice: RequestHandler = (req, _res, next) => {
   if (!req.deviceId) {
-    next(unauthorized('DEVICE_REQUIRED', 'Falta el header X-Device-Id'))
+    next(unauthorized('DEVICE_REQUIRED', 'Falta un X-Device-Token válido (POST /devices para obtenerlo)'))
     return
   }
   next()
