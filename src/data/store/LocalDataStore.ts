@@ -22,6 +22,8 @@ import type {
   TicketPlan,
   Benefit,
   NewBenefit,
+  Banner,
+  NewBanner,
 } from '../types'
 import type {
   BlockAvailability,
@@ -50,6 +52,7 @@ import { seedConvocatorias } from '../seed/convocatorias'
 import { seedApplications } from '../seed/applications'
 import { seedAnalytics } from '../seed/analytics'
 import { seedBenefits } from '../seed/benefits'
+import { seedBanners } from '../seed/banners'
 
 const K = {
   registrations: 'registrations',
@@ -68,6 +71,7 @@ const K = {
   campaigns: 'campaigns',
   membership: 'membership',
   benefitsOverlay: 'benefitsOverlay',
+  bannersOverlay: 'bannersOverlay',
 } as const
 
 /** Una campaña autogestionada se presenta como sponsor sintético en los slots. */
@@ -454,6 +458,31 @@ export class LocalDataStore implements DataStore {
   deleteSponsor(id: string): void {
     overlayDelete(K.sponsorsOverlay, id)
     this.track('admin_sponsor_deleted', { sponsorId: id })
+  }
+
+  /* ─── Banners gestionados (publicidad simple) ─── */
+
+  getBanners(): Banner[] {
+    return mergeOverlay(seedBanners, K.bannersOverlay)
+      .filter((b) => b.active)
+      .sort((a, b) => a.order - b.order)
+  }
+
+  createBanner(input: NewBanner): Banner {
+    const banner: Banner = { ...input, id: newId('bnr') }
+    overlayCreate(K.bannersOverlay, banner)
+    this.track('admin_banner_created', { bannerId: banner.id, slot: banner.slot })
+    return banner
+  }
+
+  updateBanner(id: string, patch: Partial<Banner>): void {
+    overlayEdit(K.bannersOverlay, id, patch)
+    this.track('admin_banner_updated', { bannerId: id })
+  }
+
+  deleteBanner(id: string): void {
+    overlayDelete(K.bannersOverlay, id)
+    this.track('admin_banner_deleted', { bannerId: id })
   }
 
   /* ─── Beneficios (descuentos para registrados) ─── */

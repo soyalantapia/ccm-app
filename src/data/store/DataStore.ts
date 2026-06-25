@@ -22,6 +22,8 @@ import type {
   TicketPlan,
   Benefit,
   NewBenefit,
+  Banner,
+  NewBanner,
 } from '../types'
 
 export interface BlockAvailability {
@@ -132,6 +134,12 @@ export interface DataStore {
   createCampaign(input: NewCampaign): AdCampaign
   getCampaigns(): AdCampaign[]
   getActiveCampaign(slot: AdSlot): AdCampaign | undefined
+
+  /* Banners gestionados (publicidad simple) */
+  getBanners(): Banner[]
+  createBanner(input: NewBanner): Banner
+  updateBanner(id: string, patch: Partial<Banner>): void
+  deleteBanner(id: string): void
 
   /* Beneficios (descuentos para registrados) */
   getBenefits(): Benefit[]

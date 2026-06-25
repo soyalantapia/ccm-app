@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   CalendarDays,
   Inbox,
+  Megaphone,
   MoreHorizontal,
   Settings,
   Store,
@@ -27,6 +28,7 @@ const SECTIONS = [
   { to: '/admin/catalogo', label: 'Expositores', icon: Store },
   { to: '/admin/contenido', label: 'Contenido', icon: Film },
   { to: '/admin/beneficios', label: 'Beneficios', icon: Gift },
+  { to: '/admin/banners', label: 'Banners', icon: Megaphone },
   { to: '/admin/ordenes', label: 'Entradas y órdenes', icon: Ticket },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]
@@ -44,6 +46,7 @@ const MORE = [
   { to: '/admin/catalogo', label: 'Expositores', icon: Store },
   { to: '/admin/contenido', label: 'Contenido', icon: Film },
   { to: '/admin/beneficios', label: 'Beneficios', icon: Gift },
+  { to: '/admin/banners', label: 'Banners', icon: Megaphone },
   { to: '/admin/ordenes', label: 'Entradas y órdenes', icon: Ticket },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]

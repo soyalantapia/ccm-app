@@ -47,6 +47,7 @@ const AdminGalerias = lazyWithReload(() => import('./pages/admin/AdminGalerias')
 const AdminCatalogo = lazyWithReload(() => import('./pages/admin/AdminCatalogo'))
 const AdminContenido = lazyWithReload(() => import('./pages/admin/AdminContenido'))
 const AdminBeneficios = lazyWithReload(() => import('./pages/admin/AdminBeneficios'))
+const AdminBanners = lazyWithReload(() => import('./pages/admin/AdminBanners'))
 const AdminOrdenes = lazyWithReload(() => import('./pages/admin/AdminOrdenes'))
 const AdminConfiguracion = lazyWithReload(() => import('./pages/admin/AdminConfiguracion'))
 
@@ -125,6 +126,7 @@ const router = createBrowserRouter(
             { path: 'catalogo', element: <SA><AdminCatalogo /></SA> },
             { path: 'contenido', element: <SA><AdminContenido /></SA> },
             { path: 'beneficios', element: <SA><AdminBeneficios /></SA> },
+            { path: 'banners', element: <SA><AdminBanners /></SA> },
             { path: 'ordenes', element: <SA><AdminOrdenes /></SA> },
             { path: 'configuracion', element: <SA><AdminConfiguracion /></SA> },
           ],

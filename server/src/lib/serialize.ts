@@ -18,6 +18,7 @@ import type {
   Application,
   Membership,
   Benefit,
+  Banner,
 } from '@prisma/client'
 import type {
   DeviceProfile,
@@ -34,6 +35,8 @@ import type {
   Membership as DomainMembership,
   Benefit as DomainBenefit,
   BenefitCategory,
+  Banner as DomainBanner,
+  BannerDestination,
 } from '@domain/types'
 
 // PhotoDownload del front vive en DataStore.ts (no en types.ts) y ese archivo no
@@ -219,6 +222,22 @@ export function toConvocatoria(
       ...(f.help ? { help: f.help } : {}),
       ...(f.showIfKey && f.showIfEquals ? { showIf: { key: f.showIfKey, equals: f.showIfEquals } } : {}),
     })),
+  }
+}
+
+/** Banner gestionado → shape del dominio. */
+export function toBanner(b: Banner): DomainBanner {
+  return {
+    id: b.id,
+    slot: b.slot,
+    brand: b.brand,
+    image: b.image,
+    ...(b.alt ? { alt: b.alt } : {}),
+    destinationType: b.destinationType as BannerDestination,
+    destinationUrl: b.destinationUrl,
+    fixed: b.fixed,
+    order: b.order,
+    active: b.active,
   }
 }
 

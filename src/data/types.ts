@@ -206,6 +206,28 @@ export interface ContentItem {
   socioOnly?: boolean
 }
 
+/* ─── Banners gestionados (publicidad simple) ─── */
+
+export type BannerDestination = 'whatsapp' | 'link' | 'form'
+
+export interface Banner {
+  id: string
+  /** Ubicación lógica: 'home' | 'eventos' | 'catalogo' | 'fotos' | 'contenido'. */
+  slot: string
+  brand: string
+  image: string
+  alt?: string
+  destinationType: BannerDestination
+  destinationUrl: string
+  /** Fijo (siempre visible) vs rota con los demás del slot. */
+  fixed: boolean
+  order: number
+  active: boolean
+}
+
+/** Alta de banner desde el admin (el store genera el id). */
+export type NewBanner = Omit<Banner, 'id'>
+
 /* ─── Beneficios (descuentos para registrados) ─── */
 
 export type BenefitCategory = 'hotel' | 'spa' | 'gastronomia' | 'entradas' | 'suscripcion' | 'otro'

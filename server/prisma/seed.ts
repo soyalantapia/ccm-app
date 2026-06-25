@@ -18,6 +18,7 @@ import { seedContents } from '../../src/data/seed/contents'
 import { seedConvocatorias } from '../../src/data/seed/convocatorias'
 import { seedApplications } from '../../src/data/seed/applications'
 import { seedBenefits } from '../../src/data/seed/benefits'
+import { seedBanners } from '../../src/data/seed/banners'
 import { seedPlans } from '../../src/config/plans'
 
 const prisma = new PrismaClient()
@@ -136,7 +137,18 @@ async function main() {
     await prisma.benefit.upsert({ where: { id: b.id }, create: { id: b.id, ...data }, update: data })
   }
 
+  // ── Banners gestionados (publicidad que carga marketing) ──
+  for (const bn of seedBanners) {
+    const data = {
+      slot: bn.slot, brand: bn.brand, image: bn.image, alt: bn.alt ?? null,
+      destinationType: bn.destinationType, destinationUrl: bn.destinationUrl,
+      fixed: bn.fixed, order: bn.order, active: bn.active,
+    }
+    await prisma.banner.upsert({ where: { id: bn.id }, create: { id: bn.id, ...data }, update: data })
+  }
+
   const counts = {
+    banners: await prisma.banner.count(),
     sponsors: await prisma.sponsor.count(),
     benefits: await prisma.benefit.count(),
     plans: await prisma.ticketPlan.count(),

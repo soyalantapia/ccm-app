@@ -6,6 +6,7 @@ import { IDS } from '../../data/ids'
 import { AppSection } from '../../features/app/AppSection'
 import { RegistrationRow } from '../../features/app/RegistrationRow'
 import { registrationSortKey } from '../../features/app/meta'
+import { ManagedBanner } from '../../features/ads/ManagedBanner'
 import { HomeHeader } from '../../features/app/home/HomeHeader'
 import { PrimaryActionCard } from '../../features/app/home/PrimaryActionCard'
 import { ActionStrip } from '../../features/app/home/ActionStrip'
@@ -69,6 +70,9 @@ export default function Inicio() {
 
       {/* Slot publicitario de feed (S2) */}
       <AdBanner slot="S2" className="mt-12 md:mt-16" />
+
+      {/* Banners gestionados por marketing (fijos + rotativo, con medición de clicks) */}
+      <ManagedBanner slot="home" className="mt-12 md:mt-16" />
 
       {/* 5. Descubrí: próximos Caminos compactos + postulación */}
       <AppSection

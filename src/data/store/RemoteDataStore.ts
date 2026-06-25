@@ -30,6 +30,8 @@ import type {
   Membership,
   Benefit,
   NewBenefit,
+  Banner,
+  NewBanner,
   PlanId,
   ApplicationStatus,
 } from '../types'
@@ -74,6 +76,7 @@ export class RemoteDataStore extends LocalDataStore {
   private applications?: Application[]
   private membership?: Membership
   private benefits?: Benefit[]
+  private banners?: Banner[]
   private convocatorias = new Map<string, Convocatoria>()
   private convoInflight = new Set<string>()
 
@@ -300,6 +303,43 @@ export class RemoteDataStore extends LocalDataStore {
     this.api.get<ContentItem[]>('/contents').then((c) => { this.contents = c; bus.emit('contents') }).catch(() => {})
     this.api.get<Sponsor[]>('/sponsors').then((s) => { this.sponsors = s; bus.emit('sponsors') }).catch(() => {})
     this.api.get<TicketPlan[]>('/plans').then((p) => { this.plans = p; bus.emit('plans') }).catch(() => {})
+    this.hydrateBanners()
+  }
+
+  /* ─── Banners gestionados (públicos; admin ve todos vía /admin/banners) ─── */
+  private bannersPath(): string {
+    const hasAdmin = typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('ccm:admin-token')
+    return hasAdmin ? '/admin/banners' : '/banners'
+  }
+  private hydrateBanners(): void {
+    this.api.get<Banner[]>(this.bannersPath()).then((b) => { this.banners = b; bus.emit('banners') }).catch(() => {})
+  }
+  override getBanners(): Banner[] {
+    return this.banners ?? super.getBanners()
+  }
+  override createBanner(input: NewBanner): Banner {
+    if (!this.banners) return super.createBanner(input)
+    const banner: Banner = { ...input, id: newId('bnr') }
+    this.banners = [...this.banners, banner].sort((a, b) => a.order - b.order)
+    this.track('admin_banner_created', { bannerId: banner.id, slot: banner.slot })
+    bus.emit('banners')
+    this.api.post('/admin/banners', banner).then(() => this.hydrateBanners()).catch(() => this.hydrateBanners())
+    return banner
+  }
+  override updateBanner(id: string, patch: Partial<Banner>): void {
+    if (!this.banners) return super.updateBanner(id, patch)
+    this.banners = this.banners.map((b) => (b.id === id ? { ...b, ...patch } : b)).sort((a, b) => a.order - b.order)
+    this.track('admin_banner_updated', { bannerId: id })
+    bus.emit('banners')
+    this.api.patch(`/admin/banners/${id}`, patch).then(() => this.hydrateBanners()).catch(() => this.hydrateBanners())
+  }
+  override deleteBanner(id: string): void {
+    if (!this.banners) return super.deleteBanner(id)
+    const prev = this.banners
+    this.banners = this.banners.filter((b) => b.id !== id)
+    this.track('admin_banner_deleted', { bannerId: id })
+    bus.emit('banners')
+    this.api.del(`/admin/banners/${id}`).catch(() => { this.banners = prev; bus.emit('banners') })
   }
 
   /** Contenido del DEVICE (requireDevice): favoritos y descargas. Corre tras tener el token. */

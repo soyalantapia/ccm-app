@@ -489,6 +489,38 @@ model ContentItem {
 }
 
 // ─────────────────────────────────────────────────────────
+//  BANNERS GESTIONADOS (publicidad simple, la sube marketing) — canon: feedback Gastón
+// ─────────────────────────────────────────────────────────
+
+// Destino al que va el banner cuando lo tocan (el cliente da el link).
+enum BannerDestination {
+  whatsapp
+  link
+  form
+}
+
+// Banner publicitario que carga marketing: una imagen + un destino + medición de clicks.
+// Distinto del AdCampaign self-serve (que una marca compra y paga): esto lo gestiona el equipo.
+// "Los principales son fijos y el resto rota" → `fixed`. Métrica = eventos banner_click/impression.
+model Banner {
+  id              String            @id // "bnr-..."
+  slot            String // ubicación lógica: 'home' | 'eventos' | 'catalogo' | 'fotos' | 'contenido'
+  brand           String // anunciante (para el reporte del admin)
+  image           String // URL de la imagen (marketing pega/sube en el formato pedido)
+  alt             String?
+  destinationType BannerDestination @default(link)
+  destinationUrl  String // wa.me/… | https://… | link a formulario
+  fixed           Boolean           @default(false) // fijo (siempre visible) vs rota con los demás
+  order           Int               @default(0)
+  active          Boolean           @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slot, active])
+}
+
+// ─────────────────────────────────────────────────────────
 //  BENEFICIOS (descuentos para registrados) — canon: feedback Gastón
 // ─────────────────────────────────────────────────────────
 
