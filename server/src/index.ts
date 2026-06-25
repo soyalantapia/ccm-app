@@ -1,6 +1,9 @@
-import { env } from './lib/env.js'
+import { env, assertProd } from './lib/env.js'
 import { createApp } from './app.js'
 import { prisma } from './lib/prisma.js'
+
+// Aborta si falta config crítica en producción (CORS abierto / sin ADMIN_TOKEN).
+assertProd()
 
 const app = createApp()
 

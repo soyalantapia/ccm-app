@@ -12,6 +12,12 @@ const schema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   CORS_ORIGINS: z.string().default('*'),
 
+  // Rate limiting (por IP/min). Tuneables sin redeploy. OJO: en el venue cientos de
+  // asistentes comparten una sola IP pública (NAT de la WiFi), por eso NO limitamos GETs
+  // y los límites de escritura son holgados; subirlos/bajarlos el día del evento por env.
+  RATE_LIMIT_WRITES: z.coerce.number().int().positive().default(120),
+  RATE_LIMIT_ANALYTICS: z.coerce.number().int().positive().default(600),
+
   DATABASE_URL: z.string().min(1, 'DATABASE_URL es obligatoria'),
 
   // Auth — tres secretos separados (opcionales hasta las fases A/G/H).
@@ -48,3 +54,21 @@ if (!parsed.success) {
 export const env = parsed.data
 export const corsOrigins =
   env.CORS_ORIGINS === '*' ? true : env.CORS_ORIGINS.split(',').map((s) => s.trim())
+
+/**
+ * Guardia de producción: aborta el arranque si falta config crítica en prod, en vez de
+ * bootear "sano" con CORS abierto o el panel admin caído (503 silencioso). Cada fase suma
+ * sus secretos requeridos acá (Fase C: MP_ACCESS_TOKEN + MP_WEBHOOK_SECRET, etc.).
+ * Se llama en index.ts antes de listen().
+ */
+export function assertProd(): void {
+  if (env.NODE_ENV !== 'production') return
+  const missing: string[] = []
+  if (env.CORS_ORIGINS === '*') missing.push('CORS_ORIGINS — no puede ser "*" en producción (CORS abierto a cualquier origen)')
+  if (!env.ADMIN_TOKEN) missing.push('ADMIN_TOKEN — sin él, todo /admin/* responde 503 (panel del organizador caído)')
+  if (!env.DEVICE_TOKEN_SECRET) missing.push('DEVICE_TOKEN_SECRET — sin él, no se pueden emitir ni verificar tokens de device (identidad rota)')
+  if (missing.length > 0) {
+    console.error('❌ [assertProd] Faltan variables obligatorias en producción:\n  - ' + missing.join('\n  - '))
+    process.exit(1)
+  }
+}
