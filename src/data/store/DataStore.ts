@@ -165,4 +165,10 @@ export interface DataStore {
   /* Analytics */
   track(event: string, payload?: Record<string, unknown>): void
   getAnalytics(): AnalyticsEvent[]
+
+  /**
+   * Re-hidrata los recursos con vista admin (notas/banners/beneficios) tras loguear el
+   * organizador, para que el panel vea borradores/ocultos/códigos sin recargar. No-op local.
+   */
+  refetchAdminScoped(): void
 }

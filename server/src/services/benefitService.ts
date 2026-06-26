@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js'
 import { toBenefit } from '../lib/serialize.js'
+import { cleanStoredUrl } from '../lib/url.js'
 import type { Benefit } from '@domain/types'
 
 /** ¿El device tiene al menos una inscripción confirmada? (gate de "registrado"). */
@@ -29,7 +30,7 @@ export async function createBenefit(b: Benefit): Promise<Benefit> {
   const row = await prisma.benefit.create({
     data: {
       id: b.id, partner: b.partner, category: b.category, title: b.title, description: b.description,
-      code: b.code ?? null, discountLabel: b.discountLabel ?? null, url: b.url ?? null,
+      code: b.code ?? null, discountLabel: b.discountLabel ?? null, url: cleanStoredUrl(b.url, 'link'),
       logo: b.logo ?? null, validUntil: b.validUntil ? new Date(b.validUntil) : null,
       order: b.order ?? 0, active: b.active ?? true,
     },
@@ -39,9 +40,10 @@ export async function createBenefit(b: Benefit): Promise<Benefit> {
 
 export async function updateBenefit(id: string, patch: Partial<Benefit>): Promise<Benefit> {
   const data: Record<string, unknown> = {}
-  for (const k of ['partner', 'category', 'title', 'description', 'code', 'discountLabel', 'url', 'logo', 'order', 'active'] as const) {
+  for (const k of ['partner', 'category', 'title', 'description', 'code', 'discountLabel', 'logo', 'order', 'active'] as const) {
     if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   }
+  if ('url' in patch) data.url = cleanStoredUrl(patch.url, 'link')
   if ('validUntil' in patch) data.validUntil = patch.validUntil ? new Date(patch.validUntil) : null
   const row = await prisma.benefit.update({ where: { id }, data })
   return toBenefit(row, true)

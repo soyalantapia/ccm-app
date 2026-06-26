@@ -477,7 +477,11 @@ export class LocalDataStore implements DataStore {
   }
 
   createNota(input: NewNota): Nota {
-    const nota: Nota = { ...input, id: newId('nota'), slug: input.slug || slugify(input.title) }
+    const taken = new Set(mergeOverlay(seedNotas, K.notasOverlay).map((n) => n.slug))
+    const base = input.slug || slugify(input.title)
+    let slug = base
+    for (let i = 2; taken.has(slug); i++) slug = `${base}-${i}`
+    const nota: Nota = { ...input, id: newId('nota'), slug }
     overlayCreate(K.notasOverlay, nota)
     this.track('admin_nota_created', { notaId: nota.id })
     return nota
@@ -492,6 +496,9 @@ export class LocalDataStore implements DataStore {
     overlayDelete(K.notasOverlay, id)
     this.track('admin_nota_deleted', { notaId: id })
   }
+
+  /** Sin backend no hay vista admin separada: no-op. */
+  refetchAdminScoped(): void {}
 
   /* ─── Banners gestionados (publicidad simple) ─── */
 

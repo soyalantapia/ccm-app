@@ -4,6 +4,7 @@ import { BedDouble, Crown, Gift, Sparkles, Ticket, UtensilsCrossed, Copy, Check,
 import { Badge, ButtonLink, Card, EmptyState, SectionTitle } from '../components/ui'
 import { store } from '../data/store'
 import { useBenefits, useRegistrations } from '../data/queries'
+import { safeExternalHref, isInternalPath } from '../lib/href'
 import type { Benefit, BenefitCategory } from '../data/types'
 
 const CAT_ICON: Record<BenefitCategory, typeof Gift> = {
@@ -21,10 +22,6 @@ const CAT_LABEL: Record<BenefitCategory, string> = {
   entradas: 'Entradas',
   suscripcion: 'Membresía',
   otro: 'Beneficio',
-}
-
-function isExternal(url: string) {
-  return /^https?:\/\//.test(url) || url.startsWith('wa.me') || url.startsWith('http')
 }
 
 function BenefitCard({ b }: { b: Benefit }) {
@@ -74,9 +71,9 @@ function BenefitCard({ b }: { b: Benefit }) {
           </span>
         )}
         {b.url &&
-          (isExternal(b.url) ? (
+          (safeExternalHref(b.url) ? (
             <a
-              href={b.url}
+              href={safeExternalHref(b.url)!}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => store.track('benefit_click', { benefitId: b.id })}
@@ -84,7 +81,7 @@ function BenefitCard({ b }: { b: Benefit }) {
             >
               Canjear <ArrowUpRight size={13} />
             </a>
-          ) : (
+          ) : isInternalPath(b.url) ? (
             <Link
               to={b.url}
               onClick={() => store.track('benefit_click', { benefitId: b.id })}
@@ -92,7 +89,7 @@ function BenefitCard({ b }: { b: Benefit }) {
             >
               Ver más <ArrowUpRight size={13} />
             </Link>
-          ))}
+          ) : null)}
       </div>
     </Card>
   )

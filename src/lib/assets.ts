@@ -4,5 +4,7 @@
  * renderiza con asset(path).
  */
 export function asset(path: string): string {
+  // URLs absolutas (CDN / portada externa) pasan sin tocar: solo prefijamos rutas relativas.
+  if (/^(https?:)?\/\//.test(path) || path.startsWith('data:')) return path
   return import.meta.env.BASE_URL + path.replace(/^\//, '')
 }

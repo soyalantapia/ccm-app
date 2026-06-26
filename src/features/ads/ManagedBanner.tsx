@@ -1,28 +1,45 @@
 import { useEffect, useMemo } from 'react'
 import { store } from '../../data/store'
 import { useBanners } from '../../data/queries'
+import { safeExternalHref } from '../../lib/href'
 import type { Banner } from '../../data/types'
 
 function BannerCard({ b, slot }: { b: Banner; slot: string }) {
+  const href = safeExternalHref(b.destinationUrl)
   const onClick = () => store.track('banner_click', { bannerId: b.id, slot, brand: b.brand })
+  const label = (
+    <span className="absolute left-2 top-2 z-10 rounded-sm bg-night/70 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-night-ink/80">
+      Publicidad
+    </span>
+  )
+  const img = (
+    <img
+      src={b.image}
+      alt={b.alt || b.brand}
+      loading="lazy"
+      className="aspect-[16/5] w-full object-cover transition duration-500 group-hover:scale-[1.02]"
+    />
+  )
+  // Sin destino seguro: mostramos el banner pero no como link (no rompemos ni habilitamos javascript:).
+  if (!href) {
+    return (
+      <div className="relative block overflow-hidden rounded-md border border-line">
+        {label}
+        {img}
+      </div>
+    )
+  }
   return (
     <a
-      href={b.destinationUrl}
+      href={href}
       target="_blank"
       rel="noopener noreferrer sponsored"
       onClick={onClick}
       aria-label={b.alt || `Publicidad de ${b.brand}`}
       className="group relative block overflow-hidden rounded-md border border-line"
     >
-      <span className="absolute left-2 top-2 z-10 rounded-sm bg-night/70 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-night-ink/80">
-        Publicidad
-      </span>
-      <img
-        src={b.image}
-        alt={b.alt || b.brand}
-        loading="lazy"
-        className="aspect-[16/5] w-full object-cover transition duration-500 group-hover:scale-[1.02]"
-      />
+      {label}
+      {img}
     </a>
   )
 }

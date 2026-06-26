@@ -19,6 +19,7 @@ import {
   Users,
 } from 'lucide-react'
 import { Button, Field, Input, Sheet } from '../ui'
+import { store } from '../../data/store'
 
 const SECTIONS = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -63,6 +64,8 @@ function AdminGate({ onUnlock }: { onUnlock: () => void }) {
     // clave ES el ADMIN_TOKEN: se guarda y viaja como Bearer en las escrituras /admin/*.
     sessionStorage.setItem('ccm:admin', '1')
     sessionStorage.setItem('ccm:admin-token', key)
+    // Ahora que hay token, re-traer notas/banners/beneficios con vista admin (borradores/ocultos/códigos).
+    store.refetchAdminScoped()
     onUnlock()
   }
 

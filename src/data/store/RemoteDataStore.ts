@@ -310,6 +310,14 @@ export class RemoteDataStore extends LocalDataStore {
     this.hydrateNotas()
   }
 
+  /** Tras loguear el organizador, re-trae notas/banners/beneficios con vista admin
+   *  (borradores/ocultos/códigos) — antes el panel mostraba el subset público hasta recargar. */
+  override refetchAdminScoped(): void {
+    this.hydrateBenefits()
+    this.hydrateBanners()
+    this.hydrateNotas()
+  }
+
   /* ─── Notas / novedades (públicas; admin ve todas vía /admin/notas) ─── */
   private notasPath(): string {
     const hasAdmin = typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('ccm:admin-token')
@@ -326,7 +334,11 @@ export class RemoteDataStore extends LocalDataStore {
   }
   override createNota(input: NewNota): Nota {
     if (!this.notas) return super.createNota(input)
-    const nota: Nota = { ...input, id: newId('nota'), slug: input.slug || slugify(input.title) }
+    const taken = new Set(this.notas.map((n) => n.slug))
+    const base = input.slug || slugify(input.title)
+    let slug = base
+    for (let i = 2; taken.has(slug); i++) slug = `${base}-${i}`
+    const nota: Nota = { ...input, id: newId('nota'), slug }
     this.notas = [nota, ...this.notas]
     this.track('admin_nota_created', { notaId: nota.id })
     bus.emit('notas')

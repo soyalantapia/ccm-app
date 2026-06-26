@@ -1,9 +1,16 @@
 import { prisma } from '../lib/prisma.js'
 import { toNota } from '../lib/serialize.js'
-import { notFound } from '../lib/errors.js'
+import { notFound, badRequest } from '../lib/errors.js'
 import type { Nota } from '@domain/types'
 
-/** Notas publicadas, más recientes primero (público). */
+/** Parsea una fecha y falla con 400 (no 500 opaco) si es inválida/ausente. */
+function parseDate(v: unknown, field: string): Date {
+  const d = new Date(v as string)
+  if (!v || isNaN(d.getTime())) throw badRequest('INVALID_DATE', `Fecha inválida en ${field}`)
+  return d
+}
+
+/** Notas publicadas: orden manual de prensa (order asc) y, a igualdad, más recientes primero. */
 export async function getNotas(): Promise<Nota[]> {
   const rows = await prisma.nota.findMany({
     where: { published: true },
@@ -30,7 +37,7 @@ export async function createNota(n: Nota): Promise<Nota> {
       id: n.id, slug: n.slug, title: n.title, excerpt: n.excerpt, body: n.body,
       cover: n.cover ?? null, author: n.author ?? null, category: n.category ?? null,
       youtubeId: n.youtubeId ?? null, published: n.published ?? true,
-      publishedAt: new Date(n.publishedAt), order: n.order ?? 0,
+      publishedAt: parseDate(n.publishedAt, 'fecha de publicación'), order: n.order ?? 0,
     },
   })
   return toNota(row)
