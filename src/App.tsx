@@ -33,6 +33,8 @@ const Sponsors = lazyWithReload(() => import('./pages/Sponsors'))
 const Publicidad = lazyWithReload(() => import('./pages/Publicidad'))
 const Membresia = lazyWithReload(() => import('./pages/Membresia'))
 const Beneficios = lazyWithReload(() => import('./pages/Beneficios'))
+const Notas = lazyWithReload(() => import('./pages/Notas'))
+const NotaDetalle = lazyWithReload(() => import('./pages/NotaDetalle'))
 const Stand = lazyWithReload(() => import('./pages/Stand'))
 const Legales = lazyWithReload(() => import('./pages/Legales'))
 const Inicio = lazyWithReload(() => import('./pages/app/Inicio'))
@@ -48,6 +50,7 @@ const AdminCatalogo = lazyWithReload(() => import('./pages/admin/AdminCatalogo')
 const AdminContenido = lazyWithReload(() => import('./pages/admin/AdminContenido'))
 const AdminBeneficios = lazyWithReload(() => import('./pages/admin/AdminBeneficios'))
 const AdminBanners = lazyWithReload(() => import('./pages/admin/AdminBanners'))
+const AdminNotas = lazyWithReload(() => import('./pages/admin/AdminNotas'))
 const AdminOrdenes = lazyWithReload(() => import('./pages/admin/AdminOrdenes'))
 const AdminConfiguracion = lazyWithReload(() => import('./pages/admin/AdminConfiguracion'))
 
@@ -103,6 +106,8 @@ const router = createBrowserRouter(
             { path: '/publicidad', element: <S><Publicidad /></S> },
             { path: '/membresia', element: <S><Membresia /></S> },
             { path: '/beneficios', element: <S><Beneficios /></S> },
+            { path: '/novedades', element: <S><Notas /></S> },
+            { path: '/novedades/:slug', element: <S><NotaDetalle /></S> },
             { path: '/stand', element: <S><Stand /></S> },
             { path: '/stand/:slug', element: <S><Stand /></S> },
             { path: '/terminos', element: <S><Legales kind="terminos" /></S> },
@@ -127,6 +132,7 @@ const router = createBrowserRouter(
             { path: 'contenido', element: <SA><AdminContenido /></SA> },
             { path: 'beneficios', element: <SA><AdminBeneficios /></SA> },
             { path: 'banners', element: <SA><AdminBanners /></SA> },
+            { path: 'novedades', element: <SA><AdminNotas /></SA> },
             { path: 'ordenes', element: <SA><AdminOrdenes /></SA> },
             { path: 'configuracion', element: <SA><AdminConfiguracion /></SA> },
           ],

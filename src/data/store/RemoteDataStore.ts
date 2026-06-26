@@ -32,6 +32,8 @@ import type {
   NewBenefit,
   Banner,
   NewBanner,
+  Nota,
+  NewNota,
   PlanId,
   ApplicationStatus,
 } from '../types'
@@ -77,6 +79,7 @@ export class RemoteDataStore extends LocalDataStore {
   private membership?: Membership
   private benefits?: Benefit[]
   private banners?: Banner[]
+  private notas?: Nota[]
   private convocatorias = new Map<string, Convocatoria>()
   private convoInflight = new Set<string>()
 
@@ -304,6 +307,46 @@ export class RemoteDataStore extends LocalDataStore {
     this.api.get<Sponsor[]>('/sponsors').then((s) => { this.sponsors = s; bus.emit('sponsors') }).catch(() => {})
     this.api.get<TicketPlan[]>('/plans').then((p) => { this.plans = p; bus.emit('plans') }).catch(() => {})
     this.hydrateBanners()
+    this.hydrateNotas()
+  }
+
+  /* ─── Notas / novedades (públicas; admin ve todas vía /admin/notas) ─── */
+  private notasPath(): string {
+    const hasAdmin = typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('ccm:admin-token')
+    return hasAdmin ? '/admin/notas' : '/notas'
+  }
+  private hydrateNotas(): void {
+    this.api.get<Nota[]>(this.notasPath()).then((n) => { this.notas = n; bus.emit('notas') }).catch(() => {})
+  }
+  override getNotas(): Nota[] {
+    return this.notas ?? super.getNotas()
+  }
+  override getNota(slug: string): Nota | undefined {
+    return this.notas ? this.notas.find((n) => n.slug === slug) : super.getNota(slug)
+  }
+  override createNota(input: NewNota): Nota {
+    if (!this.notas) return super.createNota(input)
+    const nota: Nota = { ...input, id: newId('nota'), slug: input.slug || slugify(input.title) }
+    this.notas = [nota, ...this.notas]
+    this.track('admin_nota_created', { notaId: nota.id })
+    bus.emit('notas')
+    this.api.post('/admin/notas', nota).then(() => this.hydrateNotas()).catch(() => this.hydrateNotas())
+    return nota
+  }
+  override updateNota(id: string, patch: Partial<Nota>): void {
+    if (!this.notas) return super.updateNota(id, patch)
+    this.notas = this.notas.map((n) => (n.id === id ? { ...n, ...patch } : n))
+    this.track('admin_nota_updated', { notaId: id })
+    bus.emit('notas')
+    this.api.patch(`/admin/notas/${id}`, patch).then(() => this.hydrateNotas()).catch(() => this.hydrateNotas())
+  }
+  override deleteNota(id: string): void {
+    if (!this.notas) return super.deleteNota(id)
+    const prev = this.notas
+    this.notas = this.notas.filter((n) => n.id !== id)
+    this.track('admin_nota_deleted', { notaId: id })
+    bus.emit('notas')
+    this.api.del(`/admin/notas/${id}`).catch(() => { this.notas = prev; bus.emit('notas') })
   }
 
   /* ─── Banners gestionados (públicos; admin ve todos vía /admin/banners) ─── */

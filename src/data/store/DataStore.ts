@@ -24,6 +24,8 @@ import type {
   NewBenefit,
   Banner,
   NewBanner,
+  Nota,
+  NewNota,
 } from '../types'
 
 export interface BlockAvailability {
@@ -140,6 +142,13 @@ export interface DataStore {
   createBanner(input: NewBanner): Banner
   updateBanner(id: string, patch: Partial<Banner>): void
   deleteBanner(id: string): void
+
+  /* Notas / novedades (CMS editorial) */
+  getNotas(): Nota[]
+  getNota(slug: string): Nota | undefined
+  createNota(input: NewNota): Nota
+  updateNota(id: string, patch: Partial<Nota>): void
+  deleteNota(id: string): void
 
   /* Beneficios (descuentos para registrados) */
   getBenefits(): Benefit[]

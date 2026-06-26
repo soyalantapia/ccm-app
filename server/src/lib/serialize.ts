@@ -19,6 +19,7 @@ import type {
   Membership,
   Benefit,
   Banner,
+  Nota,
 } from '@prisma/client'
 import type {
   DeviceProfile,
@@ -37,6 +38,7 @@ import type {
   BenefitCategory,
   Banner as DomainBanner,
   BannerDestination,
+  Nota as DomainNota,
 } from '@domain/types'
 
 // PhotoDownload del front vive en DataStore.ts (no en types.ts) y ese archivo no
@@ -224,6 +226,24 @@ export function toConvocatoria(
       ...(f.help ? { help: f.help } : {}),
       ...(f.showIfKey && f.showIfEquals ? { showIf: { key: f.showIfKey, equals: f.showIfEquals } } : {}),
     })),
+  }
+}
+
+/** Nota editorial → shape del dominio. publishedAt → 'YYYY-MM-DD'. */
+export function toNota(n: Nota): DomainNota {
+  return {
+    id: n.id,
+    slug: n.slug,
+    title: n.title,
+    excerpt: n.excerpt,
+    body: n.body,
+    ...(n.cover ? { cover: n.cover } : {}),
+    ...(n.author ? { author: n.author } : {}),
+    ...(n.category ? { category: n.category } : {}),
+    ...(n.youtubeId ? { youtubeId: n.youtubeId } : {}),
+    published: n.published,
+    publishedAt: n.publishedAt.toISOString().slice(0, 10),
+    order: n.order,
   }
 }
 

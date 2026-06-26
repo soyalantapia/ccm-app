@@ -15,6 +15,7 @@ const NAV = [
   { to: '/catalogo', label: 'Catálogo' },
   { to: '/fotos', label: 'Fotos' },
   { to: '/contenido', label: 'Contenido' },
+  { to: '/novedades', label: 'Novedades' },
   { to: '/sponsors', label: 'Sponsors' },
 ]
 

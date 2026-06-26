@@ -210,6 +210,26 @@ export interface ContentItem {
   socioOnly?: boolean
 }
 
+/* ─── Notas / novedades (CMS editorial) ─── */
+
+export interface Nota {
+  id: string
+  slug: string
+  title: string
+  excerpt: string
+  body: string
+  cover?: string
+  author?: string
+  category?: string
+  youtubeId?: string
+  published: boolean
+  publishedAt: string
+  order: number
+}
+
+/** Alta de nota desde el admin (el store genera id + slug). */
+export type NewNota = Omit<Nota, 'id' | 'slug'> & { slug?: string }
+
 /* ─── Banners gestionados (publicidad simple) ─── */
 
 export type BannerDestination = 'whatsapp' | 'link' | 'form'

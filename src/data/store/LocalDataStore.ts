@@ -24,6 +24,8 @@ import type {
   NewBenefit,
   Banner,
   NewBanner,
+  Nota,
+  NewNota,
 } from '../types'
 import type {
   BlockAvailability,
@@ -53,6 +55,7 @@ import { seedApplications } from '../seed/applications'
 import { seedAnalytics } from '../seed/analytics'
 import { seedBenefits } from '../seed/benefits'
 import { seedBanners } from '../seed/banners'
+import { seedNotas } from '../seed/notas'
 
 const K = {
   registrations: 'registrations',
@@ -72,6 +75,7 @@ const K = {
   membership: 'membership',
   benefitsOverlay: 'benefitsOverlay',
   bannersOverlay: 'bannersOverlay',
+  notasOverlay: 'notasOverlay',
 } as const
 
 /** Una campaña autogestionada se presenta como sponsor sintético en los slots. */
@@ -458,6 +462,35 @@ export class LocalDataStore implements DataStore {
   deleteSponsor(id: string): void {
     overlayDelete(K.sponsorsOverlay, id)
     this.track('admin_sponsor_deleted', { sponsorId: id })
+  }
+
+  /* ─── Notas / novedades (CMS editorial) ─── */
+
+  getNotas(): Nota[] {
+    return mergeOverlay(seedNotas, K.notasOverlay)
+      .filter((n) => n.published)
+      .sort((a, b) => a.order - b.order || b.publishedAt.localeCompare(a.publishedAt))
+  }
+
+  getNota(slug: string): Nota | undefined {
+    return mergeOverlay(seedNotas, K.notasOverlay).find((n) => n.slug === slug && n.published)
+  }
+
+  createNota(input: NewNota): Nota {
+    const nota: Nota = { ...input, id: newId('nota'), slug: input.slug || slugify(input.title) }
+    overlayCreate(K.notasOverlay, nota)
+    this.track('admin_nota_created', { notaId: nota.id })
+    return nota
+  }
+
+  updateNota(id: string, patch: Partial<Nota>): void {
+    overlayEdit(K.notasOverlay, id, patch)
+    this.track('admin_nota_updated', { notaId: id })
+  }
+
+  deleteNota(id: string): void {
+    overlayDelete(K.notasOverlay, id)
+    this.track('admin_nota_deleted', { notaId: id })
   }
 
   /* ─── Banners gestionados (publicidad simple) ─── */

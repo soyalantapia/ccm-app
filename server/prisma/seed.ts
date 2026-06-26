@@ -19,6 +19,7 @@ import { seedConvocatorias } from '../../src/data/seed/convocatorias'
 import { seedApplications } from '../../src/data/seed/applications'
 import { seedBenefits } from '../../src/data/seed/benefits'
 import { seedBanners } from '../../src/data/seed/banners'
+import { seedNotas } from '../../src/data/seed/notas'
 import { seedPlans } from '../../src/config/plans'
 
 const prisma = new PrismaClient()
@@ -147,7 +148,18 @@ async function main() {
     await prisma.banner.upsert({ where: { id: bn.id }, create: { id: bn.id, ...data }, update: data })
   }
 
+  // ── Notas / novedades editoriales (las edita prensa) ──
+  for (const n of seedNotas) {
+    const data = {
+      slug: n.slug, title: n.title, excerpt: n.excerpt, body: n.body, cover: n.cover ?? null,
+      author: n.author ?? null, category: n.category ?? null, youtubeId: n.youtubeId ?? null,
+      published: n.published, publishedAt: new Date(n.publishedAt), order: n.order,
+    }
+    await prisma.nota.upsert({ where: { id: n.id }, create: { id: n.id, ...data }, update: data })
+  }
+
   const counts = {
+    notas: await prisma.nota.count(),
     banners: await prisma.banner.count(),
     sponsors: await prisma.sponsor.count(),
     benefits: await prisma.benefit.count(),

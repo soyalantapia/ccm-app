@@ -491,6 +491,32 @@ model ContentItem {
 }
 
 // ─────────────────────────────────────────────────────────
+//  NOTAS / NOVEDADES (CMS editorial que sube prensa) — canon: feedback Gastón
+// ─────────────────────────────────────────────────────────
+
+// Nota editorial (noticia/entrevista). La carga prensa, se edita "como noticias" (semanal).
+// Puede llevar un video embebido (Gastón: "una nota que creamos con un video o algo").
+model Nota {
+  id          String   @id // "nota-..."
+  slug        String   @unique
+  title       String
+  excerpt     String // bajada / resumen para la tarjeta
+  body        String   @db.Text // cuerpo (texto plano con saltos de línea)
+  cover       String? // imagen de portada (URL)
+  author      String? // firma (prensa)
+  category    String? // moda | belleza | arte | gastronomia | turismo | tecnologia | evento
+  youtubeId   String? // video embebido opcional
+  published   Boolean  @default(true)
+  publishedAt DateTime
+  order       Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([published, publishedAt])
+}
+
+// ─────────────────────────────────────────────────────────
 //  BANNERS GESTIONADOS (publicidad simple, la sube marketing) — canon: feedback Gastón
 // ─────────────────────────────────────────────────────────
 

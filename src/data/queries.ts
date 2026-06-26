@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { store } from './store'
 import type { BlockAvailability } from './store'
-import type { EventItem, EventBlock, Registration, Benefit, Banner } from './types'
+import type { EventItem, EventBlock, Registration, Benefit, Banner, Nota } from './types'
 
 /**
  * Hooks de lectura reactiva sobre el DataStore, vía TanStack Query (migración async).
@@ -54,4 +54,13 @@ export function useBenefits(): Benefit[] {
 
 export function useBanners(): Banner[] {
   return useStoreQuery(['banners'], () => store.getBanners())
+}
+
+/* ─── Notas / novedades ─── */
+
+export function useNotas(): Nota[] {
+  return useStoreQuery(['notas'], () => store.getNotas())
+}
+export function useNota(slug: string): Nota | undefined {
+  return useStoreQuery(['notas', slug], () => store.getNota(slug))
 }
