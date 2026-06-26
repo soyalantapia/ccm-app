@@ -116,6 +116,8 @@ export interface PortfolioPiece {
   image: string
   title: string
   caption?: string
+  /** Precio del cuadro/prenda (opcional) — "algunas tendrán el precio" (Gastón). */
+  price?: number
 }
 
 export interface CatalogProfile {
@@ -128,6 +130,8 @@ export interface CatalogProfile {
   bio: string
   photo: string
   instagram?: string
+  /** Contacto directo (wa.me/… o número) — "si quiere se contacta" (Gastón). */
+  whatsapp?: string
   verified: boolean
   participatesIn: string[]
   portfolio: PortfolioPiece[]

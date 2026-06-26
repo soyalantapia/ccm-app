@@ -169,17 +169,17 @@ async function readCatalog(id: string): Promise<CatalogProfile> {
   return toCatalogProfile(c)
 }
 export async function createCatalogProfile(c: CatalogProfile): Promise<CatalogProfile> {
-  await prisma.catalogProfile.create({ data: { id: c.id, slug: c.slug, name: c.name, role: c.role, platform: c.platform, city: c.city, bio: c.bio, photo: c.photo, instagram: c.instagram ?? null, verified: c.verified, participatesIn: c.participatesIn } })
-  if (c.portfolio?.length) await prisma.portfolioPiece.createMany({ data: c.portfolio.map((p, i) => ({ id: p.id, profileId: c.id, image: p.image, title: p.title, caption: p.caption ?? null, order: i })) })
+  await prisma.catalogProfile.create({ data: { id: c.id, slug: c.slug, name: c.name, role: c.role, platform: c.platform, city: c.city, bio: c.bio, photo: c.photo, instagram: c.instagram ?? null, whatsapp: c.whatsapp ?? null, verified: c.verified, participatesIn: c.participatesIn } })
+  if (c.portfolio?.length) await prisma.portfolioPiece.createMany({ data: c.portfolio.map((p, i) => ({ id: p.id, profileId: c.id, image: p.image, title: p.title, caption: p.caption ?? null, price: p.price ?? null, order: i })) })
   return readCatalog(c.id)
 }
 export async function updateCatalogProfile(id: string, patch: Partial<CatalogProfile>): Promise<CatalogProfile> {
   const data: Record<string, unknown> = {}
-  for (const k of ['slug', 'name', 'role', 'platform', 'city', 'bio', 'photo', 'instagram', 'verified', 'participatesIn'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
+  for (const k of ['slug', 'name', 'role', 'platform', 'city', 'bio', 'photo', 'instagram', 'whatsapp', 'verified', 'participatesIn'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   await prisma.catalogProfile.update({ where: { id }, data })
   if (patch.portfolio) {
     await prisma.portfolioPiece.deleteMany({ where: { profileId: id } })
-    if (patch.portfolio.length) await prisma.portfolioPiece.createMany({ data: patch.portfolio.map((p, i) => ({ id: p.id, profileId: id, image: p.image, title: p.title, caption: p.caption ?? null, order: i })) })
+    if (patch.portfolio.length) await prisma.portfolioPiece.createMany({ data: patch.portfolio.map((p, i) => ({ id: p.id, profileId: id, image: p.image, title: p.title, caption: p.caption ?? null, price: p.price ?? null, order: i })) })
   }
   return readCatalog(id)
 }

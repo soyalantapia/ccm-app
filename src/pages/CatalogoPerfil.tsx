@@ -1,9 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowDown, ArrowLeft, ArrowRight, Maximize2 } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowRight, Maximize2, MessageCircle } from 'lucide-react'
 import { ButtonLink, EmptyState, Eyebrow, Img } from '../components/ui'
 import { store, useStore } from '../data/store'
 import { AuthorBlock, PortfolioViewer } from '../features/catalogo'
+import { formatMoney } from '../features/tickets/format'
+
+/** Link de contacto del participante: WhatsApp directo o Instagram. */
+function contactHref(profile: { whatsapp?: string; instagram?: string }): string | null {
+  if (profile.whatsapp) return /^https?:\/\//.test(profile.whatsapp) ? profile.whatsapp : `https://wa.me/${profile.whatsapp.replace(/\D/g, '')}`
+  if (profile.instagram) return `https://instagram.com/${profile.instagram.replace(/^@/, '')}`
+  return null
+}
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
@@ -80,13 +88,26 @@ export default function CatalogoPerfil() {
               {profile.name}
             </h1>
           </div>
-          <button
-            onClick={goToAuthor}
-            className="group eyebrow inline-flex items-center gap-2 text-[10px] text-ink-soft transition-colors duration-200 hover:text-ink"
-          >
-            Conocé al autor
-            <ArrowDown size={14} className="transition-transform duration-200 group-hover:translate-y-0.5" />
-          </button>
+          <div className="flex items-center gap-5">
+            {contactHref(profile) && (
+              <a
+                href={contactHref(profile)!}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => store.track('profile_contact', { profileId: profile.id })}
+                className="inline-flex items-center gap-2 rounded-sm bg-accent px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] text-accent-ink transition active:scale-[0.98]"
+              >
+                <MessageCircle size={14} /> Contactar
+              </a>
+            )}
+            <button
+              onClick={goToAuthor}
+              className="group eyebrow inline-flex items-center gap-2 text-[10px] text-ink-soft transition-colors duration-200 hover:text-ink"
+            >
+              Conocé al autor
+              <ArrowDown size={14} className="transition-transform duration-200 group-hover:translate-y-0.5" />
+            </button>
+          </div>
         </div>
 
         {hero ? (
@@ -115,6 +136,9 @@ export default function CatalogoPerfil() {
                   </h2>
                   {hero.caption && (
                     <p className="mt-3 text-[15px] leading-relaxed text-ink-soft">{hero.caption}</p>
+                  )}
+                  {hero.price != null && (
+                    <p className="type-serif mt-3 text-xl text-accent">{formatMoney(hero.price)}</p>
                   )}
                   <span className="eyebrow mt-5 inline-flex items-center gap-2 text-[10px] text-ink-soft transition-colors duration-200 group-hover:text-ink">
                     <Maximize2 size={12} strokeWidth={1.5} />
@@ -147,6 +171,9 @@ export default function CatalogoPerfil() {
                         {piece.title}
                       </span>
                     </div>
+                    {piece.price != null && (
+                      <p className="type-serif mt-1 text-sm text-accent">{formatMoney(piece.price)}</p>
+                    )}
                   </button>
                 ))}
               </div>

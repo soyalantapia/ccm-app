@@ -77,12 +77,12 @@ async function main() {
   for (const c of seedCatalog) {
     const data = {
       slug: c.slug, name: c.name, role: c.role, platform: c.platform, city: c.city,
-      bio: c.bio, photo: c.photo, instagram: c.instagram ?? null, verified: c.verified, participatesIn: c.participatesIn,
+      bio: c.bio, photo: c.photo, instagram: c.instagram ?? null, whatsapp: c.whatsapp ?? null, verified: c.verified, participatesIn: c.participatesIn,
     }
     await prisma.catalogProfile.upsert({ where: { id: c.id }, create: { id: c.id, ...data }, update: data })
     await prisma.portfolioPiece.deleteMany({ where: { profileId: c.id } })
     await prisma.portfolioPiece.createMany({
-      data: c.portfolio.map((p, i) => ({ id: p.id, profileId: c.id, image: p.image, title: p.title, caption: p.caption ?? null, order: i })),
+      data: c.portfolio.map((p, i) => ({ id: p.id, profileId: c.id, image: p.image, title: p.title, caption: p.caption ?? null, price: p.price ?? null, order: i })),
     })
   }
 

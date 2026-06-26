@@ -28,6 +28,9 @@ const PORTFOLIO_POOL: string[] = Array.from(
   (_, i) => `img/gallery/g${String(i + 1).padStart(2, '0')}.jpg`,
 )
 
+/** Pieza del portfolio en edición: imagen + título + precio (string para el input). */
+type PieceForm = { image: string; title: string; price: string }
+
 type Form = {
   name: string
   role: string
@@ -36,9 +39,10 @@ type Form = {
   bio: string
   photo: string
   instagram: string
+  whatsapp: string
   verified: boolean
   participatesIn: string
-  portfolio: string[]
+  portfolio: PieceForm[]
 }
 
 const empty: Form = {
@@ -49,6 +53,7 @@ const empty: Form = {
   bio: '',
   photo: PHOTO_OPTIONS[0].value,
   instagram: '',
+  whatsapp: '',
   verified: false,
   participatesIn: 'CCM 2026',
   portfolio: [],
@@ -63,9 +68,10 @@ function fromProfile(p: CatalogProfile): Form {
     bio: p.bio,
     photo: p.photo,
     instagram: p.instagram ?? '',
+    whatsapp: p.whatsapp ?? '',
     verified: p.verified,
     participatesIn: p.participatesIn.join(', '),
-    portfolio: p.portfolio.map((pf) => pf.image),
+    portfolio: p.portfolio.map((pf) => ({ image: pf.image, title: pf.title, price: pf.price != null ? String(pf.price) : '' })),
   }
 }
 
@@ -94,9 +100,15 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
   const togglePortfolio = (image: string) =>
     setF((prev) => ({
       ...prev,
-      portfolio: prev.portfolio.includes(image)
-        ? prev.portfolio.filter((i) => i !== image)
-        : [...prev.portfolio, image],
+      portfolio: prev.portfolio.some((p) => p.image === image)
+        ? prev.portfolio.filter((p) => p.image !== image)
+        : [...prev.portfolio, { image, title: '', price: '' }],
+    }))
+
+  const setPiece = (image: string, key: 'title' | 'price') => (e: { target: { value: string } }) =>
+    setF((prev) => ({
+      ...prev,
+      portfolio: prev.portfolio.map((p) => (p.image === image ? { ...p, [key]: e.target.value } : p)),
     }))
 
   const submit = (e: FormEvent) => {
@@ -109,10 +121,11 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
-    const portfolio: PortfolioPiece[] = f.portfolio.map((image, i) => ({
+    const portfolio: PortfolioPiece[] = f.portfolio.map((p, i) => ({
       id: newId('pf'),
-      image,
-      title: `Obra ${i + 1}`,
+      image: p.image,
+      title: p.title.trim() || `Obra ${i + 1}`,
+      price: p.price.trim() ? Number(p.price) : undefined,
     }))
     const data = {
       name: f.name.trim(),
@@ -122,6 +135,7 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
       bio: f.bio.trim(),
       photo: f.photo,
       instagram: f.instagram.trim() || undefined,
+      whatsapp: f.whatsapp.trim() || undefined,
       verified: f.verified,
       participatesIn,
       portfolio,
@@ -163,6 +177,9 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
             <Input value={f.instagram} onChange={set('instagram')} placeholder="@usuario" />
           </Field>
         </div>
+        <Field label="WhatsApp / contacto" hint="Opcional — wa.me/… o número, para el botón Contactar">
+          <Input value={f.whatsapp} onChange={set('whatsapp')} placeholder="https://wa.me/549…" />
+        </Field>
         <Field label="Bio" required>
           <Textarea
             value={f.bio}
@@ -211,7 +228,7 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
         >
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
             {PORTFOLIO_POOL.map((image, i) => {
-              const on = f.portfolio.includes(image)
+              const on = f.portfolio.some((p) => p.image === image)
               return (
                 <button
                   key={image}
@@ -233,6 +250,30 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
             })}
           </div>
         </Field>
+
+        {f.portfolio.length > 0 && (
+          <div className="space-y-2.5 rounded-md border border-line bg-surface p-3">
+            <p className="eyebrow text-[10px] text-ink-soft">Título y precio por obra (el precio es opcional)</p>
+            {f.portfolio.map((p) => (
+              <div key={p.image} className="flex items-center gap-2.5">
+                <Img src={p.image} alt="" ratio="1/1" className="w-12 shrink-0 rounded-sm" />
+                <Input
+                  value={p.title}
+                  onChange={setPiece(p.image, 'title')}
+                  placeholder="Título de la obra"
+                  className="flex-1"
+                />
+                <Input
+                  type="number"
+                  value={p.price}
+                  onChange={setPiece(p.image, 'price')}
+                  placeholder="Precio $"
+                  className="w-28 shrink-0"
+                />
+              </div>
+            ))}
+          </div>
+        )}
 
         {error && <p className="text-xs text-danger">{error}</p>}
 

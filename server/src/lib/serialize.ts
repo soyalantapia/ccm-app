@@ -142,6 +142,7 @@ export function toCatalogProfile(
     bio: c.bio,
     photo: c.photo,
     ...(c.instagram ? { instagram: c.instagram } : {}),
+    ...(c.whatsapp ? { whatsapp: c.whatsapp } : {}),
     verified: c.verified,
     participatesIn: c.participatesIn,
     portfolio: (c.portfolio ?? []).map((p) => ({
@@ -149,6 +150,7 @@ export function toCatalogProfile(
       image: p.image,
       title: p.title,
       ...(p.caption ? { caption: p.caption } : {}),
+      ...(p.price != null ? { price: p.price } : {}),
     })),
   }
 }

@@ -318,6 +318,7 @@ model CatalogProfile {
   bio            String   @db.Text
   photo          String
   instagram      String?
+  whatsapp       String? // contacto directo (wa.me/… o número) — "si quiere se contacta" (Gastón)
   verified       Boolean  @default(false)
   participatesIn String[]
 
@@ -336,6 +337,7 @@ model PortfolioPiece {
   image     String
   title     String
   caption   String?
+  price     Int? // precio del cuadro/prenda (opcional) — "algunas tendrán el precio" (Gastón)
   order     Int     @default(0)
 
   profile CatalogProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
