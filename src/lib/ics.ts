@@ -129,10 +129,10 @@ export function buildIcs(event: EventItem, url?: string): string {
   return lines.join('\r\n')
 }
 
-/** Link a la ficha del evento dentro de la app (basename /ccm-app). */
+/** Link a la ficha del evento dentro de la app (respeta el base: /ccm-app/ o /). */
 function eventUrl(event: EventItem): string {
   if (typeof window === 'undefined') return ''
-  return `${window.location.origin}/ccm-app/eventos/${event.slug}`
+  return `${window.location.origin}${import.meta.env.BASE_URL}eventos/${event.slug}`
 }
 
 /**

@@ -5,7 +5,10 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { copyFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const SITE = 'https://soyalantapia.github.io/ccm-app'
+// Base path y URL pública configurables por env: GH Pages usa '/ccm-app/'; Railway (un
+// solo servicio que sirve el front desde la raíz) usa '/' vía VITE_BASE=/.
+const BASE = process.env.VITE_BASE || '/ccm-app/'
+const SITE = process.env.VITE_OG_SITE || 'https://soyalantapia.github.io/ccm-app'
 
 /**
  * Rutas con preview propio al compartir (WhatsApp/redes). Como WhatsApp lee los
@@ -51,7 +54,7 @@ function spaFallback(): Plugin {
 }
 
 export default defineConfig({
-  base: '/ccm-app/',
+  base: BASE,
   plugins: [
     react(),
     tailwindcss(),
@@ -68,8 +71,8 @@ export default defineConfig({
           'El Ecosistema de Negocios y Tendencias más influyente del interior del país. 14ª Edición · 19 y 20 de septiembre de 2026.',
         lang: 'es-AR',
         dir: 'ltr',
-        start_url: '/ccm-app/',
-        scope: '/ccm-app/',
+        start_url: BASE,
+        scope: BASE,
         display: 'standalone',
         orientation: 'portrait',
         background_color: '#F4EFE3',
@@ -81,11 +84,11 @@ export default defineConfig({
         ],
       },
       workbox: {
-        navigateFallback: '/ccm-app/index.html',
+        navigateFallback: `${BASE}index.html`,
         // El fallback a index.html es solo para navegaciones: nunca para los
         // chunks/asset. Si un asset se pide durante la propagación de un deploy,
         // que vaya a la red (y lo recupere [[lazyWithReload]]), no que reciba HTML.
-        navigateFallbackDenylist: [/^\/ccm-app\/assets\//],
+        navigateFallbackDenylist: [new RegExp(`^${BASE}assets/`)],
         // Shell offline: JS/CSS/fonts/icons precached. Photos are runtime-cached
         // (CacheFirst) so the install stays light but viewed images work offline.
         globPatterns: ['**/*.{js,css,html,woff2,svg}', 'icons/*.png'],

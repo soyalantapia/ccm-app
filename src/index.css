@@ -1,10 +1,11 @@
 @import 'tailwindcss';
 
-/* Fuente display auto-hosteada con nombre/URL estable (no fingerprinted) para
-   poder precargarla desde index.html y cortar el FOUT sobre el título (LCP). */
+/* Fuente display auto-hosteada. Referenciada relativa: la procesa Vite y le aplica el
+   base correcto (/ccm-app/ en GH Pages, / en Railway). Antes estaba hardcodeada a
+   /ccm-app/ y, servida desde otro base, la fuente caía a un 404/HTML (no decodificaba). */
 @font-face {
   font-family: 'Schibsted Display';
-  src: url('/ccm-app/fonts/schibsted-display.woff2') format('woff2');
+  src: url('./fonts/schibsted-display.woff2') format('woff2');
   font-weight: 400 800;
   font-style: normal;
   font-display: swap;

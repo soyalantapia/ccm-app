@@ -18,6 +18,10 @@ const schema = z.object({
   RATE_LIMIT_WRITES: z.coerce.number().int().positive().default(120),
   RATE_LIMIT_ANALYTICS: z.coerce.number().int().positive().default(600),
 
+  // Si está seteada, el server sirve la SPA (front buildeado) desde esta carpeta + fallback
+  // a index.html para rutas no-API → un solo servicio Railway sirve front + /api/v1.
+  FRONT_DIST: z.string().optional(),
+
   DATABASE_URL: z.string().min(1, 'DATABASE_URL es obligatoria'),
 
   // Auth — tres secretos separados (opcionales hasta las fases A/G/H).

@@ -76,7 +76,7 @@ export function RouteError() {
         {working ? 'Actualizando…' : 'Actualizar la app'}
       </button>
 
-      <a href="/ccm-app/" className="text-xs uppercase tracking-[0.12em] text-ink-soft underline-offset-4 hover:underline">
+      <a href={import.meta.env.BASE_URL} className="text-xs uppercase tracking-[0.12em] text-ink-soft underline-offset-4 hover:underline">
         Volver al inicio
       </a>
     </main>

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Button, Field, Input, Select, Sheet, Textarea } from '../../components/ui'
 import { store } from '../../data/store'
+import { asset } from '../../lib/assets'
 import type { Nota } from '../../data/types'
 
 const CATEGORY_OPTIONS = [
@@ -105,7 +106,7 @@ export function OpsNotaForm({ open, nota, onClose }: Props) {
           <Input value={f.cover} onChange={set('cover')} placeholder="https://…/portada.jpg o img/gallery/g03.jpg" />
         </Field>
         {f.cover.trim() && (
-          <img src={f.cover.trim().startsWith('http') ? f.cover.trim() : `/ccm-app/${f.cover.trim()}`} alt="Vista previa"
+          <img src={asset(f.cover.trim())} alt="Vista previa"
             className="aspect-video w-full rounded-sm border border-line object-cover" />
         )}
 

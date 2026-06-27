@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -26,7 +27,9 @@ export function createApp() {
   // Detrás del proxy de Railway (1 hop): habilita req.ip real para el rate-limit por IP.
   app.set('trust proxy', 1)
 
-  app.use(helmet())
+  // helmet sin CSP/COEP: ahora este service también sirve la SPA (imágenes externas,
+  // YouTube, fuentes) — el CSP estricto la rompería. Quedan HSTS, nosniff, frameguard, etc.
+  app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }))
   app.use(cors({ origin: corsOrigins, credentials: false }))
   app.use(express.json({ limit: '1mb' }))
 
@@ -74,6 +77,15 @@ export function createApp() {
   v1.use(adminRouter) // Fase G: /admin/events|blocks|contents (CRUD, requireAdmin)
   // TODO(fases C/D/F + resto G): orders, memberships, sponsors/galleries/catalog CRUD, applications ...
   app.use('/api/v1', v1)
+
+  // SPA: si FRONT_DIST está seteada, este service también sirve el front buildeado.
+  // Estáticos con cache larga (assets hasheados); el resto de las rutas → index.html
+  // (fallback del router), EXCEPTO /api/* (que cae al notFoundHandler como 404 JSON).
+  if (env.FRONT_DIST) {
+    const dist = env.FRONT_DIST
+    app.use(express.static(dist, { index: false }))
+    app.get(/^\/(?!api\/).*/, (_req, res) => res.sendFile(join(dist, 'index.html')))
+  }
 
   app.use(notFoundHandler)
   app.use(errorHandler)
