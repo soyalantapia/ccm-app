@@ -1,6 +1,6 @@
 # CCM Server — contexto para el agente
 
-Backend de CCM (Córdoba Corazón de Moda). Implementa el contrato `DataStore` del frontend contra una API real, **sin reescribir pantallas**. Esto es la Fase 1 (el frontend en `../src` es la Fase 0, demo). Leé `../work-agent/backend/00-README.md` (decisiones canónicas) antes de tocar nada.
+Backend de CCM (Córdoba Corazón de Moda). Implementa el contrato `DataStore` del frontend contra una API real, **sin reescribir pantallas**. **En producción en Railway** (un solo servicio que sirve también el front buildeado). Leé `../PROJECT.MD` (biblia) + `../work-agent/ESTADO-ACTUAL.md` (estado real) + `../work-agent/backend/00-README.md` (decisiones canónicas) antes de tocar nada.
 
 ## Reglas duras (canon — ver work-agent/backend/00-README.md)
 
@@ -36,16 +36,25 @@ npm run test                    # vitest (webhook MP, concurrencia de cupo, etc.
 
 ## Estado / hoja de ruta
 
-Migración **por fases por dominio** (no por capa) — ver `work-agent/backend/10-plan-migracion-fases.md` y los prompts en `work-agent/backend/build/PROMPTS-POR-FASE.md`.
+Migración **por fases por dominio** (no por capa) — ver `work-agent/backend/10-plan-migracion-fases.md`. **Estado real detallado: `../work-agent/ESTADO-ACTUAL.md`.**
 
-- [x] **Fase 0** — esqueleto: Express + Prisma (schema canónico completo) + `/api/v1/health` + env validado + formato de error + alias de tipos.
-- [ ] **Fase A** — identidad + perfil + analytics (`/me`, `/analytics`).
-- [ ] **Fase B** — eventos + bloques + inscripciones + **cupos** (transacción anti-carrera).
-- [ ] **Fase C** — entradas + **pagos MP** (webhook). 🔶 cuenta MP de Gastón.
-- [ ] **Fase D** — membresía Socio.
-- [ ] **Fase E** — catálogo + galerías + contenido + **uploads** (object storage).
-- [ ] **Fase F** — publicidad self-serve + sponsors.
-- [ ] **Fase G** — auth admin (roles) + CRUD del organizador.
+- [x] **Fase 0** — esqueleto: Express + Prisma (schema canónico) + `/api/v1/health` + env validado + formato de error + alias de tipos.
+- [x] **Fase A** — identidad + perfil + analytics (`/me`, `/analytics`).
+- [x] **Fase B** — eventos + bloques + inscripciones + **cupos** (transacción `SELECT FOR UPDATE` anti-oversell).
+- [~] **Fase C** — entradas + **pagos MP**: motor construido; activación bloqueada por 🔶 cuenta MP + precios de Gastón (o seguir en Tikealo).
+- [x] **Fase D** — membresía Socio (gate `socioOnly`).
+- [x] **Fase E** — catálogo + galerías + contenido. Falta decidir storage de imágenes (🔶 R2 vs Spaces).
+- [x] **Fase F** — publicidad self-serve + sponsors (pago por QR).
+- [x] **Fase G** — auth admin (Bearer `ADMIN_TOKEN` temporal) + CRUD del organizador. Falta login OTP + roles `AdminRole`.
 - [ ] **Fase H** — acreditación en puerta (scan QR, online/offline).
+- **+ 4 features de los audios de Gastón** (en prod): beneficios (código gated), banners gestionados, participantes (precio+contacto), notas/CMS.
 
-> El frontend conmuta a este backend con `VITE_API_URL`; sin esa env, vuelve al `LocalDataStore` (fallback). Nunca rompas ese fallback.
+### Lo realmente implementado vs el canon
+- **Auth device:** HMAC-SHA256 (`lib/deviceToken.ts`), header **`X-Device-Token`**, emisión server-only en `POST /devices`. No es JWT (a propósito, sin libs). Sin expiración/rotación aún.
+- **Auth admin:** `Authorization: Bearer <ADMIN_TOKEN>` (shared secret, un solo rol OWNER de facto) — **temporal**; el canon pide OTP + roles.
+- **Pagos:** la tabla `Payment` polimórfica y el patrón webhook son canon; el flujo MP de entradas aún no está activo en prod.
+- **Single-service:** si `FRONT_DIST` está seteada, el server además sirve el SPA (`dist/`) + fallback para rutas no-`/api/`.
+
+> El frontend conmuta a este backend con `VITE_API_URL`; sin esa env, vuelve al `LocalDataStore` (fallback). **Nunca rompas ese fallback.**
+>
+> 🔴 **Tests:** el script `npm test` (vitest+supertest) está listo pero **no hay ningún archivo de test**. Es la deuda #1.

@@ -1,8 +1,9 @@
 # CCM — Backend (`server/`)
 
-API de **Córdoba Corazón de Moda** (Fase 1). Implementa el contrato `DataStore` del frontend contra Postgres, sin reescribir pantallas. Node + TypeScript + Express + Prisma, pensado para Railway.
+API de **Córdoba Corazón de Moda**. Implementa el contrato `DataStore` del frontend contra Postgres, sin reescribir pantallas. Node + TypeScript + Express + Prisma. **En producción en Railway**, donde el mismo servicio sirve además el frontend buildeado (single-service; ver `FRONT_DIST` en `app.ts`).
 
-Plan completo en [`../work-agent/backend/`](../work-agent/backend/00-README.md). Convenciones del repo en [`CLAUDE.md`](./CLAUDE.md).
+- 📖 Biblia del proyecto: [`../PROJECT.MD`](../PROJECT.MD) · Estado real: [`../work-agent/ESTADO-ACTUAL.md`](../work-agent/ESTADO-ACTUAL.md)
+- Plan de arquitectura: [`../work-agent/backend/`](../work-agent/backend/00-README.md) (es el *plan*; el estado real está arriba). Convenciones: [`CLAUDE.md`](./CLAUDE.md).
 
 ## Requisitos
 
@@ -32,18 +33,21 @@ npm run typecheck             # tsc --noEmit
 ```
 server/
 ├─ prisma/
-│  ├─ schema.prisma   # canon = doc 04 (modelo de datos)
-│  └─ seed.ts         # seed→prod idempotente (stub hasta fase B/E)
+│  ├─ schema.prisma   # 29 modelos · 15 enums (canon = doc 04)
+│  ├─ migrations/     # 6 migraciones versionadas (0_init … 5_nota)
+│  └─ seed.ts         # seed→prod idempotente (funcional)
 ├─ src/
-│  ├─ index.ts        # arranque + apagado prolijo
-│  ├─ app.ts          # Express app, monta /api/v1
+│  ├─ index.ts        # arranque (assertProd) + apagado prolijo
+│  ├─ app.ts          # Express: middlewares + /api/v1 + serving del SPA (FRONT_DIST)
 │  ├─ domain.ts       # re-export de los tipos del front (@domain/types)
-│  ├─ routes/         # HTTP por dominio (hoy: health)
-│  ├─ middlewares/    # error handler, 404, ...
-│  └─ lib/            # env (zod), prisma (singleton), errors
+│  ├─ routes/         # 13 routers (health, devices, me, events, registrations, catalog,
+│  │                  #   photos, benefits, banners, notas, memberships, analytics, admin)
+│  ├─ services/       # 12 services (lógica de negocio + Prisma)
+│  ├─ middlewares/    # device, admin, error
+│  └─ lib/            # env (zod), prisma (singleton), errors, deviceToken (HMAC), serialize, url
 └─ .env.example       # contrato de entorno (3 secretos JWT, MP, storage)
 ```
 
 ## Estado
 
-**Fase 0** lista (esqueleto + schema canónico + `/api/v1/health`). Las fases A→H se construyen una por vez siguiendo `../work-agent/backend/build/PROMPTS-POR-FASE.md`.
+**En producción.** Fases **0, A, B, D, E, F, G** completas + las 4 features de los audios de Gastón (beneficios, banners, participantes, notas). Pendiente: pagos MP de entradas (C, bloqueado por Gastón), acreditación QR (H), login OTP + roles, uploads de imágenes, y **tests** (el script `npm test` corre vitest pero hoy hay 0 archivos). Estado detallado: [`../work-agent/ESTADO-ACTUAL.md`](../work-agent/ESTADO-ACTUAL.md).
