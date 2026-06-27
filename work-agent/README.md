@@ -17,6 +17,7 @@ Plataforma **EN VIVO en Railway como un solo servicio** (front + API): [health](
 
 | Archivo / carpeta | Qué es |
 |---|---|
+| **`ONBOARDING-DEV.md`** | 🚀 **Prompt ejecutable** para que un dev senior nuevo recorra TODO el proyecto, lo entienda y proponga "¿con qué seguimos?". Empezá acá si te sumás al equipo. |
 | **`ESTADO-ACTUAL.md`** | ⭐ Estado **real** vivo (qué hay en prod, qué falta, accesos). |
 | `HANDOFF-COMPLETO.md` | Handoff autosuficiente del backend. |
 | `PROMPT-SENIOR-DEV.md` | Prompt para arrancar un chat nuevo como senior dev. |
