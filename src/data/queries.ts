@@ -10,11 +10,14 @@ import type { EventItem, EventBlock, Registration, Benefit, Banner, Nota } from 
  * `useStore((s) => s.getX())`. Cada bus key ('events', 'blocks', …) = prefijo de su queryKey.
  */
 function useStoreQuery<T>(key: unknown[], read: () => T): T {
-  return useQuery({
+  // initialData (función) garantiza data definida en el primer render; el cast cierra el
+  // tipo (useQuery lo ensancha a T | undefined por la inferencia del genérico).
+  const { data } = useQuery({
     queryKey: key,
     queryFn: () => Promise.resolve(read()),
     initialData: read,
-  }).data
+  })
+  return data as T
 }
 
 /* ─── Eventos / bloques / inscripciones ─── */
