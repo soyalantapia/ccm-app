@@ -1,1 +1,0 @@
-function e(e){if(!e)return null;let t=e.trim();return t?/^(https?:\/\/|mailto:|tel:)/i.test(t)?t:/^[a-z][a-z0-9+.-]*:/i.test(t)||t.startsWith(`/`)?null:/^[\w-]+(\.[\w-]+)+/.test(t)?`https://${t}`:null:null}function t(e){return!!e&&e.trim().startsWith(`/`)}export{e as n,t};
