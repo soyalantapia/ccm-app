@@ -123,7 +123,7 @@ export function Interstitial() {
         </button>
       )}
 
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-between px-6 pb-8 pt-[max(2.5rem,env(safe-area-inset-top))]">
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-between px-6 pb-8 pt-[max(2.5rem,env(safe-area-inset-top))] md:max-w-lg md:justify-center md:gap-12">
         {/* Encabezado: eyebrow + sponsor */}
         <div className="pt-6 motion-safe:animate-rise">
           <div className="eyebrow flex items-center gap-2.5 text-[10px] text-night-ink/50">

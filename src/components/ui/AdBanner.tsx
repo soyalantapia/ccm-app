@@ -71,7 +71,7 @@ export function AdBanner({ slot, index = 0, className }: AdBannerProps) {
   // S2 — sponsor-banner de los mockups: card oscura #181410, eyebrow dorado,
   // nombre en Playfair, subtítulo gris y caja-logo dorada 42px a la derecha.
   return (
-    <div ref={ref} className={className ?? ''}>
+    <div ref={ref} className={`mx-auto max-w-3xl ${className ?? ''}`}>
       <Link
         to="/sponsors"
         onClick={onClick}
