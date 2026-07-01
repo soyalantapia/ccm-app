@@ -1,15 +1,12 @@
 import { WifiOff } from 'lucide-react'
-import { Card, QR } from '../../components/ui'
+import { QR } from '../../components/ui'
 import { qrToken } from '../../lib/identity'
 import { useStore } from '../../data/store'
 
-function Corner({ className }: { className: string }) {
-  return <span aria-hidden className={`pointer-events-none absolute h-6 w-6 border-accent ${className}`} />
-}
-
 /**
- * Tarjeta de acreditación editorial (PRD §8.3): marco fino con esquinas
- * doradas, QR offline grande, nombre serif. La pieza insignia del evento.
+ * Tarjeta de acreditación (qr-card de los mockups): superficie blanca con borde
+ * dorado de 2px, badge dorado, nombre en Playfair 900, QR offline y código
+ * monoespaciado. La pieza insignia del evento.
  */
 export function AccreditationCard() {
   const profile = useStore((s) => s.getProfile())
@@ -19,27 +16,24 @@ export function AccreditationCard() {
   const token = qrToken()
 
   return (
-    <Card className="relative mx-auto w-full max-w-sm px-7 py-10 text-center md:px-10">
-      {/* Marco interior fino + esquinas doradas decorativas */}
-      <span aria-hidden className="pointer-events-none absolute inset-2.5 rounded-sm border border-line" />
-      <Corner className="left-2.5 top-2.5 border-l-2 border-t-2" />
-      <Corner className="right-2.5 top-2.5 border-r-2 border-t-2" />
-      <Corner className="bottom-2.5 left-2.5 border-b-2 border-l-2" />
-      <Corner className="bottom-2.5 right-2.5 border-b-2 border-r-2" />
+    <div className="mx-auto w-full max-w-sm rounded-[14px] border-2 border-accent bg-white p-5 text-center shadow-[0_4px_16px_rgba(0,0,0,0.1)]">
+      <div className="eyebrow text-[9px] text-accent">Acreditación · Entrada General</div>
+      <h2 className="type-display mt-3 text-balance text-[24px] leading-[1.15] text-ink">{name}</h2>
+      <p className="mt-1.5 text-[10px] font-medium uppercase tracking-[0.05em] text-text-2">
+        CCM 2026 · 19 y 20 de septiembre
+      </p>
 
-      <div className="eyebrow text-[10px] text-accent">Acreditación · Entrada General</div>
-      <h2 className="type-serif mt-3 text-balance text-3xl text-ink">{name}</h2>
-      <p className="eyebrow mt-2.5 text-[9px] text-ink-soft">CCM 2026 · 19 y 20 de septiembre</p>
-
-      <div className="mt-7 flex justify-center">
-        <QR value={token} size={240} />
+      <div className="mt-[18px] flex justify-center">
+        <QR value={token} size={160} />
       </div>
 
-      <p className="eyebrow mt-6 text-[9px] text-ink-soft/50">{token}</p>
-      <p className="mt-4 flex items-center justify-center gap-1.5 text-[11px] text-ink-soft/70">
-        <WifiOff size={12} className="text-accent" />
+      <p className="mt-3.5 text-[9px] tracking-[0.06em] text-text-4 [font-family:ui-monospace,SFMono-Regular,Menlo,monospace]">
+        {token}
+      </p>
+      <p className="mt-3 flex items-center justify-center gap-1.5 text-[10px] font-semibold text-accent">
+        <WifiOff size={12} />
         Tu QR funciona sin conexión
       </p>
-    </Card>
+    </div>
   )
 }

@@ -26,20 +26,23 @@ export const TOKEN_KEYS = [
 export type TokenKey = (typeof TOKEN_KEYS)[number]
 export type ThemeOverrides = Partial<Record<TokenKey, string>>
 
+// Paleta del sistema visual CCM 2026 (mockups aprobados). DEBE reflejar los mismos
+// valores que :root en index.css: el pre-paint (index.html) y este DEFAULT_THEME son
+// el baseline; si difieren, el editor/pre-paint reintroduce colores viejos.
 export const DEFAULT_THEME: Record<TokenKey, string> = {
-  bg: '#f4efe3',
-  surface: '#fbf8ef',
+  bg: '#f5f0e8',
+  surface: '#ffffff',
   ink: '#181410',
-  'ink-soft': '#6b6353',
-  line: '#ddd3bd',
-  accent: '#a87d22',
-  'accent-ink': '#1c1503',
-  night: '#131c2e',
-  'night-soft': '#1d2a42',
-  'night-ink': '#f0e8d5',
-  'radius-sm': '2px',
-  'radius-md': '8px',
-  'radius-lg': '18px',
+  'ink-soft': '#666666',
+  line: '#e1ddd5',
+  accent: '#b8860b',
+  'accent-ink': '#ffffff',
+  night: '#181410',
+  'night-soft': '#2a1f0a',
+  'night-ink': '#f5f0e8',
+  'radius-sm': '8px',
+  'radius-md': '12px',
+  'radius-lg': '14px',
 }
 
 export interface ThemePreset {
@@ -48,46 +51,12 @@ export interface ThemePreset {
   overrides: ThemeOverrides
 }
 
+// Dirección visual única aprobada (mockups CCM 2026). Los presets legacy
+// (noche/bordeaux/esmeralda) se quitaron: reinyectaban azules/paleta vieja por
+// encima de la marca. Si en el futuro hay branding por tenant, agregá variantes
+// ON-brand (que no toquen la relación crema/tinta/dorado del sistema).
 export const THEME_PRESETS: ThemePreset[] = [
   { id: 'editorial', label: 'Editorial CCM', overrides: {} },
-  {
-    id: 'noche',
-    label: 'Noche de gala',
-    overrides: {
-      bg: '#121a2b',
-      surface: '#1a2438',
-      ink: '#f1e9d6',
-      'ink-soft': '#a99f88',
-      line: '#2c3a55',
-      accent: '#d4af4f',
-      'accent-ink': '#171204',
-      night: '#0a0f1c',
-      'night-soft': '#141d31',
-      'night-ink': '#f1e9d6',
-    },
-  },
-  {
-    id: 'bordeaux',
-    label: 'Bordeaux',
-    overrides: {
-      accent: '#8e2f3c',
-      'accent-ink': '#fdf3ec',
-      night: '#2a1218',
-      'night-soft': '#3b1a22',
-      'night-ink': '#f4e6da',
-    },
-  },
-  {
-    id: 'esmeralda',
-    label: 'Esmeralda',
-    overrides: {
-      accent: '#1f6f50',
-      'accent-ink': '#f0f7ef',
-      night: '#0e2419',
-      'night-soft': '#173626',
-      'night-ink': '#e8f0e2',
-    },
-  },
 ]
 
 export function getTheme(): ThemeOverrides {

@@ -1,7 +1,10 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClientProvider } from '@tanstack/react-query'
-import '@fontsource-variable/archivo/index.css'
+// Sistema visual CCM 2026 (mockups aprobados): Playfair Display (display/editorial)
+// + Montserrat (UI). Auto-hospedadas vía fontsource (bundle offline, sin Google Fonts).
+import '@fontsource-variable/playfair-display/index.css'
+import '@fontsource-variable/montserrat/index.css'
 import './index.css'
 import App from './App'
 import { queryClient } from './lib/queryClient'

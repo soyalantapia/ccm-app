@@ -1,127 +1,183 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
-import { AdBanner, ButtonLink, EmptyState, YouTubeEmbed } from '../../components/ui'
+import { GraduationCap, Mic, Play } from 'lucide-react'
+import { AdBanner } from '../../components/ui'
 import { useStore } from '../../data/store'
-import { IDS } from '../../data/ids'
-import { AppSection } from '../../features/app/AppSection'
-import { RegistrationRow } from '../../features/app/RegistrationRow'
-import { registrationSortKey } from '../../features/app/meta'
-import { ManagedBanner } from '../../features/ads/ManagedBanner'
-import { HomeHeader } from '../../features/app/home/HomeHeader'
-import { PrimaryActionCard } from '../../features/app/home/PrimaryActionCard'
-import { ActionStrip } from '../../features/app/home/ActionStrip'
-import { DiscoverRow } from '../../features/app/home/DiscoverRow'
+import { config } from '../../config'
+import { SectionLabel } from '../../features/app/mockup'
 import { WelcomeSheet } from '../../features/app/WelcomeSheet'
+import type { ContentItem, Nota } from '../../data/types'
 
-/**
- * Inicio (feed) — PRD §8.1, estrategia app-nativa: header compacto, card de
- * acción principal (registro o carnet wallet), strip de accesos tipo stories,
- * agenda, descubrí, lo nuevo y slot S2. Módulos cortos, escaneable, accionable.
- */
-export default function Inicio() {
-  const firstName = useStore((s) => s.getProfile().fields.firstName?.value)
-  const principal = useStore((s) => s.getEventById(IDS.events.principal))
-  const registrations = useStore((s) =>
-    s
-      .getRegistrations()
-      .filter((r) => r.status === 'confirmada')
-      .sort((a, b) => registrationSortKey(a).localeCompare(registrationSortKey(b))),
-  )
-  const caminos = useStore((s) => s.getEvents().filter((e) => e.type === 'camino' && !e.past).slice(0, 2))
-  const contents = useStore((s) => s.getContents().slice(0, 2))
+function fmtDate(iso: string) {
+  try {
+    const d = new Date(iso)
+    return d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+  } catch {
+    return ''
+  }
+}
 
+/** noticia-card de los mockups: img (cover o gradiente con título), tag dorado,
+ *  título Playfair, fecha. Variante featured = ancho completo (col-span-2). */
+function NoticiaCard({ n, featured = false }: { n: Nota; featured?: boolean }) {
   return (
-    <div className="mx-auto max-w-2xl px-5 py-8 md:py-12">
-      {/* 1. Header compacto */}
-      <HomeHeader firstName={firstName} dateLabel={`CCM 2026 · ${principal?.dateLabel ?? '19 y 20 sept'}`} />
-
-      {/* 2. Card de acción principal: registro o carnet wallet */}
-      <PrimaryActionCard />
-
-      {/* 3. Strip de accesos rápidos tipo stories */}
-      <ActionStrip />
-
-      {/* 4. Tu agenda: inscripciones confirmadas */}
-      <AppSection
-        eyebrow="Tu agenda"
-        title="Tus inscripciones"
-        link={registrations.length > 0 ? { to: '/mi-qr', label: 'Mi QR' } : undefined}
-      >
-        {registrations.length === 0 ? (
-          <EmptyState
-            className="py-10"
-            title="Tu agenda está vacía"
-            action={
-              <ButtonLink to="/eventos" variant="outline" size="sm">
-                Explorar la agenda
-              </ButtonLink>
-            }
-          >
-            Charlas, masterclasses y desfiles con cupo limitado: reservá tu lugar.
-          </EmptyState>
+    <Link
+      to={`/novedades/${n.slug}`}
+      className={`overflow-hidden rounded-[12px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.07)] ${featured ? 'col-span-2' : ''}`}
+    >
+      <div className={`relative ${featured ? 'h-[110px]' : 'h-[80px]'} bg-cream-muted`}>
+        {n.cover ? (
+          <img src={n.cover} alt="" loading="lazy" className="h-full w-full object-cover" />
         ) : (
-          <div className="border-b border-line">
-            {registrations.map((r) => (
-              <RegistrationRow key={r.id} registration={r} showQrLink />
-            ))}
+          <div className="flex h-full items-center justify-center bg-gradient-to-br from-brown-gray to-ink px-3 text-center">
+            <span className="type-serif text-[11px] leading-tight text-accent">{n.title}</span>
           </div>
         )}
-      </AppSection>
+      </div>
+      <div className="px-2.5 pb-2.5 pt-2">
+        <div className="text-[8px] font-bold uppercase tracking-[0.08em] text-accent">{n.category ?? 'CCM'}</div>
+        <div className={`type-serif mt-0.5 leading-[1.3] text-ink ${featured ? 'text-[14px]' : 'text-[12px]'}`}>
+          {n.title}
+        </div>
+        <div className="mt-1 text-[8px] text-text-4">{fmtDate(n.publishedAt)}</div>
+      </div>
+    </Link>
+  )
+}
 
-      {/* Slot publicitario de feed (S2) */}
-      <AdBanner slot="S2" className="mt-12 md:mt-16" />
+/** video-card del carrusel (thumbnail de YouTube + play + tag + título). */
+function VideoThumb({ c }: { c: ContentItem }) {
+  return (
+    <Link
+      to="/contenido"
+      className="w-[190px] shrink-0 overflow-hidden rounded-[12px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.07)]"
+    >
+      <div className="relative flex h-[100px] items-center justify-center bg-ink">
+        {c.youtubeId && (
+          <img
+            src={`https://i.ytimg.com/vi/${c.youtubeId}/mqdefault.jpg`}
+            alt=""
+            loading="lazy"
+            className="absolute inset-0 h-full w-full object-cover opacity-80"
+          />
+        )}
+        <span className="absolute left-1.5 top-1.5 z-10 rounded-[3px] bg-accent px-1.5 py-0.5 text-[7px] font-bold uppercase text-accent-ink">
+          Video
+        </span>
+        <span className="relative z-10 flex h-7 w-7 items-center justify-center rounded-full bg-accent text-accent-ink">
+          <Play size={12} className="ml-0.5" />
+        </span>
+      </div>
+      <div className="p-2.5">
+        <div className="text-[8px] font-bold uppercase tracking-[0.08em] text-accent">{c.platform ?? 'CCM'}</div>
+        <div className="type-serif mt-0.5 line-clamp-2 text-[11px] leading-[1.3] text-ink">{c.title}</div>
+      </div>
+    </Link>
+  )
+}
 
-      {/* Banners gestionados por marketing (fijos + rotativo, con medición de clicks) */}
-      <ManagedBanner slot="home" className="mt-12 md:mt-16" />
+/** Noticias (feed) — mockup: franja evento → banners → noticias → Elukamo accesos →
+ *  membresía → más noticias → carrusel de video. Todo con data real (notas/contents). */
+export default function Inicio() {
+  const notas = useStore((s) => s.getNotas())
+  const contents = useStore((s) => s.getContents())
+  const [featured, ...restNotas] = notas
+  const masNoticias = restNotas.slice(2, 6)
 
-      {/* 5. Descubrí: próximos Caminos compactos + postulación */}
-      <AppSection
-        eyebrow="Antes de septiembre"
-        title={
-          <>
-            Próximos <em className="text-accent">Caminos</em>
-          </>
-        }
-        link={{ to: '/eventos', label: 'Toda la agenda' }}
-      >
-        <div className="border-b border-line">
-          {caminos.map((ev) => (
-            <DiscoverRow key={ev.id} event={ev} />
-          ))}
+  return (
+    <div className="mx-auto max-w-2xl pb-6">
+      {/* Franja evento inline */}
+      <div className="flex items-center justify-between gap-3 bg-ink px-5 py-3">
+        <div className="min-w-0">
+          <div className="type-serif text-[14px] text-night-ink">CCM 2026 · {config.edition}</div>
+          <div className="mt-0.5 truncate text-[10px] font-medium tracking-[0.04em] text-accent">
+            {config.mainDatesLabel}
+          </div>
         </div>
         <Link
-          to={`/c/${IDS.convocatoriaSlugs.camino}`}
-          className="group mt-5 flex items-center justify-between gap-4 rounded-md border border-line bg-surface p-4 transition-colors active:scale-[0.99]"
+          to="/entradas"
+          className="shrink-0 rounded-[5px] bg-accent px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.05em] text-accent-ink"
+        >
+          Inscribite
+        </Link>
+      </div>
+
+      <div className="px-5">
+        <AdBanner slot="S2" className="mt-3.5" />
+
+        {/* Noticias: 1 featured + 2 */}
+        {featured && (
+          <>
+            <SectionLabel>Noticias</SectionLabel>
+            <div className="grid grid-cols-2 gap-2.5">
+              <NoticiaCard n={featured} featured />
+              {restNotas.slice(0, 2).map((n) => (
+                <NoticiaCard key={n.id} n={n} />
+              ))}
+            </div>
+          </>
+        )}
+
+        <AdBanner slot="S2" index={1} className="mt-4" />
+
+        {/* Elukamo accesos */}
+        <SectionLabel>Elukamo</SectionLabel>
+        <div className="grid grid-cols-2 gap-2.5">
+          <Link to="/contenido" className="flex flex-col gap-1.5 rounded-[12px] bg-ink p-3.5">
+            <Mic size={20} className="text-accent" />
+            <span className="text-[8px] font-bold uppercase tracking-[0.1em] text-accent">Elukamo</span>
+            <span className="type-serif text-[13px] text-night-ink">Entrevistas</span>
+            <span className="text-[9px] font-semibold text-accent">Ver todas →</span>
+          </Link>
+          <Link to="/membresia" className="flex flex-col gap-1.5 rounded-[12px] bg-ink p-3.5">
+            <GraduationCap size={20} className="text-accent" />
+            <span className="text-[8px] font-bold uppercase tracking-[0.1em] text-accent">Elukamo</span>
+            <span className="type-serif text-[13px] text-night-ink">Capacitaciones</span>
+            <span className="text-[9px] font-semibold text-accent">Ver todas →</span>
+          </Link>
+        </div>
+
+        {/* Más noticias */}
+        {masNoticias.length > 0 && (
+          <>
+            <SectionLabel>Más noticias</SectionLabel>
+            <div className="grid grid-cols-2 gap-2.5">
+              {masNoticias.map((n) => (
+                <NoticiaCard key={n.id} n={n} />
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Membresía CTA (gradiente dorado) */}
+        <Link
+          to="/membresia"
+          className="mt-4 flex items-center justify-between gap-3 rounded-[12px] bg-gradient-to-br from-accent to-gold-deep px-4 py-3.5"
         >
           <div className="min-w-0">
-            <div className="eyebrow text-[9px] text-accent">Convocatoria abierta</div>
-            <p className="type-serif mt-1 text-balance text-base text-ink">
-              Postulate al <em className="text-accent">Camino a CCM</em>
-            </p>
+            <div className="text-[8px] font-bold uppercase tracking-[0.1em] text-white/70">Membresía</div>
+            <div className="type-display mt-0.5 text-[15px] text-white">Socio CCM VIP</div>
+            <div className="mt-0.5 truncate text-[9px] text-white/75">Capacitaciones · descuentos · eventos VIP</div>
           </div>
-          <ArrowRight
-            size={18}
-            className="shrink-0 text-ink transition-transform duration-200 group-hover:translate-x-0.5"
-          />
+          <span className="shrink-0 rounded-[8px] bg-white px-3.5 py-2 text-[10px] font-bold uppercase text-accent">
+            Quiero ser VIP
+          </span>
         </Link>
-      </AppSection>
 
-      {/* 6. Lo nuevo: videos compactos */}
-      <AppSection eyebrow="Contenido" title="Lo nuevo" link={{ to: '/contenido', label: 'Ver todo' }}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {contents.map((c) => (
-            <div key={c.id}>
-              <YouTubeEmbed youtubeId={c.youtubeId} title={c.title} trackPayload={{ contentId: c.id }} />
-              <p className="eyebrow mt-2 text-[9px] text-ink-soft">
-                {c.platform}
-                {c.duration ? ` · ${c.duration}` : ''}
-              </p>
+        {/* Noticias en video (carrusel) */}
+        {contents.length > 0 && (
+          <>
+            <SectionLabel>Noticias en video</SectionLabel>
+            <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5">
+              {contents.slice(0, 8).map((c) => (
+                <VideoThumb key={c.id} c={c} />
+              ))}
             </div>
-          ))}
-        </div>
-      </AppSection>
+          </>
+        )}
 
-      {/* Onboarding de primera vez (no se solapa con el interstitial S1) */}
+        <AdBanner slot="S2" index={2} className="mt-6" />
+      </div>
+
       <WelcomeSheet />
     </div>
   )

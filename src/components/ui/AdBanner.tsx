@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowUpRight } from 'lucide-react'
+import { ArrowUpRight, Sparkles } from 'lucide-react'
 import { useStore, store } from '../../data/store'
 import type { AdSlot } from '../../data/types'
 
@@ -68,21 +68,23 @@ export function AdBanner({ slot, index = 0, className }: AdBannerProps) {
     )
   }
 
-  // S2 — banner nativo de feed
+  // S2 — sponsor-banner de los mockups: card oscura #181410, eyebrow dorado,
+  // nombre en Playfair, subtítulo gris y caja-logo dorada 42px a la derecha.
   return (
-    <div ref={ref} className={`relative overflow-hidden rounded-md border border-line bg-surface ${className ?? ''}`}>
-      <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-accent" />
-      <Link to="/sponsors" onClick={onClick} className="group block py-5 pl-6 pr-5">
-        <div className="eyebrow text-[9px] text-ink-soft/60">Espacio patrocinado</div>
-        <div className="type-serif mt-1.5 text-xl leading-snug text-ink">{creative.headline}</div>
-        <div className="mt-2 flex items-center justify-between gap-4">
-          <span className="text-xs text-ink-soft">{sponsor.name} · {sponsor.tagline}</span>
-          {creative.cta && (
-            <span className="eyebrow flex shrink-0 items-center gap-1 text-[10px] text-accent transition-transform duration-200 group-hover:translate-x-0.5">
-              {creative.cta} <ArrowUpRight size={12} />
-            </span>
-          )}
+    <div ref={ref} className={className ?? ''}>
+      <Link
+        to="/sponsors"
+        onClick={onClick}
+        className="flex items-center justify-between gap-3 rounded-[12px] bg-ink px-4 py-3.5 transition-transform active:scale-[0.99]"
+      >
+        <div className="min-w-0">
+          <div className="text-[8px] font-bold uppercase tracking-[0.1em] text-accent">Espacio patrocinado</div>
+          <div className="type-serif mt-0.5 truncate text-[13px] text-night-ink">{sponsor.name}</div>
+          <div className="mt-0.5 truncate text-[9px] text-text-2">{creative.headline}</div>
         </div>
+        <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[10px] bg-accent text-accent-ink">
+          <Sparkles size={18} />
+        </span>
       </Link>
     </div>
   )

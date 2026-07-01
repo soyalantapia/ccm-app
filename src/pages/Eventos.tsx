@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, CalendarDays, MapPin, Ticket } from 'lucide-react'
-import { Badge, EmptyState, Eyebrow, Img, SectionTitle, Tabs } from '../components/ui'
+import { AdBanner, Badge, EmptyState, Eyebrow, Img, Tabs } from '../components/ui'
 import { store, useStore } from '../data/store'
 import { useEvents, useRegistrations } from '../data/queries'
 import { EventCard } from '../features/eventos/EventCard'
 import { formatMoney } from '../features/tickets/format'
 import { EVENT_TYPE_ORDER, EVENT_TYPE_TABS } from '../features/eventos/eventMeta'
+import { SectionLabel } from '../features/app/mockup'
 
 /** Listado /eventos: banner del evento principal + Caminos y capacitaciones. */
 export default function Eventos() {
@@ -94,20 +95,13 @@ export default function Eventos() {
         </Link>
       )}
 
-      {/* ─── Caminos y capacitaciones ─── */}
-      <div className="mt-14 md:mt-20">
-        <SectionTitle
-          eyebrow="Antes de septiembre"
-          title={
-            <>
-              Caminos y <em className="text-accent">encuentros</em>
-            </>
-          }
-          lead="Los eventos previos del ecosistema: charlas, networking y desfiles cápsula con cupo limitado."
-        />
-      </div>
+      {/* Sponsor-banner tras el hero (cadencia del mockup) */}
+      <AdBanner slot="S2" className="mt-8" />
 
-      {tabs.length > 2 && <Tabs tabs={tabs} active={filter} onChange={setFilter} className="mt-8" />}
+      {/* ─── Camino a CCM ─── */}
+      <SectionLabel className="mt-4">Camino a CCM</SectionLabel>
+
+      {tabs.length > 2 && <Tabs tabs={tabs} active={filter} onChange={setFilter} className="mt-2" />}
 
       {visible.length === 0 ? (
         <EmptyState title="Nada por acá todavía">
@@ -126,7 +120,9 @@ export default function Eventos() {
         </div>
       )}
 
-      <div className="mt-16 flex items-center justify-center">
+      <AdBanner slot="S2" index={1} className="mt-12" />
+
+      <div className="mt-12 flex items-center justify-center">
         <Eyebrow>Sin inscripción no se ingresa · cupos limitados</Eyebrow>
       </div>
     </div>

@@ -1,66 +1,52 @@
 # DESIGN.md — Sistema de diseño CCM
 
-**Estética: editorial de lujo** — revista de moda impresa llevada a producto digital. Marfil/crema de fondo, tinta negra, dorado/mostaza como acento, bloques de contraste azul noche. Mucho aire, grillas asimétricas, fotografía protagonista, serif display enorme. **Prohibido** que parezca template (Bootstrap/Material/dashboard genérico).
+**Estética: revista de moda de lujo llevada a app.** Crema hueso de fondo, tinta marrón-negra, dorado como acento único, tipografía serif de revista (Playfair Display) para display/editorial y sans (Montserrat) para toda la UI. Densidad de sponsors intercalados, bottom-nav mobile de 5 slots con QR central elevado. **Dirección aprobada por el cliente (3 mockups CCM 2026).** Prohibido derivar a patrones genéricos: nada de azules/grises fríos, sombras de color, sans genéricas ni cards uniformes sin la cadencia de sponsors.
 
-## Tokens (únicos colores permitidos)
+## Tokens (fuente única de verdad)
 
-| Utilidad Tailwind | Rol |
-|---|---|
-| `bg-bg` | fondo general marfil |
-| `bg-surface` | cards / paneles (crema más claro) |
-| `text-ink` / `bg-ink` | tinta principal |
-| `text-ink-soft` | texto secundario |
-| `border-line` | líneas y bordes (siempre 1px) |
-| `bg-accent text-accent-ink` | dorado — CTAs, acentos, hovers |
-| `bg-night text-night-ink` | bloques azul noche (secciones de contraste, footer, galas) |
-| `bg-night-soft` | superficie sobre night |
-| `text-success` / `text-danger` | solo estados (cupos, errores) |
+La paleta/tipografía/radios viven como variables `--t-*` en `src/index.css` (`:root`) y se remapean a utilidades Tailwind vía `@theme inline`. `src/lib/theme.ts` (`DEFAULT_THEME`) las espeja para el editor de tema del admin + el pre-paint (`index.html`). **Si tocás un color/radio, actualizá index.css Y theme.ts juntos**, o el pre-paint/admin reinyecta valores viejos.
 
-Opacidades permitidas: `text-ink-soft/70`, `bg-ink/5`, `border-night-soft`, etc. `white`/`black` solo sobre fotografía (overlays).
+### Colores editables por el admin (`TOKEN_KEYS`, hex)
+| Token / utilidad | Hex | Rol |
+|---|---|---|
+| `bg` | `#F5F0E8` | canvas crema hueso |
+| `surface` | `#FFFFFF` | cards elevadas claras |
+| `ink` / `night` | `#181410` | tinta y superficies oscuras (marrón-negro cálido; **no hay azul**) |
+| `ink-soft` | `#666666` | texto secundario sobre crema |
+| `line` | `#E1DDD5` | hairline sobre crema |
+| `accent` | `#B8860B` | dorado primario (eyebrows, CTAs, badges, íconos, underline activo) |
+| `accent-ink` | `#FFFFFF` | texto/íconos sobre dorado |
+| `night-soft` | `#2A1F0A` | borde/divisor sobre oscuro |
+| `night-ink` | `#F5F0E8` | texto crema sobre oscuro |
 
-## Tipografía (sans, app-first)
+### Constantes de marca (NO editables — fijas en index.css/@theme)
+`gold-deep #8A6208` (fin del gradiente dorado) · `brown-warm #2A1A00` · `brown-olive #2A1F0A` · `brown-gray #2A2420` (extremos de gradientes cálidos) · `cream-muted #E8E0D0` (placeholders/chips) · `text-2 #888` · `text-3 #666` · `text-4 #999` · `text-5 #AAA`.
 
-Dirección: **app moderna, no revista**. Sin serif display, **sin itálicas** (marean y leen a "editorial"). El énfasis se hace con **peso + dorado**, nunca con cursiva.
+### Tipografía (auto-hospedada vía fontsource, offline — sin Google Fonts en runtime)
+- `--t-font-display` = **Playfair Display Variable**. Utilidad `type-display` (peso 900: héroes, logo, precios, nombres) y `type-serif` (peso 700: títulos de card/sección). Serif → sin tracking negativo.
+- `--t-font-sans` = **Montserrat Variable** (body por defecto). `eyebrow` = Montserrat 700 uppercase, tracking 0.12em, 10px (labels/section-labels). Metadatos, botones, nav, descripciones.
+- monoespaciada del sistema: solo el código de acreditación.
 
-- `type-display` → **Schibsted Grotesk** peso 720, tight (`letter-spacing -0.022em`). Títulos grandes. Tamaños con clamp: hero `text-[clamp(2.6rem,9vw,5.5rem)]`, sección `text-[clamp(2rem,6vw,3.4rem)]`. (Token `--t-font-display`.)
-- `type-serif` → display secundario: misma sans, peso 560. Subtítulos, nombres, precios, horarios (`text-xl`–`text-3xl`). *(El nombre de la utilidad se mantiene por compatibilidad; ya no es serif.)*
-- `eyebrow` → Archivo uppercase tracking 0.22em 11px. Etiquetas, labels, nav.
-- Body: Archivo (default `font-sans`), `text-[15px] leading-relaxed text-ink-soft` para párrafos.
-- **Énfasis en títulos**: `<em className="text-accent">moda</em>` — solo color dorado, sin itálica. Hay un reset global `em { font-style: normal }`, así que ningún `<em>` se renderiza en cursiva. **No usar la clase `italic` en ningún lado.**
+### Radios
+Runtime editable (3 sliders del admin): `radius-sm 8` · `radius-md 12` · `radius-lg 14`. Los radios de detalle del mockup (4/5/6/10/18/20/full) se usan como **literales por componente** (`rounded-[12px]`, `rounded-full`, …), no como tokens.
 
-## Patrones editoriales (usar estos, no inventar otros)
+## Vocabulario de componentes (mockups)
 
-1. **Cabecera de sección**: `<SectionTitle eyebrow="..." title={...} lead="..." />`. Eyebrow SIEMPRE con su regla dorada.
-2. **Numeración editorial**: listas con `01 — 07` en eyebrow dorado (plataformas, menú).
-3. **Dark blocks**: secciones completas `bg-night text-night-ink` para galas/VIP/sponsor — alternar con secciones marfil para ritmo.
-4. **Grillas asimétricas**: en grids de cards alternar alturas/spans (`md:col-span-2`, `md:row-span-2`, offsets con `md:mt-12`). Nunca grilla perfectamente uniforme en secciones hero/destacados (sí uniforme en listados utilitarios).
-5. **Reglas finas**: separar con `border-t border-line`, nunca con sombras pesadas.
-6. **Fotografía**: `<Img>` con ratio fijo (`3/4` retratos, `4/5` people, `16/10` covers). Hover en cards: `group-hover:scale-[1.04]` con `transition duration-700` en `imgClassName`.
-7. **Overlay editorial sobre foto**: gradiente `bg-gradient-to-t from-night/80 via-night/20 to-transparent` + texto `text-night-ink` abajo.
+Primitivas compartidas en `src/features/app/mockup.tsx`: `SectionLabel` (barra dorada 24×2 + eyebrow), `BeneficioItem` (fila con caja-ícono dorada), `SectionEmpty` (estado vacío con tinte dorado), `SponsorCuadrado`.
 
-## Componentes del kit (`src/components/ui`) — usar SIEMPRE
+- **section-label**: cada bloque abre con barra dorada + eyebrow dorado uppercase.
+- **sponsor-banner** (`AdBanner` slot S2): card oscura `#181410` radius 12, eyebrow dorado, nombre Playfair, subtítulo gris, caja-logo dorada 42px. Separan secciones (cadencia: nunca dos secciones sin banner/CTA entre medio).
+- **noticia-card** (Inicio): #fff radius 12, img (cover o gradiente con título), tag dorado, título Playfair, fecha. Featured = ancho completo.
+- **participante-card** (Participantes): foto + rol·plataforma dorado + nombre Playfair + ciudad + bio + "Ver Catálogo →".
+- **evento-card** (`EventCard`): tag+fecha, foto, hora/título/lugar, cupo/CTA.
+- **qr-card** (`AccreditationCard`): #fff, borde dorado 2px, nombre Playfair 900, QR offline, código mono, nota dorada.
+- **suscripcion-card**: gradiente dorado (`accent → gold-deep`), pill "Activa", CTA blanca con texto dorado.
+- **beneficio-card destacado**: gradiente `ink → brown-warm` + borde dorado.
+- **bottom-nav** (`SiteLayout`): barra `#181410`, 5 slots (Noticias · Eventos · **Mi QR** central elevado -18px con glow · Participantes · Elukamo), activo con subrayado dorado 2px arriba. Solo mobile (`md:hidden`). Perfil vive en el drawer.
 
-`Button/ButtonLink` (primary/ink/outline/ghost/night · sm/md/lg) · `Card` (surface/night/bare, hover) · `Badge` (estados de cupo: `tone="success"` "Quedan X" / `tone="danger"` "Completo") · `SectionTitle`/`Eyebrow` · `Sheet` (bottom sheet) · `Modal` (variant="media" para fotos/video) · `Field/Input/Textarea/Select` · `Tabs` · `Stat` (cifras grandes serif) · `Img` · `Marquee` · `EmptyState` · `Countdown` · `QR` · `YouTubeEmbed` · `AdBanner` (slots S2/S3/S6) · `toast()`.
+## Reglas
+- Voz: español rioplatense con voseo ("Accedé", "Inscribite", "Reservá"). Eyebrows uppercase dorados. CTAs imperativos con →. Título con palabra clave en dorado (`<em className="text-accent">`); hay reset global `em { font-style: normal }` (sin itálicas).
+- Toda la UI lee/escribe vía el contrato `DataStore`. El fallback `LocalDataStore` (sin `VITE_API_URL`) **nunca se rompe**.
+- Preferí tokens (`--t-*` + `@theme inline`) sobre hex/radios sueltos cuando exista equivalente.
 
-Si necesitás algo que no existe, crealo en `src/features/<tu-area>/` consumiendo tokens — NO modificar `src/components/ui` (compartido).
-
-## Layout y espaciado
-
-- Contenedor: `mx-auto max-w-6xl px-5` (admin: `px-5 md:px-10`).
-- Ritmo vertical generoso: secciones `py-16 md:py-24`; entre título y contenido `mt-10 md:mt-14`.
-- Radios SOLO vía tokens: `rounded-sm` (botones, badges), `rounded-md` (cards), `rounded-lg` (sheets/modals). Nunca `rounded-xl`. `rounded-full` se permite solo en controles circulares "app-native": avatares, botón central del bottom nav, steppers +/− del selector de entradas, el play de YouTube y el botón flotante "volver" sobre el hero de las fichas.
-
-## Motion
-
-- Transiciones 200–300ms `ease-out`; imágenes 700ms.
-- Entradas: `animate-rise` (una por bloque clave, no en cascada infinita).
-- Hover links: subrayado que aparece (`underline decoration-accent underline-offset-4` en hover) o flecha que se desplaza (`group-hover:translate-x-0.5`).
-- Nada de spinners: estados de carga con `animate-pulse` sobre formas.
-
-## Admin
-
-Misma identidad (NO dashboard genérico): sidebar night, contenido marfil, títulos serif, tablas con `border-line` y eyebrows como headers de columna, números grandes con `Stat`. Densidad mayor que el sitio público pero misma voz.
-
-## Voz y copy
-
-Voseo argentino, tono del evento: directo, fashion, cálido. "Inscribite", "Comprá tu Night VIP", "Vení con tu mejor LOOK 🖤" (emojis con moderación, solo donde el PRD los usa). Microcopys útiles: "Una sola vez: no te lo volvemos a pedir."
+> Arquitectura: la app es una **PWA responsive full-viewport** (header sticky `max-w-6xl`, nav desktop `lg:flex`, bottom-nav `md:hidden`). El phone-frame 390px / status-bar de los mockups es chrome del board de presentación — **no** se replica.

@@ -1,36 +1,41 @@
 @import 'tailwindcss';
 
-/* Fuente display auto-hosteada. Referenciada relativa: la procesa Vite y le aplica el
-   base correcto (/ccm-app/ en GH Pages, / en Railway). Antes estaba hardcodeada a
-   /ccm-app/ y, servida desde otro base, la fuente caía a un 404/HTML (no decodificaba). */
-@font-face {
-  font-family: 'Schibsted Display';
-  src: url('./fonts/schibsted-display.woff2') format('woff2');
-  font-weight: 400 800;
-  font-style: normal;
-  font-display: swap;
-}
+/* Tipografía del sistema visual CCM 2026 (mockups aprobados): Playfair Display
+   (display/editorial) + Montserrat (UI). Las @font-face las aportan los paquetes
+   fontsource importados en main.tsx (bundle offline, sin Google Fonts en runtime). */
 
 :root {
   /* ─── Design tokens (runtime) ─────────────────────────────────────────
      Única fuente de color/tipografía/radios de toda la app (D23).
      El editor de tema del admin sobreescribe estas variables en vivo;
      index.html las re-aplica desde localStorage antes del primer paint. */
-  --t-bg: #f4efe3;
-  --t-surface: #fbf8ef;
-  --t-ink: #181410;
-  --t-ink-soft: #6b6353;
-  --t-line: #ddd3bd;
-  --t-accent: #a87d22;
-  --t-accent-ink: #1c1503;
-  --t-night: #131c2e;
-  --t-night-soft: #1d2a42;
-  --t-night-ink: #f0e8d5;
-  --t-radius-sm: 2px;
-  --t-radius-md: 8px;
-  --t-radius-lg: 18px;
-  --t-font-display: 'Schibsted Display', 'Schibsted Grotesk Variable', 'Archivo Variable', system-ui, sans-serif;
-  --t-font-sans: 'Archivo Variable', system-ui, -apple-system, sans-serif;
+  /* ── Editables por el admin (TOKEN_KEYS en lib/theme.ts) — HEX only ── */
+  --t-bg: #f5f0e8; /* canvas crema hueso */
+  --t-surface: #ffffff; /* cards elevadas claras */
+  --t-ink: #181410; /* marrón-negro cálido: texto/oscuros */
+  --t-ink-soft: #666666; /* texto secundario sobre crema */
+  --t-line: #e1ddd5; /* hairline sobre crema (≈ rgba(0,0,0,.08)) */
+  --t-accent: #b8860b; /* dorado primario (DarkGoldenrod) */
+  --t-accent-ink: #ffffff; /* texto/íconos sobre dorado */
+  --t-night: #181410; /* superficie oscura (mismo tono cálido, sin azul) */
+  --t-night-soft: #2a1f0a; /* borde/divisor sobre oscuro */
+  --t-night-ink: #f5f0e8; /* texto crema sobre oscuro */
+  --t-radius-sm: 8px;
+  --t-radius-md: 12px;
+  --t-radius-lg: 14px;
+  /* ── Constantes de marca (NO editables): dorado profundo, marrones de gradiente,
+        grises de texto, crema apagado. Ver §1.1 del sistema de diseño. ── */
+  --t-gold-deep: #8a6208; /* fin del gradiente dorado */
+  --t-brown-warm: #2a1a00; /* fin de gradientes cálidos (#181410→#2a1a00) */
+  --t-brown-olive: #2a1f0a; /* extremo claro de hero/thumb destacado */
+  --t-brown-gray: #2a2420; /* extremo de gradiente en imgs de card */
+  --t-cream-muted: #e8e0d0; /* placeholders de imagen / chips inactivos */
+  --t-text-2: #888888; /* muted (sb-sub, subtítulos) */
+  --t-text-3: #666666; /* terciario/inactivos */
+  --t-text-4: #999999; /* tenue (fechas, código QR) */
+  --t-text-5: #aaaaaa; /* muy tenue (lugar, precios secundarios) */
+  --t-font-display: 'Playfair Display Variable', 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --t-font-sans: 'Montserrat Variable', 'Montserrat', system-ui, -apple-system, sans-serif;
 }
 
 @theme inline {
@@ -47,9 +52,19 @@
   /* Dorado más oscuro para TEXTO CHICO sobre superficies claras (AA ≥4.5:1 sobre
      crema). Deriva del accent (sigue al tema). No usar sobre fondos oscuros. */
   --color-accent-strong: color-mix(in srgb, var(--t-accent) 78%, black);
+  --color-gold-deep: var(--t-gold-deep);
   --color-night: var(--t-night);
   --color-night-soft: var(--t-night-soft);
   --color-night-ink: var(--t-night-ink);
+  /* Marrones de gradiente + grises de texto + crema apagado (constantes de marca). */
+  --color-brown-warm: var(--t-brown-warm);
+  --color-brown-olive: var(--t-brown-olive);
+  --color-brown-gray: var(--t-brown-gray);
+  --color-cream-muted: var(--t-cream-muted);
+  --color-text-2: var(--t-text-2);
+  --color-text-3: var(--t-text-3);
+  --color-text-4: var(--t-text-4);
+  --color-text-5: var(--t-text-5);
   --color-white: #ffffff;
   --color-black: #000000;
   --color-success: #2e7d4f;
@@ -93,26 +108,30 @@
 /* ─── Type helpers (sans display, app-first) ──────────────────────────── */
 
 @utility type-display {
+  /* Display editorial: Playfair Display 900 (héroes, logo, precios). Serif → sin
+     tracking negativo. */
   font-family: var(--t-font-display);
-  font-weight: 720;
-  line-height: 1.02;
-  letter-spacing: -0.022em;
+  font-weight: 900;
+  line-height: 1.15;
+  letter-spacing: 0;
 }
 
 @utility type-serif {
-  /* Display secundario (subtítulos, nombres, precios, horarios): misma sans,
-     peso medio. Mantiene el nombre de la utilidad por compatibilidad. */
+  /* Títulos de card/sección, nombres propios: Playfair Display 700. Mantiene el
+     nombre de la utilidad por compatibilidad (ya no es la sans secundaria). */
   font-family: var(--t-font-display);
-  font-weight: 560;
-  letter-spacing: -0.011em;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
 }
 
 @utility eyebrow {
+  /* Labels/eyebrows uppercase: Montserrat 700, tracking 0.12em (mockup section-label). */
   font-family: var(--t-font-sans);
   text-transform: uppercase;
-  letter-spacing: 0.22em;
-  font-size: 0.6875rem;
-  font-weight: 600;
+  letter-spacing: 0.12em;
+  font-size: 0.625rem;
+  font-weight: 700;
 }
 
 @utility no-scrollbar {

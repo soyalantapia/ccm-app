@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { CalendarDays, Heart, Home, Menu, QrCode, Store, Ticket, User, X } from 'lucide-react'
+import { CalendarDays, Heart, Home, Menu, Play, QrCode, Store, Ticket, X } from 'lucide-react'
 import { Button } from '../ui'
 import { registerFree } from '../../lib/actions'
 import { useStore } from '../../data/store'
@@ -12,19 +12,22 @@ const NAV = [
   { to: '/entradas', label: 'Entradas' },
   { to: '/membresia', label: 'Membresías' },
   { to: '/beneficios', label: 'Beneficios' },
-  { to: '/catalogo', label: 'Catálogo' },
+  { to: '/catalogo', label: 'Participantes' },
+  { to: '/contenido', label: 'Elukamo' },
   { to: '/fotos', label: 'Fotos' },
-  { to: '/contenido', label: 'Contenido' },
   { to: '/novedades', label: 'Novedades' },
+  { to: '/perfil', label: 'Mi perfil' },
   { to: '/sponsors', label: 'Sponsors' },
 ]
 
+// Bottom-nav mobile de 5 slots (mockups): Noticias · Eventos · Mi QR (centro
+// elevado) · Participantes · Elukamo. Perfil sale del nav → vive en el drawer (NAV).
 const BOTTOM_NAV = [
-  { to: '/app', label: 'Inicio', icon: Home },
+  { to: '/app', label: 'Noticias', icon: Home },
   { to: '/eventos', label: 'Eventos', icon: CalendarDays },
   { to: '/mi-qr', label: 'Mi QR', icon: QrCode, center: true },
-  { to: '/catalogo', label: 'Expositores', icon: Store },
-  { to: '/perfil', label: 'Perfil', icon: User },
+  { to: '/catalogo', label: 'Participantes', icon: Store },
+  { to: '/contenido', label: 'Elukamo', icon: Play },
 ]
 
 function Wordmark({ tone = 'ink' }: { tone?: 'ink' | 'night' }) {
@@ -143,24 +146,26 @@ function Header() {
 }
 
 function BottomNav() {
+  // Barra oscura #181410 (mockups): 72px, borde superior tenue, ítem activo con
+  // subrayado dorado 2px arriba; QR central elevado (-18px) siempre dorado con glow.
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
-      <div className="grid grid-cols-5">
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-ink pb-[env(safe-area-inset-bottom)] md:hidden">
+      <div className="grid h-[64px] grid-cols-5">
         {BOTTOM_NAV.map((item) => {
           const Icon = item.icon
           if (item.center) {
             return (
-              <NavLink key={item.to} to={item.to} className="relative flex flex-col items-center pb-1.5 pt-1">
+              <NavLink key={item.to} to={item.to} className="relative flex flex-col items-center justify-center">
                 {({ isActive }) => (
                   <>
+                    <span className="-mt-[18px] flex h-[52px] w-[52px] items-center justify-center rounded-full bg-accent text-accent-ink shadow-[0_4px_16px_rgba(184,134,11,0.5)] transition-transform duration-200 active:scale-95">
+                      <Icon size={22} strokeWidth={1.75} />
+                    </span>
                     <span
-                      className={`-mt-5 flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all duration-200 ${
-                        isActive ? 'bg-ink text-bg' : 'bg-accent text-accent-ink'
+                      className={`mt-1 text-[9px] font-semibold uppercase tracking-[0.06em] ${
+                        isActive ? 'text-night-ink' : 'text-[#6b6b6b]'
                       }`}
                     >
-                      <Icon size={20} strokeWidth={1.75} />
-                    </span>
-                    <span className="mt-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-ink-soft">
                       {item.label}
                     </span>
                   </>
@@ -169,17 +174,20 @@ function BottomNav() {
             )
           }
           return (
-            <NavLink key={item.to} to={item.to} className="flex flex-col items-center gap-1 pb-1.5 pt-2.5">
+            <NavLink key={item.to} to={item.to} className="relative flex flex-col items-center justify-center gap-1">
               {({ isActive }) => (
                 <>
+                  {isActive && (
+                    <span aria-hidden className="absolute inset-x-[20%] top-0 h-0.5 rounded-b-[2px] bg-accent" />
+                  )}
                   <Icon
                     size={19}
                     strokeWidth={1.75}
-                    className={isActive ? 'text-ink' : 'text-ink-soft/70'}
+                    className={isActive ? 'text-night-ink' : 'text-[#6b6b6b]'}
                   />
                   <span
-                    className={`text-[9px] font-semibold uppercase tracking-[0.12em] ${
-                      isActive ? 'text-ink' : 'text-ink-soft/70'
+                    className={`text-[9px] font-semibold uppercase tracking-[0.06em] ${
+                      isActive ? 'text-night-ink' : 'text-[#6b6b6b]'
                     }`}
                   >
                     {item.label}

@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, type ReactNode } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { Star } from 'lucide-react'
 import { AdBanner, Badge, Button, EmptyState, SectionTitle } from '../../components/ui'
 import { store, useStore } from '../../data/store'
@@ -10,6 +10,16 @@ import { AddToCalendar } from '../../features/app/AddToCalendar'
 import { AppSection } from '../../features/app/AppSection'
 import { RegistrationRow } from '../../features/app/RegistrationRow'
 import { ORDER_STATUS_META, formatDay, registrationSortKey } from '../../features/app/meta'
+
+/** section-label de los mockups: barra dorada 24×2 + eyebrow dorado uppercase. */
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="mt-8 flex items-center gap-2.5 pb-2.5">
+      <span aria-hidden className="h-0.5 w-6 shrink-0 bg-accent" />
+      <span className="eyebrow text-[10px] text-accent">{children}</span>
+    </div>
+  )
+}
 
 /** Mi QR — PRD §8.3: acreditación offline, inscripciones, entradas VIP y slot S6. */
 export default function MiQR() {
@@ -107,6 +117,61 @@ export default function MiQR() {
               </div>
             </AppSection>
           )}
+
+          {/* Mi Suscripción (suscripcion-card dorada si es socio, si no CTA de membresía) */}
+          <SectionLabel>Mi Suscripción</SectionLabel>
+          {isSocio ? (
+            <div className="mx-auto max-w-sm rounded-[14px] bg-gradient-to-br from-accent to-gold-deep p-[18px] text-center">
+              <span className="inline-block rounded-full bg-white/20 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-white">
+                Activa
+              </span>
+              <h3 className="type-display mt-2 text-[22px] text-white">Socio CCM VIP</h3>
+              <p className="mt-1.5 text-[10px] text-white/80">Tu membresía premium está activa</p>
+              <Link
+                to="/membresia"
+                className="mt-3.5 inline-block rounded-[8px] bg-white px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.05em] text-accent transition-transform active:scale-[0.98]"
+              >
+                Ver detalles
+              </Link>
+            </div>
+          ) : (
+            <Link
+              to="/membresia"
+              className="mx-auto flex max-w-sm items-center justify-between gap-3 rounded-[14px] border border-accent/30 bg-gradient-to-br from-ink to-brown-warm p-[18px] text-left transition-transform active:scale-[0.99]"
+            >
+              <div>
+                <div className="eyebrow text-[8px] text-accent">Membresía</div>
+                <div className="type-serif mt-1 text-[15px] text-night-ink">Hacete Socio CCM VIP</div>
+                <div className="mt-1 text-[10px] text-text-2">Capacitaciones · descuentos · eventos VIP</div>
+              </div>
+              <span className="shrink-0 rounded-[8px] bg-accent px-3.5 py-2 text-[10px] font-bold uppercase text-white">
+                Quiero ser VIP
+              </span>
+            </Link>
+          )}
+
+          {/* Mis Beneficios (2-col: base + destacado, → /beneficios) */}
+          <SectionLabel>Mis Beneficios</SectionLabel>
+          <div className="grid grid-cols-2 gap-2.5">
+            <Link
+              to="/beneficios"
+              className="rounded-[12px] border-2 border-transparent bg-white p-3.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform active:scale-[0.98]"
+            >
+              <div className="text-[28px]">🎁</div>
+              <div className="type-serif mt-2 text-[13px] text-ink">Beneficios Socio</div>
+              <div className="mt-1 text-[9px] leading-[1.4] text-text-3">Acceso a descuentos y ofertas básicas</div>
+              <div className="mt-2.5 text-[10px] font-bold text-accent">Ver →</div>
+            </Link>
+            <Link
+              to="/beneficios"
+              className="rounded-[12px] border-2 border-accent bg-gradient-to-br from-ink to-brown-warm p-3.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform active:scale-[0.98]"
+            >
+              <div className="text-[28px]">⭐</div>
+              <div className="type-serif mt-2 text-[13px] text-night-ink">Beneficios VIP</div>
+              <div className="mt-1 text-[9px] leading-[1.4] text-text-2">Acceso premium y exclusivo</div>
+              <div className="mt-2.5 text-[10px] font-bold text-accent">Ver →</div>
+            </Link>
+          </div>
         </>
       )}
 
