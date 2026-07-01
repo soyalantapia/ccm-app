@@ -7,21 +7,37 @@ import { useStore } from '../../data/store'
 import { IDS } from '../../data/ids'
 import { config } from '../../config'
 
-const NAV = [
+// Foco (tesis Gastón: simple, de nicho): la app SON las 5 pestañas. PRIMARY =
+// las que compiten por atención (top-nav en desktop; bottom-nav en mobile). El
+// resto no infla el nav: las secundarias viven en el drawer, y el B2B (sponsors/
+// publicidad/stand) en el footer.
+const PRIMARY = [
+  { to: '/app', label: 'Noticias' },
   { to: '/eventos', label: 'Eventos' },
+  { to: '/catalogo', label: 'Participantes' },
+  { to: '/contenido', label: 'Elukamo' },
+]
+
+const SECONDARY = [
   { to: '/entradas', label: 'Entradas' },
   { to: '/membresia', label: 'Membresías' },
   { to: '/beneficios', label: 'Beneficios' },
+  { to: '/fotos', label: 'Fotos' },
+  { to: '/perfil', label: 'Mi perfil' },
+]
+
+// Menú completo del drawer: 5 pestañas + secundarias (sin duplicar B2B/legal).
+const DRAWER = [
+  { to: '/app', label: 'Noticias' },
+  { to: '/eventos', label: 'Eventos' },
+  { to: '/mi-qr', label: 'Mi QR' },
   { to: '/catalogo', label: 'Participantes' },
   { to: '/contenido', label: 'Elukamo' },
-  { to: '/fotos', label: 'Fotos' },
-  { to: '/novedades', label: 'Novedades' },
-  { to: '/perfil', label: 'Mi perfil' },
-  { to: '/sponsors', label: 'Sponsors' },
+  ...SECONDARY,
 ]
 
 // Bottom-nav mobile de 5 slots (mockups): Noticias · Eventos · Mi QR (centro
-// elevado) · Participantes · Elukamo. Perfil sale del nav → vive en el drawer (NAV).
+// elevado) · Participantes · Elukamo. Perfil y demás secundarias → drawer (SECONDARY).
 const BOTTOM_NAV = [
   { to: '/app', label: 'Noticias', icon: Home },
   { to: '/eventos', label: 'Eventos', icon: CalendarDays },
@@ -75,7 +91,7 @@ function Header() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5">
           <Wordmark />
           <nav className="hidden items-center gap-7 lg:flex">
-            {NAV.map((item) => (
+            {PRIMARY.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -96,7 +112,7 @@ function Header() {
             <button
               onClick={() => setMenuOpen(true)}
               aria-label="Abrir menú"
-              className="rounded-sm p-2 text-ink transition-colors hover:bg-ink/5 lg:hidden"
+              className="rounded-sm p-2 text-ink transition-colors hover:bg-ink/5"
             >
               <Menu size={20} strokeWidth={1.75} />
             </button>
@@ -117,7 +133,7 @@ function Header() {
             </button>
           </div>
           <nav className="flex flex-1 flex-col justify-center gap-1 px-8">
-            {[{ to: '/', label: 'Inicio' }, ...NAV].map((item, i) => (
+            {DRAWER.map((item, i) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -224,7 +240,7 @@ function Footer() {
           <div className="grid grid-cols-2 gap-10 text-sm">
             <div className="space-y-2.5">
               <div className="eyebrow text-[9px] text-accent">Explorar</div>
-              {NAV.slice(0, 4).map((item) => (
+              {PRIMARY.map((item) => (
                 <Link key={item.to} to={item.to} className="block text-night-ink/70 transition-colors hover:text-night-ink">
                   {item.label}
                 </Link>
