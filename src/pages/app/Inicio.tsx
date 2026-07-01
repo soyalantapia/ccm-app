@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { GraduationCap, Mic } from 'lucide-react'
-import { AdBanner } from '../../components/ui'
+import { AdBanner, ButtonLink, SectionTitle } from '../../components/ui'
 import { useStore } from '../../data/store'
 import { config } from '../../config'
 import { NoticiaCard, SectionLabel, VideoThumb } from '../../features/app/mockup'
@@ -16,18 +16,30 @@ export default function Inicio() {
   const masNoticias = restNotas.slice(2, 6)
 
   return (
-    <div className="mx-auto max-w-2xl pb-6 lg:max-w-5xl lg:pb-16">
-      {/* Franja evento inline */}
-      <div className="flex items-center justify-between gap-3 bg-ink px-5 py-3 lg:rounded-b-[16px] lg:px-8 lg:py-5">
+    <div className="mx-auto max-w-2xl pb-6 lg:max-w-6xl lg:pb-16">
+      {/* Cabecera editorial — solo desktop (estándar de página del sitio) */}
+      <div className="hidden lg:flex lg:items-end lg:justify-between lg:gap-8 lg:px-8 lg:pt-14">
+        <SectionTitle
+          eyebrow={`CCM 2026 · ${config.mainDatesLabel}`}
+          title="Noticias"
+          lead="Lo que pasa en el ecosistema CCM: novedades, plataformas y contenido en video."
+        />
+        <ButtonLink to="/entradas" size="lg" className="shrink-0">
+          Inscribite
+        </ButtonLink>
+      </div>
+
+      {/* Franja evento inline — mobile (mockup 1:1) */}
+      <div className="flex items-center justify-between gap-3 bg-ink px-5 py-3 lg:hidden">
         <div className="min-w-0">
-          <div className="type-serif text-[14px] text-night-ink lg:text-[20px]">CCM 2026 · {config.edition}</div>
-          <div className="mt-0.5 truncate text-[10px] font-medium tracking-[0.04em] text-accent lg:text-[12px]">
+          <div className="type-serif text-[14px] text-night-ink">CCM 2026 · {config.edition}</div>
+          <div className="mt-0.5 truncate text-[10px] font-medium tracking-[0.04em] text-accent">
             {config.mainDatesLabel}
           </div>
         </div>
         <Link
           to="/entradas"
-          className="shrink-0 rounded-[5px] bg-accent px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.05em] text-accent-ink lg:rounded-[7px] lg:px-5 lg:py-2.5 lg:text-[12px]"
+          className="shrink-0 rounded-[5px] bg-accent px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.05em] text-accent-ink"
         >
           Inscribite
         </Link>
@@ -40,7 +52,13 @@ export default function Inicio() {
         {featured && (
           <>
             <SectionLabel>Noticias</SectionLabel>
-            <div className="grid grid-cols-2 gap-2.5 lg:gap-5">
+            {/* Con UNA sola nota secundaria, en desktop va al lado del hero
+                (grilla de 3) en vez de quedar huérfana a media columna. */}
+            <div
+              className={`grid grid-cols-2 gap-2.5 lg:gap-5 ${
+                restNotas.slice(0, 2).length === 1 ? 'lg:grid-cols-3' : ''
+              }`}
+            >
               <NoticiaCard n={featured} featured />
               {restNotas.slice(0, 2).map((n) => (
                 <NoticiaCard key={n.id} n={n} />
@@ -72,7 +90,7 @@ export default function Inicio() {
         {masNoticias.length > 0 && (
           <>
             <SectionLabel>Más noticias</SectionLabel>
-            <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3 lg:gap-5">
+            <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-5">
               {masNoticias.map((n) => (
                 <NoticiaCard key={n.id} n={n} />
               ))}

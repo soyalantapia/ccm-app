@@ -26,6 +26,15 @@ const SECONDARY = [
   { to: '/perfil', label: 'Mi perfil' },
 ]
 
+// Nav superior de desktop: las 4 pestañas core + Fotos y Entradas. En pantalla
+// grande hay lugar de sobra y una barra más completa se lee más "web" y menos
+// vacía (en mobile sigue mandando el bottom-nav + el drawer).
+const TOPNAV = [
+  ...PRIMARY,
+  { to: '/fotos', label: 'Fotos' },
+  { to: '/entradas', label: 'Entradas' },
+]
+
 // Menú completo del drawer: 5 pestañas + secundarias (sin duplicar B2B/legal).
 const DRAWER = [
   { to: '/app', label: 'Noticias' },
@@ -88,16 +97,21 @@ function Header() {
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-line bg-bg/90 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5">
-          <Wordmark />
-          <nav className="hidden items-center gap-7 lg:flex">
-            {PRIMARY.map((item) => (
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5 lg:h-[72px] lg:px-8">
+          <div className="lg:flex-1">
+            <Wordmark />
+          </div>
+          {/* Nav centrado (3 zonas) — más completo en desktop para no verse vacío */}
+          <nav className="hidden items-center gap-8 lg:flex">
+            {TOPNAV.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
-                  `eyebrow text-[10px] transition-colors ${
-                    isActive ? 'text-ink' : 'text-ink-soft hover:text-ink'
+                  `eyebrow relative text-[11px] transition-colors after:absolute after:-bottom-1.5 after:left-0 after:h-px after:bg-accent after:transition-all after:duration-200 ${
+                    isActive
+                      ? 'text-ink after:w-full'
+                      : 'text-ink-soft after:w-0 hover:text-ink hover:after:w-full'
                   }`
                 }
               >
@@ -105,7 +119,7 @@ function Header() {
               </NavLink>
             ))}
           </nav>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 lg:flex-1 lg:justify-end">
             <Button size="sm" onClick={() => void registerFree(navigate)}>
               {registered ? 'Mi QR' : 'Registrate'}
             </Button>

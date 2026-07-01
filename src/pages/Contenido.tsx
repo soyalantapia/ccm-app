@@ -28,7 +28,7 @@ export default function Contenido() {
   const elukamoSponsor = sponsors[0]
 
   return (
-    <div className="mx-auto max-w-2xl pb-6 lg:max-w-5xl lg:pb-16">
+    <div className="mx-auto max-w-2xl pb-6 lg:max-w-6xl lg:pb-16">
       {/* Header ELUKAMO + sponsor-elukamo box + tabs */}
       <div className="bg-ink px-5 pb-2.5 pt-3.5 lg:rounded-b-[20px] lg:px-10 lg:pb-4 lg:pt-8">
         <div className="type-display text-[22px] leading-none text-night-ink lg:text-[46px] lg:tracking-[0.02em]">ELUKAMO</div>

@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { LayoutGrid, Shirt, Palette, UtensilsCrossed, Sparkles, Leaf, Plane, Cpu, Tag, type LucideIcon } from 'lucide-react'
-import { AdBanner } from '../components/ui'
+import { AdBanner, SectionTitle } from '../components/ui'
 import { useStore } from '../data/store'
 import { ParticipanteCard } from '../features/catalogo/ParticipanteCard'
 import { DesignerCard, SectionEmpty, SectionLabel, SponsorCuadrado } from '../features/app/mockup'
@@ -71,8 +71,17 @@ export default function Catalogo() {
 
   return (
     <section className="mx-auto max-w-2xl pb-6 lg:max-w-6xl">
+      {/* Cabecera editorial — solo desktop (estándar de página del sitio) */}
+      <div className="hidden lg:block lg:px-8 lg:pt-14">
+        <SectionTitle
+          eyebrow="El ecosistema · Siete mundos"
+          title="Participantes"
+          lead="Diseñadores, marcas e influencers verificados del catálogo CCM, curados por plataforma."
+        />
+      </div>
+
       {/* Filtros (chips scroll horizontal) */}
-      <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-5 py-3 lg:gap-2.5 lg:py-4">
+      <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-5 py-3 lg:gap-2.5 lg:px-8 lg:py-4 lg:pt-8">
         <Chip active={!platform} onClick={() => setPlatform(null)} icon={LayoutGrid}>
           Todas
         </Chip>
@@ -83,7 +92,7 @@ export default function Catalogo() {
         ))}
       </div>
 
-      <div className="px-5">
+      <div className="px-5 lg:px-8">
         <AdBanner slot="S2" />
 
         {platform ? (

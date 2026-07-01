@@ -58,7 +58,7 @@ export default function Eventos() {
   const visible = filter === 'todos' ? rest : rest.filter((e) => e.type === filter)
 
   return (
-    <div className="mx-auto max-w-2xl px-5 py-6 lg:max-w-5xl">
+    <div className="mx-auto max-w-2xl px-5 py-6 lg:max-w-6xl lg:px-8 lg:py-10">
       {/* ─── Banner del evento principal → la compra vive adentro ─── */}
       {principal && (
         <Link
@@ -159,7 +159,7 @@ export default function Eventos() {
       {contents.length > 0 && (
         <>
           <SectionLabel>Noticias en video</SectionLabel>
-          <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5">
+          <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:-mx-8 lg:gap-5 lg:px-8">
             {contents.slice(0, 6).map((c) => (
               <VideoThumb key={c.id} c={c} />
             ))}
