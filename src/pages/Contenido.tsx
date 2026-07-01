@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Sparkles } from 'lucide-react'
 import { AdBanner, EmptyState } from '../components/ui'
 import { store, useStore } from '../data/store'
 import { VideoCard } from '../features/contenido/VideoCard'
@@ -27,38 +28,41 @@ export default function Contenido() {
   const elukamoSponsor = sponsors[0]
 
   return (
-    <div className="mx-auto max-w-2xl pb-6 lg:max-w-4xl">
+    <div className="mx-auto max-w-2xl pb-6 lg:max-w-5xl lg:pb-16">
       {/* Header ELUKAMO + sponsor-elukamo box + tabs */}
-      <div className="bg-ink px-5 pb-2.5 pt-3.5">
-        <div className="type-display text-[22px] leading-none text-night-ink">ELUKAMO</div>
+      <div className="bg-ink px-5 pb-2.5 pt-3.5 lg:rounded-b-[20px] lg:px-10 lg:pb-4 lg:pt-8">
+        <div className="type-display text-[22px] leading-none text-night-ink lg:text-[46px] lg:tracking-[0.02em]">ELUKAMO</div>
         {elukamoSponsor && (
-          <div className="mt-3.5 flex items-center justify-between gap-3 rounded-[10px] border border-dashed border-accent/50 bg-white/[0.07] px-3.5 py-2.5">
+          <div className="mt-3.5 flex items-center justify-between gap-3 rounded-[10px] border border-dashed border-accent/50 bg-white/[0.07] px-3.5 py-2.5 lg:mt-6 lg:max-w-md lg:gap-5 lg:rounded-[14px] lg:px-6 lg:py-4">
             <div className="min-w-0">
-              <div className="text-[8px] font-bold uppercase tracking-[0.12em] text-accent">Sponsor Elukamo</div>
-              <div className="type-serif mt-0.5 truncate text-[13px] text-night-ink">{elukamoSponsor.name}</div>
+              <div className="text-[8px] font-bold uppercase tracking-[0.12em] text-accent lg:text-[11px]">Sponsor Elukamo</div>
+              <div className="type-serif mt-0.5 truncate text-[13px] text-night-ink lg:mt-1 lg:text-[18px]">{elukamoSponsor.name}</div>
             </div>
-            <span className="shrink-0 rounded-[4px] bg-accent px-2 py-1 text-[9px] font-bold uppercase text-accent-ink">
+            <span className="shrink-0 rounded-[4px] bg-accent px-2 py-1 text-[9px] font-bold uppercase text-accent-ink lg:hidden">
               Sponsor
+            </span>
+            <span className="hidden shrink-0 items-center justify-center rounded-[10px] bg-accent text-accent-ink lg:flex lg:h-12 lg:w-12">
+              <Sparkles size={22} />
             </span>
           </div>
         )}
-        <div className="mt-2.5 flex border-b border-white/[0.08]">
+        <div className="mt-2.5 flex border-b border-white/[0.08] lg:mt-6 lg:gap-2">
           {(['entrevistas', 'capacitaciones'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`relative flex-1 py-2.5 text-center text-[11px] font-bold uppercase tracking-[0.08em] transition-colors ${
+              className={`relative flex-1 py-2.5 text-center text-[11px] font-bold uppercase tracking-[0.08em] transition-colors lg:flex-none lg:px-7 lg:py-4 lg:text-[14px] ${
                 tab === t ? 'text-accent' : 'text-[#6b6b6b]'
               }`}
             >
               {t === 'entrevistas' ? 'Entrevistas' : 'Capacitaciones'}
-              {tab === t && <span aria-hidden className="absolute inset-x-[15%] bottom-0 h-0.5 rounded-t bg-accent" />}
+              {tab === t && <span aria-hidden className="absolute inset-x-[15%] bottom-0 h-0.5 rounded-t bg-accent lg:inset-x-0 lg:h-[3px]" />}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="px-5">
+      <div className="px-5 lg:px-10">
         {tab === 'entrevistas' ? (
           !featured ? (
             <EmptyState title="Todavía no hay videos acá" className="mt-10">
@@ -66,7 +70,7 @@ export default function Contenido() {
             </EmptyState>
           ) : (
             <>
-              <div className="mt-4">
+              <div className="mt-4 lg:mt-8">
                 <VideoCard item={featured} featured />
               </div>
 
@@ -75,7 +79,7 @@ export default function Contenido() {
               {rest.length > 0 && (
                 <>
                   <SectionLabel>Entrevistas</SectionLabel>
-                  <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2 lg:gap-3">
+                  <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2 lg:gap-5">
                     {rest.map((item) => (
                       <EntrevistaRow key={item.id} c={item} />
                     ))}
@@ -84,7 +88,7 @@ export default function Contenido() {
               )}
 
               <SectionLabel>Noticias</SectionLabel>
-              <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5">
+              <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:-mx-10 lg:gap-5 lg:px-10">
                 {sorted.slice(0, 6).map((c) => (
                   <VideoThumb key={c.id} c={c} />
                 ))}
@@ -98,9 +102,9 @@ export default function Contenido() {
             {/* Capacitaciones: gate premium (o acceso si es socio) */}
             <AdBanner slot="S2" className="mt-4" />
             {isSocio ? (
-              <div className="mt-1 rounded-[14px] border border-accent/30 bg-gradient-to-br from-ink to-brown-warm p-4 text-center">
-                <div className="type-serif text-[15px] text-night-ink">Ya sos Socio CCM VIP</div>
-                <div className="mt-1 text-[10px] text-text-2">Tenés acceso completo a las capacitaciones de Elukamo.</div>
+              <div className="mt-1 rounded-[14px] border border-accent/30 bg-gradient-to-br from-ink to-brown-warm p-4 text-center lg:mx-auto lg:max-w-2xl lg:rounded-[18px] lg:p-8">
+                <div className="type-serif text-[15px] text-night-ink lg:text-[22px]">Ya sos Socio CCM VIP</div>
+                <div className="mt-1 text-[10px] text-text-2 lg:mt-2 lg:text-[13px]">Tenés acceso completo a las capacitaciones de Elukamo.</div>
               </div>
             ) : (
               <div className="mt-1">
@@ -109,14 +113,14 @@ export default function Contenido() {
             )}
 
             <SectionLabel>Entrevistas Elukamo</SectionLabel>
-            <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5">
+            <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:-mx-10 lg:gap-5 lg:px-10">
               {sorted.slice(0, 6).map((c) => (
                 <VideoThumb key={c.id} c={c} />
               ))}
             </div>
 
             <SectionLabel>Noticias CCM</SectionLabel>
-            <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5">
+            <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:-mx-10 lg:gap-5 lg:px-10">
               {sorted.slice(0, 6).map((c) => (
                 <VideoThumb key={`n-${c.id}`} c={c} />
               ))}

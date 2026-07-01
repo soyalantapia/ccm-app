@@ -80,10 +80,10 @@ export function VideoCard({ item, featured, className }: VideoCardProps) {
       {featured ? (
         <div className="mt-6 md:grid md:grid-cols-12 md:gap-x-8">
           <div className="md:col-span-7">
-            <p className="eyebrow text-[10px] text-ink-soft">{meta}</p>
-            <h3 className="type-serif mt-2.5 text-2xl text-ink md:text-3xl">{item.title}</h3>
+            <p className="eyebrow text-[10px] text-ink-soft lg:text-[12px]">{meta}</p>
+            <h3 className="type-serif mt-2.5 text-2xl text-ink md:text-3xl lg:text-4xl">{item.title}</h3>
           </div>
-          <p className="mt-3 text-[15px] leading-relaxed text-ink-soft md:col-span-5 md:mt-1">
+          <p className="mt-3 text-[15px] leading-relaxed text-ink-soft md:col-span-5 md:mt-1 lg:text-[17px]">
             {item.description}
           </p>
         </div>
