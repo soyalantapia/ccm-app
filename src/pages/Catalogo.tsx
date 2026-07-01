@@ -1,8 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { Sparkles } from 'lucide-react'
 import { AdBanner } from '../components/ui'
 import { useStore } from '../data/store'
 import { ParticipanteCard } from '../features/catalogo/ParticipanteCard'
-import { SectionLabel, SectionEmpty } from '../features/app/mockup'
+import { DesignerCard, SectionEmpty, SectionLabel, SponsorCuadrado } from '../features/app/mockup'
 
 /** filtro-btn de los mockups: pill; inactivo crema apagado, activo oscuro + dorado. */
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
@@ -18,21 +19,20 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   )
 }
 
-/** Participantes (mockup): chips por plataforma → banner global → secciones por
- *  plataforma (section-label + participante-cards) con sponsor-banners intercalados. */
+/** Participantes (mockup):
+ *  - "Todas": banner global → secciones por plataforma (participante-cards).
+ *  - Plataforma seleccionada: catálogo por plataforma (designer-grid) + "Sponsors de la Plataforma". */
 export default function Catalogo() {
   const catalog = useStore((s) => s.getCatalog())
+  const sponsors = useStore((s) => s.getSponsors())
   const [platform, setPlatform] = useState<string | null>(null)
 
   const platforms = useMemo(() => [...new Set(catalog.map((p) => p.platform))], [catalog])
   const groups = useMemo(
-    () =>
-      platforms
-        .filter((pl) => !platform || pl === platform)
-        .map((pl) => ({ platform: pl, items: catalog.filter((p) => p.platform === pl) }))
-        .filter((g) => g.items.length > 0),
-    [catalog, platforms, platform],
+    () => platforms.map((pl) => ({ platform: pl, items: catalog.filter((p) => p.platform === pl) })).filter((g) => g.items.length > 0),
+    [catalog, platforms],
   )
+  const selected = platform ? catalog.filter((p) => p.platform === platform) : []
 
   return (
     <section className="mx-auto max-w-2xl pb-6">
@@ -49,18 +49,39 @@ export default function Catalogo() {
       </div>
 
       <div className="px-5">
-        {/* Sponsor global de participantes */}
         <AdBanner slot="S2" />
 
-        {groups.length === 0 ? (
-          <div className="mt-4">
-            <SectionEmpty
-              icon="✨"
-              title="Nadie por acá todavía"
-              sub="Pronto vas a ver a los participantes de esta plataforma."
-            />
-          </div>
+        {platform ? (
+          /* ── Catálogo por plataforma (designer-grid) ── */
+          <>
+            <SectionLabel>Catálogo de {platform}</SectionLabel>
+            {selected.length > 0 ? (
+              <div className="grid grid-cols-2 gap-2.5">
+                {selected.map((p) => (
+                  <DesignerCard key={p.id} profile={p} />
+                ))}
+              </div>
+            ) : (
+              <SectionEmpty
+                icon="✨"
+                title={`${platform} en camino`}
+                sub="Pronto vas a ver a los participantes de esta plataforma."
+              />
+            )}
+
+            {sponsors.length > 0 && (
+              <>
+                <SectionLabel>Sponsors de la Plataforma</SectionLabel>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {sponsors.slice(0, 4).map((sp) => (
+                    <SponsorCuadrado key={sp.id} icon={<Sparkles size={16} />} name={sp.name} label={sp.level} />
+                  ))}
+                </div>
+              </>
+            )}
+          </>
         ) : (
+          /* ── Vista principal: agrupado por plataforma (participante-cards) ── */
           groups.map((g, gi) => (
             <section key={g.platform}>
               <SectionLabel>{g.platform}</SectionLabel>
@@ -69,7 +90,6 @@ export default function Catalogo() {
                   <ParticipanteCard key={p.id} profile={p} />
                 ))}
               </div>
-              {/* Sponsor-banner intercalado cada 2 plataformas (cadencia del mockup) */}
               {gi % 2 === 1 && <AdBanner slot="S2" index={gi} className="mt-4" />}
             </section>
           ))

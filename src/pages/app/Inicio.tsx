@@ -1,79 +1,10 @@
 import { Link } from 'react-router-dom'
-import { GraduationCap, Mic, Play } from 'lucide-react'
+import { GraduationCap, Mic } from 'lucide-react'
 import { AdBanner } from '../../components/ui'
 import { useStore } from '../../data/store'
 import { config } from '../../config'
-import { SectionLabel } from '../../features/app/mockup'
+import { NoticiaCard, SectionLabel, VideoThumb } from '../../features/app/mockup'
 import { WelcomeSheet } from '../../features/app/WelcomeSheet'
-import type { ContentItem, Nota } from '../../data/types'
-
-function fmtDate(iso: string) {
-  try {
-    const d = new Date(iso)
-    return d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
-  } catch {
-    return ''
-  }
-}
-
-/** noticia-card de los mockups: img (cover o gradiente con título), tag dorado,
- *  título Playfair, fecha. Variante featured = ancho completo (col-span-2). */
-function NoticiaCard({ n, featured = false }: { n: Nota; featured?: boolean }) {
-  return (
-    <Link
-      to={`/novedades/${n.slug}`}
-      className={`overflow-hidden rounded-[12px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.07)] ${featured ? 'col-span-2' : ''}`}
-    >
-      <div className={`relative ${featured ? 'h-[110px]' : 'h-[80px]'} bg-cream-muted`}>
-        {n.cover ? (
-          <img src={n.cover} alt="" loading="lazy" className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full items-center justify-center bg-gradient-to-br from-brown-gray to-ink px-3 text-center">
-            <span className="type-serif text-[11px] leading-tight text-accent">{n.title}</span>
-          </div>
-        )}
-      </div>
-      <div className="px-2.5 pb-2.5 pt-2">
-        <div className="text-[8px] font-bold uppercase tracking-[0.08em] text-accent">{n.category ?? 'CCM'}</div>
-        <div className={`type-serif mt-0.5 leading-[1.3] text-ink ${featured ? 'text-[14px]' : 'text-[12px]'}`}>
-          {n.title}
-        </div>
-        <div className="mt-1 text-[8px] text-text-4">{fmtDate(n.publishedAt)}</div>
-      </div>
-    </Link>
-  )
-}
-
-/** video-card del carrusel (thumbnail de YouTube + play + tag + título). */
-function VideoThumb({ c }: { c: ContentItem }) {
-  return (
-    <Link
-      to="/contenido"
-      className="w-[190px] shrink-0 overflow-hidden rounded-[12px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.07)]"
-    >
-      <div className="relative flex h-[100px] items-center justify-center bg-ink">
-        {c.youtubeId && (
-          <img
-            src={`https://i.ytimg.com/vi/${c.youtubeId}/mqdefault.jpg`}
-            alt=""
-            loading="lazy"
-            className="absolute inset-0 h-full w-full object-cover opacity-80"
-          />
-        )}
-        <span className="absolute left-1.5 top-1.5 z-10 rounded-[3px] bg-accent px-1.5 py-0.5 text-[7px] font-bold uppercase text-accent-ink">
-          Video
-        </span>
-        <span className="relative z-10 flex h-7 w-7 items-center justify-center rounded-full bg-accent text-accent-ink">
-          <Play size={12} className="ml-0.5" />
-        </span>
-      </div>
-      <div className="p-2.5">
-        <div className="text-[8px] font-bold uppercase tracking-[0.08em] text-accent">{c.platform ?? 'CCM'}</div>
-        <div className="type-serif mt-0.5 line-clamp-2 text-[11px] leading-[1.3] text-ink">{c.title}</div>
-      </div>
-    </Link>
-  )
-}
 
 /** Noticias (feed) — mockup: franja evento → banners → noticias → Elukamo accesos →
  *  membresía → más noticias → carrusel de video. Todo con data real (notas/contents). */

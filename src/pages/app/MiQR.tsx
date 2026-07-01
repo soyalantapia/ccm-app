@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Star } from 'lucide-react'
 import { AdBanner, Badge, Button, EmptyState, SectionTitle } from '../../components/ui'
@@ -8,17 +8,15 @@ import { registerFree } from '../../lib/actions'
 import { AccreditationCard } from '../../features/app/AccreditationCard'
 import { AddToCalendar } from '../../features/app/AddToCalendar'
 import { AppSection } from '../../features/app/AppSection'
-import { RegistrationRow } from '../../features/app/RegistrationRow'
+import { InscripcionItem, SectionLabel } from '../../features/app/mockup'
 import { ORDER_STATUS_META, formatDay, registrationSortKey } from '../../features/app/meta'
+import type { Registration } from '../../data/types'
 
-/** section-label de los mockups: barra dorada 24×2 + eyebrow dorado uppercase. */
-function SectionLabel({ children }: { children: ReactNode }) {
-  return (
-    <div className="mt-8 flex items-center gap-2.5 pb-2.5">
-      <span aria-hidden className="h-0.5 w-6 shrink-0 bg-accent" />
-      <span className="eyebrow text-[10px] text-accent">{children}</span>
-    </div>
-  )
+/** Deriva hora/título/rubro del bloque y renderiza el inscripcion-item del mockup. */
+function InscripcionRow({ registration }: { registration: Registration }) {
+  const block = useStore((s) => (registration.blockId ? s.getBlock(registration.blockId) : undefined))
+  if (!block) return null
+  return <InscripcionItem hora={block.start} titulo={block.title} plataforma={`${block.kind} · ${block.room}`} />
 }
 
 /** Mi QR — PRD §8.3: acreditación offline, inscripciones, entradas VIP y slot S6. */
@@ -83,15 +81,16 @@ export default function MiQR() {
             )}
           </div>
 
-          {/* Inscripciones a bloques: día, hora y sala */}
+          {/* Mis Inscripciones (inscripcion-item de los mockups) */}
           {blockRegistrations.length > 0 && (
-            <AppSection eyebrow="Tus inscripciones">
-              <div className="border-b border-line">
+            <>
+              <SectionLabel>Mis Inscripciones</SectionLabel>
+              <div className="flex flex-col gap-2">
                 {blockRegistrations.map((r) => (
-                  <RegistrationRow key={r.id} registration={r} showCalendar />
+                  <InscripcionRow key={r.id} registration={r} />
                 ))}
               </div>
-            </AppSection>
+            </>
           )}
 
           {/* Entradas VIP con estado de la orden MP */}

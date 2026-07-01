@@ -1,13 +1,22 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, CalendarDays, MapPin, Ticket } from 'lucide-react'
+import { ArrowRight, CalendarDays, MapPin, Sparkles, Ticket } from 'lucide-react'
 import { AdBanner, Badge, EmptyState, Eyebrow, Img, Tabs } from '../components/ui'
 import { store, useStore } from '../data/store'
 import { useEvents, useRegistrations } from '../data/queries'
+import { IDS } from '../data/ids'
 import { EventCard } from '../features/eventos/EventCard'
 import { formatMoney } from '../features/tickets/format'
 import { EVENT_TYPE_ORDER, EVENT_TYPE_TABS } from '../features/eventos/eventMeta'
-import { SectionLabel } from '../features/app/mockup'
+import {
+  CorazonesCta,
+  LanzamientoCard,
+  NoticiaCard,
+  PrensaItem,
+  SectionLabel,
+  SponsorCuadrado,
+  VideoThumb,
+} from '../features/app/mockup'
 
 /** Listado /eventos: banner del evento principal + Caminos y capacitaciones. */
 export default function Eventos() {
@@ -19,8 +28,15 @@ export default function Eventos() {
   )
   const [filter, setFilter] = useState('todos')
 
+  const sponsors = useStore((s) => s.getSponsors())
+  const contents = useStore((s) => s.getContents())
+  const notas = useStore((s) => s.getNotas())
+
   const principal = events.find((e) => e.type === 'principal')
-  const rest = events.filter((e) => e.type !== 'principal')
+  // Un evento especial (capacitación destacada) se muestra como lanzamiento-card
+  // y se excluye de la lista de Caminos para no duplicarlo.
+  const especial = events.find((e) => e.type === 'capacitacion')
+  const rest = events.filter((e) => e.type !== 'principal' && e.id !== especial?.id)
 
   /** Inscripto al evento o a alguno de sus bloques (toda registration lleva eventId). */
   const registeredEventIds = useMemo(
@@ -42,7 +58,7 @@ export default function Eventos() {
   const visible = filter === 'todos' ? rest : rest.filter((e) => e.type === filter)
 
   return (
-    <div className="mx-auto max-w-6xl px-5 py-10 md:py-16">
+    <div className="mx-auto max-w-2xl px-5 py-6">
       {/* ─── Banner del evento principal → la compra vive adentro ─── */}
       {principal && (
         <Link
@@ -108,7 +124,7 @@ export default function Eventos() {
           Pronto vas a encontrar nuevos encuentros en esta categoría.
         </EmptyState>
       ) : (
-        <div className="mt-10 grid animate-rise gap-x-6 gap-y-6 sm:gap-y-8 md:grid-cols-2 md:items-stretch">
+        <div className="mt-4 flex animate-rise flex-col gap-2.5">
           {visible.map((event) => (
             <EventCard
               key={event.id}
@@ -120,9 +136,68 @@ export default function Eventos() {
         </div>
       )}
 
-      <AdBanner slot="S2" index={1} className="mt-12" />
+      <AdBanner slot="S2" index={1} className="mt-4" />
 
-      <div className="mt-12 flex items-center justify-center">
+      {/* Evento especial (lanzamiento-card) */}
+      {especial && (
+        <>
+          <SectionLabel>Evento especial</SectionLabel>
+          <LanzamientoCard event={especial} />
+        </>
+      )}
+
+      {/* Sponsors (sponsors-duo) */}
+      {sponsors.length > 0 && (
+        <div className="mt-4 grid grid-cols-2 gap-2.5">
+          {sponsors.slice(0, 2).map((sp) => (
+            <SponsorCuadrado key={sp.id} icon={<Sparkles size={16} />} name={sp.name} label={sp.level} />
+          ))}
+        </div>
+      )}
+
+      {/* Noticias en video */}
+      {contents.length > 0 && (
+        <>
+          <SectionLabel>Noticias en video</SectionLabel>
+          <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5">
+            {contents.slice(0, 6).map((c) => (
+              <VideoThumb key={c.id} c={c} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Novedades (noticias-duo) */}
+      {notas.length > 0 && (
+        <>
+          <SectionLabel>Novedades</SectionLabel>
+          <div className="grid grid-cols-2 gap-2.5">
+            {notas.slice(0, 2).map((n) => (
+              <NoticiaCard key={n.id} n={n} />
+            ))}
+          </div>
+        </>
+      )}
+
+      <AdBanner slot="S2" index={2} className="mt-4" />
+
+      {/* Prensa */}
+      {notas.length > 2 && (
+        <>
+          <SectionLabel>Prensa</SectionLabel>
+          <div className="flex flex-col gap-2">
+            {notas.slice(2, 5).map((n) => (
+              <PrensaItem key={n.id} n={n} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Corazones CCM */}
+      <SectionLabel>Corazones CCM</SectionLabel>
+      <CorazonesCta to={`/c/${IDS.convocatoriaSlugs.camino}`} />
+
+      <div className="mt-8 flex items-center justify-center">
         <Eyebrow>Sin inscripción no se ingresa · cupos limitados</Eyebrow>
       </div>
     </div>
