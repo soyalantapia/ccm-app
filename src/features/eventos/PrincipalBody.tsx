@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { Sparkles } from 'lucide-react'
 import { Badge, Eyebrow, EmptyState, SectionTitle } from '../../components/ui'
 import { store, useStore } from '../../data/store'
@@ -112,11 +111,12 @@ export function PrincipalBody({ event }: { event: EventItem }) {
             }
             lead="Desfiles exclusivos, música en vivo, shows y experiencias premium dentro del evento."
           />
+          {/* <a> nativo al hash: React Router no scrollea a #entradas por defecto — el CTA quedaba muerto */}
           <div className="mt-8 grid gap-4 md:mt-10 md:grid-cols-2">
             {EXPERIENCIAS.map((x) => (
-              <Link
+              <a
                 key={x.name}
-                to="#entradas"
+                href="#entradas"
                 className="group flex items-center justify-between gap-4 rounded-md border border-night-soft bg-night-soft/40 p-5 transition-colors hover:border-accent/60"
               >
                 <div>
@@ -132,7 +132,7 @@ export function PrincipalBody({ event }: { event: EventItem }) {
                     Comprar ↑
                   </div>
                 </div>
-              </Link>
+              </a>
             ))}
           </div>
         </div>

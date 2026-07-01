@@ -66,6 +66,7 @@ export default function FotosGaleria() {
               src={photo.src}
               alt={photo.alt}
               ratio="3/4"
+              priority={i < 8}
               imgClassName="transition duration-700 group-hover:scale-[1.04]"
             />
             {favSet.has(photo.id) && (

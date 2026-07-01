@@ -30,13 +30,15 @@ const SECONDARY = [
 // grande hay lugar de sobra y una barra más completa se lee más "web" y menos
 // vacía (en mobile sigue mandando el bottom-nav + el drawer).
 const TOPNAV = [
+  { to: '/', label: 'Inicio' },
   ...PRIMARY,
   { to: '/fotos', label: 'Fotos' },
   { to: '/entradas', label: 'Entradas' },
 ]
 
-// Menú completo del drawer: 5 pestañas + secundarias (sin duplicar B2B/legal).
+// Menú completo del drawer: inicio + 5 pestañas + secundarias (sin duplicar B2B/legal).
 const DRAWER = [
+  { to: '/', label: 'Inicio' },
   { to: '/app', label: 'Noticias' },
   { to: '/eventos', label: 'Eventos' },
   { to: '/mi-qr', label: 'Mi QR' },
@@ -107,6 +109,7 @@ function Header() {
               <NavLink
                 key={item.to}
                 to={item.to}
+                end={item.to === '/'}
                 className={({ isActive }) =>
                   `eyebrow relative text-[11px] transition-colors after:absolute after:-bottom-1.5 after:left-0 after:h-px after:bg-accent after:transition-all after:duration-200 ${
                     isActive
@@ -151,6 +154,7 @@ function Header() {
               <NavLink
                 key={item.to}
                 to={item.to}
+                end={item.to === '/'}
                 className="group flex items-baseline gap-4 py-2.5"
                 style={{ animationDelay: `${i * 40}ms` }}
               >

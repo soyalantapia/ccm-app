@@ -38,7 +38,7 @@ export default function MiQR() {
     .sort((a, b) => registrationSortKey(a).localeCompare(registrationSortKey(b)))
 
   return (
-    <div className="mx-auto max-w-2xl px-5 py-12 md:py-20">
+    <div className="mx-auto max-w-2xl px-5 py-12 md:py-20 lg:max-w-3xl">
       <SectionTitle
         align="center"
         eyebrow="Mi QR"
@@ -120,15 +120,15 @@ export default function MiQR() {
           {/* Mi Suscripción (suscripcion-card dorada si es socio, si no CTA de membresía) */}
           <SectionLabel>Mi Suscripción</SectionLabel>
           {isSocio ? (
-            <div className="mx-auto max-w-sm rounded-[14px] bg-gradient-to-br from-accent to-gold-deep p-[18px] text-center">
-              <span className="inline-block rounded-full bg-white/20 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-white">
+            <div className="mx-auto max-w-sm rounded-[14px] bg-gradient-to-br from-accent to-gold-deep p-[18px] text-center lg:max-w-md lg:p-7">
+              <span className="inline-block rounded-full bg-white/20 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-white lg:text-[10px]">
                 Activa
               </span>
-              <h3 className="type-display mt-2 text-[22px] text-white">Socio CCM VIP</h3>
-              <p className="mt-1.5 text-[10px] text-white/80">Tu membresía premium está activa</p>
+              <h3 className="type-display mt-2 text-[22px] text-white lg:text-[28px]">Socio CCM VIP</h3>
+              <p className="mt-1.5 text-[10px] text-white/80 lg:text-[12.5px]">Tu membresía premium está activa</p>
               <Link
                 to="/membresia"
-                className="mt-3.5 inline-block rounded-[8px] bg-white px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.05em] text-accent transition-transform active:scale-[0.98]"
+                className="mt-3.5 inline-block rounded-[8px] bg-white px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.05em] text-accent transition-transform active:scale-[0.98] lg:px-6 lg:text-[12px]"
               >
                 Ver detalles
               </Link>
@@ -136,12 +136,12 @@ export default function MiQR() {
           ) : (
             <Link
               to="/membresia"
-              className="mx-auto flex max-w-sm items-center justify-between gap-3 rounded-[14px] border border-accent/30 bg-gradient-to-br from-ink to-brown-warm p-[18px] text-left transition-transform active:scale-[0.99]"
+              className="mx-auto flex max-w-sm items-center justify-between gap-3 rounded-[14px] border border-accent/30 bg-gradient-to-br from-ink to-brown-warm p-[18px] text-left transition-transform active:scale-[0.99] lg:max-w-md lg:p-6"
             >
               <div>
-                <div className="eyebrow text-[8px] text-accent">Membresía</div>
-                <div className="type-serif mt-1 text-[15px] text-night-ink">Hacete Socio CCM VIP</div>
-                <div className="mt-1 text-[10px] text-text-2">Capacitaciones · descuentos · eventos VIP</div>
+                <div className="eyebrow text-[8px] text-accent lg:text-[10px]">Membresía</div>
+                <div className="type-serif mt-1 text-[15px] text-night-ink lg:text-[18px]">Hacete Socio CCM VIP</div>
+                <div className="mt-1 text-[10px] text-text-2 lg:text-[12.5px]">Capacitaciones · descuentos · eventos VIP</div>
               </div>
               <span className="shrink-0 rounded-[8px] bg-accent px-3.5 py-2 text-[10px] font-bold uppercase text-white">
                 Quiero ser VIP
@@ -151,31 +151,31 @@ export default function MiQR() {
 
           {/* Mis Beneficios (2-col: base + destacado, → /beneficios) */}
           <SectionLabel>Mis Beneficios</SectionLabel>
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-2 gap-2.5 lg:gap-4">
             <Link
               to="/beneficios"
-              className="rounded-[12px] border-2 border-transparent bg-white p-3.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform active:scale-[0.98]"
+              className="rounded-[12px] border-2 border-transparent bg-white p-3.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform active:scale-[0.98] lg:p-5"
             >
-              <div className="text-[28px]">🎁</div>
-              <div className="type-serif mt-2 text-[13px] text-ink">Beneficios Socio</div>
-              <div className="mt-1 text-[9px] leading-[1.4] text-text-3">Acceso a descuentos y ofertas básicas</div>
-              <div className="mt-2.5 text-[10px] font-bold text-accent">Ver →</div>
+              <div className="text-[28px] lg:text-[36px]">🎁</div>
+              <div className="type-serif mt-2 text-[13px] text-ink lg:text-[16px]">Beneficios Socio</div>
+              <div className="mt-1 text-[9px] leading-[1.4] text-text-3 lg:text-[11px]">Acceso a descuentos y ofertas básicas</div>
+              <div className="mt-2.5 text-[10px] font-bold text-accent lg:text-[11px]">Ver →</div>
             </Link>
             <Link
               to="/beneficios"
-              className="rounded-[12px] border-2 border-accent bg-gradient-to-br from-ink to-brown-warm p-3.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform active:scale-[0.98]"
+              className="rounded-[12px] border-2 border-accent bg-gradient-to-br from-ink to-brown-warm p-3.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform active:scale-[0.98] lg:p-5"
             >
-              <div className="text-[28px]">⭐</div>
-              <div className="type-serif mt-2 text-[13px] text-night-ink">Beneficios VIP</div>
-              <div className="mt-1 text-[9px] leading-[1.4] text-text-2">Acceso premium y exclusivo</div>
-              <div className="mt-2.5 text-[10px] font-bold text-accent">Ver →</div>
+              <div className="text-[28px] lg:text-[36px]">⭐</div>
+              <div className="type-serif mt-2 text-[13px] text-night-ink lg:text-[16px]">Beneficios VIP</div>
+              <div className="mt-1 text-[9px] leading-[1.4] text-text-2 lg:text-[11px]">Acceso premium y exclusivo</div>
+              <div className="mt-2.5 text-[10px] font-bold text-accent lg:text-[11px]">Ver →</div>
             </Link>
           </div>
         </>
       )}
 
       {/* Slot discreto de sponsor (S6) */}
-      <AdBanner slot="S6" className="mt-16" />
+      <AdBanner slot="S6" className="mt-16 lg:mt-10" />
     </div>
   )
 }

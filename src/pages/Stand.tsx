@@ -192,6 +192,10 @@ export default function Stand() {
         <section className="border-t border-line">
           <div className="mx-auto max-w-6xl px-5 py-16 md:py-24">
             <Eyebrow>Qué te llevás</Eyebrow>
+            {/* Título display — solo desktop (estándar de sección del sitio) */}
+            <h2 className="type-display mt-4 hidden text-[clamp(1.8rem,4vw,2.6rem)] text-balance text-ink lg:block">
+              Tres cosas que te llevás por dejar tus datos
+            </h2>
             <div className="mt-8 grid gap-px overflow-hidden rounded-md border border-line bg-line md:mt-10 md:grid-cols-3">
               {PERKS.map((perk) => (
                 <div key={perk.title} className="bg-surface p-7 md:p-8">
@@ -219,7 +223,7 @@ export default function Stand() {
 
           <div className="mt-12 grid grid-cols-3 gap-x-6 gap-y-10 md:mt-14">
             <Stat value="1 toque" label="Del QR al lead capturado" />
-            <Stat value="4 datos" label="Nombre · email · teléfono" />
+            <Stat value="4 datos" label="Nombre · apellido · email · teléfono" />
             <Stat value="En vivo" label="Visible en el reporte del sponsor" tone="accent" />
           </div>
 

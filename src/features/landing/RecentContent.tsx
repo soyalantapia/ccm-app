@@ -39,8 +39,18 @@ export function RecentContent() {
           </Link>
         </div>
         <div className="mt-10 grid gap-6 md:mt-14 md:grid-cols-2">
+          {/* Con exactamente 2 videos, en desktop van lado a lado (sin huérfano). */}
           {videos.map((v, i) => (
-            <div key={v.id} className={i === 0 && videos.length > 1 ? 'md:col-span-2' : ''}>
+            <div
+              key={v.id}
+              className={
+                i === 0 && videos.length > 1
+                  ? videos.length === 2
+                    ? 'md:col-span-2 lg:col-span-1'
+                    : 'md:col-span-2'
+                  : ''
+              }
+            >
               <YouTubeEmbed
                 youtubeId={v.youtubeId}
                 title={v.title}

@@ -16,21 +16,25 @@ export function AccreditationCard() {
   const token = qrToken()
 
   return (
-    <div className="mx-auto w-full max-w-sm rounded-[14px] border-2 border-accent bg-white p-5 text-center shadow-[0_4px_16px_rgba(0,0,0,0.1)]">
-      <div className="eyebrow text-[9px] text-accent">Acreditación · Entrada General</div>
-      <h2 className="type-display mt-3 text-balance text-[24px] leading-[1.15] text-ink">{name}</h2>
-      <p className="mt-1.5 text-[10px] font-medium uppercase tracking-[0.05em] text-text-2">
+    <div className="mx-auto w-full max-w-sm rounded-[14px] border-2 border-accent bg-white p-5 text-center shadow-[0_4px_16px_rgba(0,0,0,0.1)] lg:max-w-md lg:p-8">
+      <div className="eyebrow text-[9px] text-accent lg:text-[11px]">Acreditación · Entrada General</div>
+      <h2 className="type-display mt-3 text-balance text-[24px] leading-[1.15] text-ink lg:text-[32px]">{name}</h2>
+      <p className="mt-1.5 text-[10px] font-medium uppercase tracking-[0.05em] text-text-2 lg:text-[12px]">
         CCM 2026 · 19 y 20 de septiembre
       </p>
 
-      <div className="mt-[18px] flex justify-center">
+      {/* QR dual-size: 160 mobile (mockup) / 200 desktop */}
+      <div className="mt-[18px] flex justify-center lg:hidden">
         <QR value={token} size={160} />
       </div>
+      <div className="mt-6 hidden justify-center lg:flex">
+        <QR value={token} size={200} />
+      </div>
 
-      <p className="mt-3.5 text-[9px] tracking-[0.06em] text-text-4 [font-family:ui-monospace,SFMono-Regular,Menlo,monospace]">
+      <p className="mt-3.5 text-[9px] tracking-[0.06em] text-text-4 [font-family:ui-monospace,SFMono-Regular,Menlo,monospace] lg:text-[11px]">
         {token}
       </p>
-      <p className="mt-3 flex items-center justify-center gap-1.5 text-[10px] font-semibold text-accent">
+      <p className="mt-3 flex items-center justify-center gap-1.5 text-[10px] font-semibold text-accent lg:text-[12px]">
         <WifiOff size={12} />
         Tu QR funciona sin conexión
       </p>

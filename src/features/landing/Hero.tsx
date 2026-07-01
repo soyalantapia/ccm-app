@@ -32,7 +32,9 @@ export function Hero() {
           </div>
 
           {/* Video portada (reel del evento) */}
-          <div className="relative animate-rise md:col-span-5 md:row-span-2 md:mt-4">
+          {/* lg:self-start: sin esto el grid estira el item (stretch) y el marco
+              dorado h-full se extiende ~200px por debajo de la foto */}
+          <div className="relative animate-rise md:col-span-5 md:row-span-2 md:mt-4 lg:self-start">
             <span
               aria-hidden
               className="absolute -bottom-4 -right-3 h-full w-full rounded-md border border-accent md:-right-4"

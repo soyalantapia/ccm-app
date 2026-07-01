@@ -73,13 +73,15 @@ export default function Inicio() {
         <SectionLabel>Elukamo</SectionLabel>
         <div className="grid grid-cols-2 gap-2.5 lg:gap-5">
           <Link to="/contenido" className="flex flex-col gap-1.5 rounded-[12px] bg-ink p-3.5 lg:gap-2.5 lg:rounded-[16px] lg:p-6">
-            <Mic size={20} className="text-accent" />
+            <Mic size={20} className="text-accent lg:hidden" />
+            <Mic size={28} className="hidden text-accent lg:block" />
             <span className="text-[8px] font-bold uppercase tracking-[0.1em] text-accent lg:text-[10px]">Elukamo</span>
             <span className="type-serif text-[13px] text-night-ink lg:text-[18px]">Entrevistas</span>
             <span className="text-[9px] font-semibold text-accent lg:text-[11px]">Ver todas →</span>
           </Link>
           <Link to="/membresia" className="flex flex-col gap-1.5 rounded-[12px] bg-ink p-3.5 lg:gap-2.5 lg:rounded-[16px] lg:p-6">
-            <GraduationCap size={20} className="text-accent" />
+            <GraduationCap size={20} className="text-accent lg:hidden" />
+            <GraduationCap size={28} className="hidden text-accent lg:block" />
             <span className="text-[8px] font-bold uppercase tracking-[0.1em] text-accent lg:text-[10px]">Elukamo</span>
             <span className="type-serif text-[13px] text-night-ink lg:text-[18px]">Capacitaciones</span>
             <span className="text-[9px] font-semibold text-accent lg:text-[11px]">Ver todas →</span>
@@ -117,7 +119,8 @@ export default function Inicio() {
         {contents.length > 0 && (
           <>
             <SectionLabel>Noticias en video</SectionLabel>
-            <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:-mx-8 lg:gap-5 lg:px-8">
+            {/* Mobile: carrusel táctil. Desktop: grilla (el carrusel dejaba 1/3 vacío). */}
+            <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:mx-0 lg:grid lg:grid-cols-3 lg:gap-5 lg:overflow-visible lg:px-0">
               {contents.slice(0, 8).map((c) => (
                 <VideoThumb key={c.id} c={c} />
               ))}

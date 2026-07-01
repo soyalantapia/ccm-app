@@ -42,7 +42,7 @@ export function AdBanner({ slot, index = 0, className }: AdBannerProps) {
   if (slot === 'S6') {
     return (
       <div ref={ref} className={`text-center ${className ?? ''}`}>
-        <Link to="/sponsors" onClick={onClick} className="eyebrow text-[10px] text-ink-soft/70 transition-colors hover:text-ink-soft">
+        <Link to="/sponsors" onClick={onClick} className="eyebrow text-[10px] text-ink-soft/70 transition-colors hover:text-ink-soft lg:text-ink-soft">
           {creative.headline}
         </Link>
       </div>
@@ -68,36 +68,46 @@ export function AdBanner({ slot, index = 0, className }: AdBannerProps) {
     )
   }
 
-  // S2 — sponsor-banner de los mockups. Mobile 1:1; en desktop pasa a card OSCURA
-  // PARTIDA premium: panel-emblema dorado (izq) | bloque tipográfico (centro) | CTA pill (der),
-  // con gradiente cálido from-ink→brown-warm y hairline dorado superior.
+  // S2 — sponsor-banner. Mobile: card oscura de los mockups (1:1). Desktop:
+  // ADVERTORIAL editorial de revista — filetes finos arriba/abajo, sello centrado
+  // con guiones dorados, nombre en Playfair y CTA discreta. Se integra al fondo
+  // crema de la página en vez de interrumpirla con una caja oscura.
   return (
-    <div ref={ref} className={`mx-auto max-w-3xl lg:max-w-4xl ${className ?? ''}`}>
+    <div ref={ref} className={`mx-auto max-w-3xl ${className ?? ''}`}>
+      {/* Mobile — mockup 1:1 */}
       <Link
         to="/sponsors"
         onClick={onClick}
-        className="group relative flex items-center justify-between gap-3 overflow-hidden rounded-[12px] bg-ink px-4 py-3.5 transition-transform active:scale-[0.99] lg:min-h-[116px] lg:gap-0 lg:rounded-[18px] lg:bg-gradient-to-br lg:from-ink lg:to-brown-warm lg:p-0 lg:ring-1 lg:ring-inset lg:ring-accent/20 lg:transition-shadow lg:hover:shadow-[0_12px_40px_rgba(0,0,0,0.28)] lg:active:scale-100"
+        className="flex items-center justify-between gap-3 rounded-[12px] bg-ink px-4 py-3.5 transition-transform active:scale-[0.99] lg:hidden"
       >
-        {/* hairline dorado superior — solo desktop */}
-        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 hidden h-px bg-gradient-to-r from-transparent via-accent/60 to-transparent lg:block" />
-
-        {/* ZONA 1 — panel-emblema. Mobile: caja 42px a la DERECHA (order-2). Desktop: panel ancho a la IZQUIERDA (order-1) */}
-        <span className="order-2 flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[10px] bg-accent text-accent-ink lg:order-1 lg:h-auto lg:w-[104px] lg:self-stretch lg:rounded-none lg:rounded-l-[18px] lg:border-r lg:border-accent-ink/10 lg:bg-gradient-to-br lg:from-accent lg:to-gold-deep">
-          <Sparkles size={18} className="lg:hidden" />
-          <Sparkles size={30} className="hidden lg:block" />
-        </span>
-
-        {/* ZONA 2 — bloque tipográfico. Mobile order-1; desktop centrado con padding editorial */}
-        <div className="order-1 min-w-0 lg:order-2 lg:flex lg:flex-1 lg:flex-col lg:justify-center lg:px-8 lg:py-6">
-          <div className="text-[8px] font-bold uppercase tracking-[0.1em] text-accent lg:text-[11px] lg:tracking-[0.14em]">Espacio patrocinado</div>
-          <div className="type-serif mt-0.5 truncate text-[13px] text-night-ink lg:mt-1.5 lg:whitespace-normal lg:text-[26px] lg:leading-tight">{sponsor.name}</div>
-          <div className="mt-0.5 truncate text-[9px] text-text-2 lg:mt-1.5 lg:whitespace-normal lg:text-[13px] lg:leading-snug lg:text-night-ink/70">{creative.headline}</div>
+        <div className="min-w-0">
+          <div className="text-[8px] font-bold uppercase tracking-[0.1em] text-accent">Espacio patrocinado</div>
+          <div className="type-serif mt-0.5 truncate text-[13px] text-night-ink">{sponsor.name}</div>
+          <div className="mt-0.5 truncate text-[9px] text-text-2">{creative.headline}</div>
         </div>
+        <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[10px] bg-accent text-accent-ink">
+          <Sparkles size={18} />
+        </span>
+      </Link>
 
-        {/* ZONA 3 — CTA pill, solo desktop; borde dorado que invierte a fondo dorado en hover */}
-        <span className="order-3 mr-8 hidden shrink-0 items-center gap-1.5 self-center rounded-full border border-accent/40 px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.05em] text-accent transition-colors group-hover:bg-accent group-hover:text-accent-ink lg:inline-flex">
+      {/* Desktop — advertorial editorial */}
+      <Link
+        to="/sponsors"
+        onClick={onClick}
+        className="group hidden flex-col items-center border-y border-line py-8 text-center transition-colors duration-200 hover:border-accent/50 lg:flex"
+      >
+        <span className="eyebrow flex items-center gap-3 text-[9px] text-ink-soft/60">
+          <span aria-hidden className="h-px w-10 bg-accent/70" />
+          Espacio patrocinado
+          <span aria-hidden className="h-px w-10 bg-accent/70" />
+        </span>
+        <span className="type-display mt-3.5 text-[30px] leading-tight text-ink transition-colors duration-200 group-hover:text-accent-strong">
+          {sponsor.name}
+        </span>
+        <span className="mt-2 max-w-xl text-[14px] leading-relaxed text-ink-soft">{creative.headline}</span>
+        <span className="eyebrow mt-5 inline-flex items-center gap-1.5 text-[10px] text-accent-strong">
           {creative.cta ?? 'Conocé más'}
-          <ArrowUpRight size={15} className="transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          <ArrowUpRight size={13} className="transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
         </span>
       </Link>
     </div>

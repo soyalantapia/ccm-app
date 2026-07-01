@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { Badge, ButtonLink, EmptyState, Eyebrow, Img, YouTubeEmbed } from '../components/ui'
+import { AdBanner, Badge, ButtonLink, EmptyState, Eyebrow, Img, YouTubeEmbed } from '../components/ui'
 import { store, useStore } from '../data/store'
 
 function fmtDate(iso: string) {
@@ -40,7 +40,7 @@ export default function NotaDetalle() {
   }
 
   return (
-    <article className="mx-auto max-w-3xl px-5 py-10 md:py-16">
+    <article className="mx-auto max-w-3xl px-5 py-10 md:py-16 lg:max-w-4xl">
       <Link
         to="/novedades"
         className="group eyebrow inline-flex items-center gap-2 text-[10px] text-ink-soft transition-colors hover:text-ink"
@@ -75,6 +75,17 @@ export default function NotaDetalle() {
           <p key={i}>{p}</p>
         ))}
       </div>
+
+      {/* Cierre editorial — solo desktop: la nota terminaba en seco contra el footer */}
+      <div className="mt-12 hidden border-t border-ink/10 pt-8 lg:flex lg:items-center lg:justify-between">
+        <ButtonLink to="/novedades" variant="outline" size="sm">
+          Más novedades
+        </ButtonLink>
+        <ButtonLink to="/entradas" size="sm">
+          Conseguí tu entrada
+        </ButtonLink>
+      </div>
+      <AdBanner slot="S2" className="mt-12 hidden lg:block" />
     </article>
   )
 }

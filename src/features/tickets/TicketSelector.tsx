@@ -149,7 +149,7 @@ export function TicketSelector({ className }: { className?: string }) {
                     aria-label={`Quitar ${plan.name}`}
                     onClick={() => bump(plan, -1)}
                     disabled={count === 0}
-                    className="flex h-11 w-11 items-center justify-center rounded-full border border-line text-ink transition-all active:scale-90 disabled:opacity-30 hover:border-ink"
+                    className="flex h-11 w-11 items-center justify-center rounded-full border border-line text-ink transition-all active:scale-90 disabled:opacity-30 hover:border-ink lg:h-9 lg:w-9"
                   >
                     <Minus size={15} />
                   </button>
@@ -157,7 +157,7 @@ export function TicketSelector({ className }: { className?: string }) {
                   <button
                     aria-label={`Agregar ${plan.name}`}
                     onClick={() => bump(plan, 1)}
-                    className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-accent-ink shadow-sm transition-all active:scale-90 hover:brightness-105"
+                    className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-accent-ink shadow-sm transition-all active:scale-90 hover:brightness-105 lg:h-9 lg:w-9"
                   >
                     <Plus size={15} />
                   </button>

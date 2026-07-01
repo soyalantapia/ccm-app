@@ -559,11 +559,16 @@ export class LocalDataStore implements DataStore {
       const sponsor = campaignSponsor(campaign)
       return { sponsor, creative: sponsor.creatives[0] }
     }
-    const withSlot = this.getSponsors().flatMap((sponsor) =>
-      sponsor.creatives.filter((c) => c.slot === slot).map((creative) => ({ sponsor, creative })),
-    )
-    if (withSlot.length === 0) return undefined
-    return withSlot[index % withSlot.length]
+    // Rota primero por SPONSOR (slots consecutivos = marcas distintas) y recién
+    // después por creatividad dentro del mismo sponsor — aplanar por creative
+    // hacía que dos banners seguidos mostraran la misma marca (se leía a relleno).
+    const bySponsor = this.getSponsors()
+      .map((sponsor) => ({ sponsor, creatives: sponsor.creatives.filter((c) => c.slot === slot) }))
+      .filter((e) => e.creatives.length > 0)
+    if (bySponsor.length === 0) return undefined
+    const entry = bySponsor[index % bySponsor.length]
+    const creative = entry.creatives[Math.floor(index / bySponsor.length) % entry.creatives.length]
+    return { sponsor: entry.sponsor, creative }
   }
 
   /* ─── Publicidad autogestionada (self-serve) ─── */

@@ -83,7 +83,7 @@ export default function Sponsors() {
             Comprá tu espacio en 1 minuto
           </ButtonLink>
         </div>
-        <p className="mt-3 text-[13px] text-ink-soft">
+        <p className="mt-3 text-[13px] text-ink-soft lg:max-w-2xl">
           ¿Una marca chica o una promo puntual? Autogestionás tu banner, elegís cuántas horas corre y
           pagás con QR — sin pasar por ventas. La exclusividad por rubro se reserva por orden de llegada.
         </p>

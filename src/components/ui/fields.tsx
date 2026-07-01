@@ -45,18 +45,39 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 }
 
 export function Select({ options, placeholder, className, ...rest }: SelectProps) {
+  // appearance-none borra el chevron nativo → sin señal de "esto se despliega".
+  // Chevron custom solo desktop (lg:) para no alterar el mockup mobile; el
+  // placeholder sin valor se atenúa para no leerse como valor ya elegido.
+  const empty = rest.value === ''
   return (
-    <select className={`${inputClass} appearance-none ${className ?? ''}`} {...rest}>
-      {placeholder && (
-        <option value="" disabled hidden>
-          {placeholder}
-        </option>
-      )}
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    <span className="relative block">
+      <select
+        className={`${inputClass} appearance-none lg:pr-9 ${empty ? 'lg:text-ink-soft/60' : ''} ${className ?? ''}`}
+        {...rest}
+      >
+        {placeholder && (
+          <option value="" disabled hidden>
+            {placeholder}
+          </option>
+        )}
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <svg
+        aria-hidden
+        viewBox="0 0 16 16"
+        className="pointer-events-none absolute right-3.5 top-1/2 hidden h-4 w-4 -translate-y-1/2 text-ink-soft lg:block"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M4 6l4 4 4-4" />
+      </svg>
+    </span>
   )
 }

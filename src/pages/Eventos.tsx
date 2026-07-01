@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, CalendarDays, MapPin, Sparkles, Ticket } from 'lucide-react'
-import { AdBanner, Badge, EmptyState, Eyebrow, Img, Tabs } from '../components/ui'
+import { AdBanner, Badge, EmptyState, Eyebrow, Img, SectionTitle, Tabs } from '../components/ui'
 import { store, useStore } from '../data/store'
 import { useEvents, useRegistrations } from '../data/queries'
 import { IDS } from '../data/ids'
@@ -115,7 +115,17 @@ export default function Eventos() {
       <AdBanner slot="S2" className="mt-8" />
 
       {/* ─── Camino a CCM ─── */}
-      <SectionLabel className="mt-4">Camino a CCM</SectionLabel>
+      {/* Mobile: eyebrow del mockup. Desktop: cabecera editorial (estándar del sitio). */}
+      <div className="lg:hidden">
+        <SectionLabel className="mt-4">Camino a CCM</SectionLabel>
+      </div>
+      <div className="hidden lg:mt-16 lg:block">
+        <SectionTitle
+          eyebrow="Agenda del año"
+          title="Camino a CCM"
+          lead="Encuentros, charlas y capacitaciones que preparan la 14ª edición — con cupo e inscripción previa."
+        />
+      </div>
 
       {tabs.length > 2 && <Tabs tabs={tabs} active={filter} onChange={setFilter} className="mt-2" />}
 
@@ -124,7 +134,7 @@ export default function Eventos() {
           Pronto vas a encontrar nuevos encuentros en esta categoría.
         </EmptyState>
       ) : (
-        <div className="mt-4 grid animate-rise grid-cols-1 gap-2.5 lg:grid-cols-2 lg:gap-4">
+        <div className="mt-4 grid animate-rise grid-cols-1 gap-2.5 lg:mt-8 lg:grid-cols-2 lg:gap-5">
           {visible.map((event) => (
             <EventCard
               key={event.id}
@@ -136,7 +146,7 @@ export default function Eventos() {
         </div>
       )}
 
-      <AdBanner slot="S2" index={1} className="mt-4" />
+      <AdBanner slot="S2" index={1} className="mt-4 lg:mt-8" />
 
       {/* Evento especial (lanzamiento-card) */}
       {especial && (
@@ -148,7 +158,7 @@ export default function Eventos() {
 
       {/* Sponsors (sponsors-duo) */}
       {sponsors.length > 0 && (
-        <div className="mt-4 grid grid-cols-2 gap-2.5">
+        <div className="mt-4 grid grid-cols-2 gap-2.5 lg:mt-6 lg:gap-4">
           {sponsors.slice(0, 2).map((sp) => (
             <SponsorCuadrado key={sp.id} icon={<Sparkles size={16} />} name={sp.name} label={sp.level} />
           ))}
@@ -159,7 +169,7 @@ export default function Eventos() {
       {contents.length > 0 && (
         <>
           <SectionLabel>Noticias en video</SectionLabel>
-          <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:-mx-8 lg:gap-5 lg:px-8">
+          <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:mx-0 lg:grid lg:grid-cols-3 lg:gap-5 lg:overflow-visible lg:px-0">
             {contents.slice(0, 6).map((c) => (
               <VideoThumb key={c.id} c={c} />
             ))}
@@ -171,7 +181,7 @@ export default function Eventos() {
       {notas.length > 0 && (
         <>
           <SectionLabel>Novedades</SectionLabel>
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-2 gap-2.5 lg:gap-4">
             {notas.slice(0, 2).map((n) => (
               <NoticiaCard key={n.id} n={n} />
             ))}
@@ -179,7 +189,7 @@ export default function Eventos() {
         </>
       )}
 
-      <AdBanner slot="S2" index={2} className="mt-4" />
+      <AdBanner slot="S2" index={2} className="mt-4 lg:mt-8" />
 
       {/* Prensa */}
       {notas.length > 2 && (

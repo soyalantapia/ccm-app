@@ -7,6 +7,13 @@ import { IDS } from '../../data/ids'
 
 const linkClass = 'font-semibold text-ink underline decoration-accent underline-offset-4 transition-colors hover:text-accent'
 
+/** Separa el emoji inicial de la pregunta: en mobile se conserva (mockup 1:1);
+ *  en desktop el índice dorado 01–11 ya cumple ese rol y el emoji duplica viñeta. */
+function splitEmoji(q: string): { emoji: string | null; text: string } {
+  const m = q.match(/^(\p{Extended_Pictographic}️?)\s*/u)
+  return m ? { emoji: m[1], text: q.slice(m[0].length) } : { emoji: null, text: q }
+}
+
 /** Las preguntas reales de la página oficial del evento (Tikealo). */
 const FAQS: { q: string; a: ReactNode }[] = [
   {
@@ -102,7 +109,9 @@ export function FaqSection() {
           />
         </div>
         <div className="md:col-span-8">
-          {FAQS.map((item, i) => (
+          {FAQS.map((item, i) => {
+            const { emoji, text } = splitEmoji(item.q)
+            return (
             <details key={item.q} className="group border-t border-line last:border-b">
               <summary className="flex cursor-pointer list-none items-baseline justify-between gap-6 py-5 [&::-webkit-details-marker]:hidden">
                 <span className="flex items-baseline gap-4">
@@ -110,7 +119,8 @@ export function FaqSection() {
                     {String(i + 1).padStart(2, '0')}
                   </span>
                   <span className="type-serif text-lg leading-snug text-ink transition-colors group-open:text-accent md:text-xl">
-                    {item.q}
+                    {emoji && <span className="lg:hidden">{emoji} </span>}
+                    {text}
                   </span>
                 </span>
                 <Plus
@@ -121,7 +131,8 @@ export function FaqSection() {
               </summary>
               <div className="pb-6 pl-11 pr-2 text-[15px] leading-relaxed text-ink-soft md:pr-10">{item.a}</div>
             </details>
-          ))}
+            )
+          })}
         </div>
       </div>
     </section>

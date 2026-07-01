@@ -57,7 +57,14 @@ export function AuthorBlock({ profile, onViewPieces }: AuthorBlockProps) {
               {instagram && (
                 <div>
                   <span className="eyebrow block text-[10px] text-night-ink/50">Instagram</span>
-                  <p className="type-serif mt-1 text-lg text-night-ink">{instagram}</p>
+                  <a
+                    href={`https://instagram.com/${instagram.replace(/^@/, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="type-serif mt-1 block text-lg text-night-ink decoration-accent underline-offset-4 hover:underline"
+                  >
+                    {instagram}
+                  </a>
                 </div>
               )}
               <div>

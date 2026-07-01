@@ -70,7 +70,7 @@ export default function Fotos() {
       />
 
       {tab === 'galerias' && (
-        <div className="mt-8 grid animate-rise gap-5 md:grid-cols-2 md:gap-6">
+        <div className="mt-8 grid animate-rise gap-5 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
           {galleries.map((gallery, i) => (
             <GalleryCard key={gallery.id} gallery={gallery} featured={i === 0} />
           ))}

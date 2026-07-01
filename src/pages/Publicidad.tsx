@@ -140,7 +140,7 @@ export default function Publicidad() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-5 py-10 md:py-16">
+    <div className="mx-auto max-w-3xl px-5 py-10 md:py-16 lg:max-w-5xl">
       <SectionTitle
         eyebrow="Publicidad · autogestión"
         title={
@@ -155,7 +155,7 @@ export default function Publicidad() {
 
       {/* ─── Paso 1: elegir espacio ─── */}
       {step === 1 && (
-        <div className="mt-10 grid gap-4 sm:grid-cols-2">
+        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {AD_SLOTS.map((s) => (
             <button
               key={s.slot}
@@ -173,13 +173,13 @@ export default function Publicidad() {
               <div className="mt-4 flex items-end justify-between border-t border-line pt-3">
                 <div>
                   <div className="type-serif text-xl text-ink">{formatMoney(s.pricePerHour)}</div>
-                  <div className="eyebrow text-[8px] text-ink-soft/70">por hora</div>
+                  <div className="eyebrow text-[8px] text-ink-soft/70 lg:text-[10px]">por hora</div>
                 </div>
                 <span className="eyebrow flex items-center gap-1 text-[10px] text-accent-strong transition-transform group-hover:translate-x-0.5">
                   Elegir <ArrowRight size={12} />
                 </span>
               </div>
-              <p className="mt-2 text-[11px] text-ink-soft/70">~{s.reachPerHour} impresiones/h estimadas</p>
+              <p className="mt-2 text-[11px] text-ink-soft/70 lg:text-xs">~{s.reachPerHour} impresiones/h estimadas</p>
             </button>
           ))}
         </div>

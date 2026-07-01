@@ -69,11 +69,15 @@ export function SectionEmpty({ icon, title, sub }: { icon: ReactNode; title: Rea
 
 /** sponsor-cuadrado: card oscura vertical (caja-logo dorada + label + nombre Playfair). */
 export function SponsorCuadrado({ icon, name, label = 'Sponsor' }: { icon: ReactNode; name: ReactNode; label?: string }) {
+  // Desktop: fila horizontal (ícono | textos) — la pila vertical mobile estirada
+  // a media grilla 6xl dejaba 80% de vacío oscuro.
   return (
-    <div className="flex flex-col items-start gap-1.5 rounded-[12px] bg-ink p-3 lg:gap-2 lg:p-4">
-      <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-accent text-accent-ink lg:h-12 lg:w-12">{icon}</span>
-      <span className="text-[7px] font-bold uppercase tracking-[0.1em] text-accent lg:text-[9px]">{label}</span>
-      <span className="type-serif text-[12px] leading-tight text-night-ink lg:text-[15px]">{name}</span>
+    <div className="flex flex-col items-start gap-1.5 rounded-[12px] bg-ink p-3 lg:flex-row lg:items-center lg:gap-4 lg:p-6">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-accent text-accent-ink lg:h-12 lg:w-12">{icon}</span>
+      <div className="flex flex-col gap-1.5 lg:min-w-0 lg:gap-1">
+        <span className="text-[7px] font-bold uppercase tracking-[0.1em] text-accent lg:text-[9px]">{label}</span>
+        <span className="type-serif text-[12px] leading-tight text-night-ink lg:text-[15px]">{name}</span>
+      </div>
     </div>
   )
 }
@@ -83,9 +87,11 @@ export function NoticiaCard({ n, featured = false }: { n: Nota; featured?: boole
   return (
     <Link
       to={`/novedades/${n.slug}`}
-      className={`overflow-hidden rounded-[12px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform duration-200 hover:-translate-y-0.5 lg:rounded-[16px] lg:shadow-[0_4px_18px_rgba(0,0,0,0.08)] ${featured ? 'col-span-2' : ''}`}
+      className={`overflow-hidden rounded-[12px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform duration-200 hover:-translate-y-0.5 lg:flex lg:flex-col lg:rounded-[16px] lg:shadow-[0_4px_18px_rgba(0,0,0,0.08)] ${featured ? 'col-span-2' : ''}`}
     >
-      <div className={`relative bg-cream-muted ${featured ? 'h-[110px] lg:h-[300px]' : 'h-[80px] lg:h-[190px]'}`}>
+      {/* lg:flex-1 en la no-featured: si el grid la estira (al lado del hero),
+          la imagen absorbe la altura sobrante en vez de dejar blanco muerto. */}
+      <div className={`relative bg-cream-muted ${featured ? 'h-[110px] lg:h-[300px]' : 'h-[80px] lg:h-[190px] lg:flex-1'}`}>
         {n.cover ? (
           <img src={n.cover} alt="" loading="lazy" className="h-full w-full object-cover" />
         ) : (
@@ -108,7 +114,7 @@ export function VideoThumb({ c }: { c: ContentItem }) {
   return (
     <Link
       to="/contenido"
-      className="w-[190px] shrink-0 overflow-hidden rounded-[12px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform duration-200 hover:-translate-y-0.5 lg:w-[300px] lg:rounded-[16px] lg:shadow-[0_4px_18px_rgba(0,0,0,0.08)]"
+      className="w-[190px] shrink-0 overflow-hidden rounded-[12px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform duration-200 hover:-translate-y-0.5 lg:w-auto lg:rounded-[16px] lg:shadow-[0_4px_18px_rgba(0,0,0,0.08)]"
     >
       <div className="relative flex h-[100px] items-center justify-center bg-ink lg:h-[170px]">
         {c.youtubeId && (
@@ -226,20 +232,24 @@ export function CorazonesCta({ to }: { to: string }) {
 
 /** lanzamiento-card: "Evento especial" (badge + fecha + título Playfair 900 + CTA). */
 export function LanzamientoCard({ event }: { event: EventItem }) {
+  // Desktop: banda horizontal a todo el ancho (texto | CTA) — la card centrada
+  // angosta dejaba crema vacío a ambos lados, el anti-patrón del estándar.
   return (
-    <div className="mx-auto max-w-2xl rounded-[14px] border border-accent/30 bg-gradient-to-br from-ink to-brown-warm p-[18px] lg:max-w-3xl lg:rounded-[18px] lg:p-7">
-      <span className="inline-block rounded-[4px] bg-accent px-2 py-1 text-[8px] font-bold uppercase tracking-[0.08em] text-accent-ink lg:text-[10px]">
-        Evento especial
-      </span>
-      <div className="mt-2.5 text-[10px] font-bold uppercase text-accent lg:mt-3 lg:text-[12px]">
-        {event.dateLabel}
-        {event.timeLabel ? ` · ${event.timeLabel}` : ''}
+    <div className="mx-auto max-w-2xl rounded-[14px] border border-accent/30 bg-gradient-to-br from-ink to-brown-warm p-[18px] lg:flex lg:max-w-none lg:items-center lg:justify-between lg:gap-12 lg:rounded-[18px] lg:p-10">
+      <div className="lg:min-w-0 lg:flex-1">
+        <span className="inline-block rounded-[4px] bg-accent px-2 py-1 text-[8px] font-bold uppercase tracking-[0.08em] text-accent-ink lg:text-[10px]">
+          Evento especial
+        </span>
+        <div className="mt-2.5 text-[10px] font-bold uppercase text-accent lg:mt-3 lg:text-[12px]">
+          {event.dateLabel}
+          {event.timeLabel ? ` · ${event.timeLabel}` : ''}
+        </div>
+        <div className="type-display mt-1 text-[18px] leading-tight text-night-ink lg:mt-1.5 lg:text-[30px]">{event.title}</div>
+        <div className="mt-1 text-[10px] text-text-2 lg:text-[13px]">📍 {event.venue}</div>
       </div>
-      <div className="type-display mt-1 text-[18px] leading-tight text-night-ink lg:mt-1.5 lg:text-[30px]">{event.title}</div>
-      <div className="mt-1 text-[10px] text-text-2 lg:text-[13px]">📍 {event.venue}</div>
       <Link
         to={`/eventos/${event.slug}`}
-        className="mt-3.5 block rounded-[8px] bg-accent py-2.5 text-center text-[11px] font-bold uppercase tracking-[0.05em] text-accent-ink lg:mt-5 lg:max-w-xs lg:py-3.5 lg:text-[13px]"
+        className="mt-3.5 block rounded-[8px] bg-accent py-2.5 text-center text-[11px] font-bold uppercase tracking-[0.05em] text-accent-ink lg:mt-0 lg:w-72 lg:shrink-0 lg:py-3.5 lg:text-[13px]"
       >
         Reservá tu lugar
       </Link>

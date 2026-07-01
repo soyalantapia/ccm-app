@@ -14,7 +14,7 @@ export function GalleryCard({ gallery, featured }: GalleryCardProps) {
   return (
     <Link
       to={`/fotos/${gallery.slug}`}
-      className={`group relative block overflow-hidden rounded-md ${featured ? 'md:col-span-2' : ''}`}
+      className={`group relative block overflow-hidden rounded-md ${featured ? 'md:col-span-2 lg:col-span-3' : ''}`}
     >
       <Img
         src={gallery.cover}
@@ -26,11 +26,11 @@ export function GalleryCard({ gallery, featured }: GalleryCardProps) {
         aria-hidden
         className="absolute inset-0 bg-gradient-to-t from-night/80 via-night/20 to-transparent"
       />
-      <div className="absolute inset-x-0 bottom-0 p-5 md:p-8">
+      <div className={`absolute inset-x-0 bottom-0 p-5 md:p-8 ${featured ? 'lg:p-10' : ''}`}>
         <div className="eyebrow text-[10px] text-accent">
           {gallery.eventLabel} · {gallery.date}
         </div>
-        <h3 className="type-serif mt-2 text-2xl text-night-ink md:text-3xl">{gallery.title}</h3>
+        <h3 className={`type-serif mt-2 text-2xl text-night-ink md:text-3xl ${featured ? 'lg:text-5xl' : ''}`}>{gallery.title}</h3>
         <div className="mt-3 flex items-center justify-between gap-4">
           <span className="text-xs text-night-ink/70">{gallery.photos.length} fotos</span>
           <span className="eyebrow flex items-center gap-1 text-[10px] text-night-ink transition-transform duration-200 group-hover:translate-x-0.5">

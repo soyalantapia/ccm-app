@@ -38,7 +38,7 @@ export default function Perfil() {
   ]
 
   return (
-    <div className="mx-auto max-w-3xl px-5 py-12 md:py-20">
+    <div className="mx-auto max-w-3xl px-5 py-12 md:py-20 lg:max-w-4xl">
       {/* Header con avatar tipográfico */}
       <header className="flex animate-rise items-center gap-5">
         <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-night text-night-ink md:h-20 md:w-20">

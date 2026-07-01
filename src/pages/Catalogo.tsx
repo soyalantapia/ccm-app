@@ -81,7 +81,7 @@ export default function Catalogo() {
       </div>
 
       {/* Filtros (chips scroll horizontal) */}
-      <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-5 py-3 lg:gap-2.5 lg:px-8 lg:py-4 lg:pt-8">
+      <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-5 py-3 lg:flex-wrap lg:gap-2.5 lg:overflow-x-visible lg:px-8 lg:py-4 lg:pt-8">
         <Chip active={!platform} onClick={() => setPlatform(null)} icon={LayoutGrid}>
           Todas
         </Chip>

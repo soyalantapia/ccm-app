@@ -70,11 +70,11 @@ const VIP_GROUPS: { label: string; items: { icon: typeof Gift; title: string; de
 
 function HeroTitle({ pre, highlight, sub }: { pre: string; highlight: string; sub: string }) {
   return (
-    <div className="pt-3.5 text-center">
-      <h1 className="type-display text-[26px] leading-[1.2] text-ink">
+    <div className="pt-3.5 text-center lg:pt-10">
+      <h1 className="type-display text-[26px] leading-[1.2] text-ink lg:text-[44px]">
         {pre} <em className="text-accent">{highlight}</em>
       </h1>
-      <p className="mt-1.5 text-[10px] text-text-2">{sub}</p>
+      <p className="mt-1.5 text-[10px] text-text-2 lg:mt-3 lg:text-[15px] lg:text-ink-soft">{sub}</p>
     </div>
   )
 }
@@ -94,7 +94,7 @@ function DescuentoRow({ b, registered }: { b: Benefit; registered: boolean }) {
   const externalHref = b.url ? safeExternalHref(b.url) : null
   return (
     <BeneficioItem
-      icon={<Icon size={18} />}
+      icon={<Icon size={18} className="lg:h-[22px] lg:w-[22px]" />}
       title={
         <span className="flex items-center gap-2">
           {b.partner}
@@ -128,7 +128,7 @@ function DescuentoRow({ b, registered }: { b: Benefit; registered: boolean }) {
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => store.track('benefit_click', { benefitId: b.id })}
-              className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-accent"
+              className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-accent lg:text-[11px]"
             >
               Canjear <ArrowUpRight size={12} />
             </a>
@@ -136,7 +136,7 @@ function DescuentoRow({ b, registered }: { b: Benefit; registered: boolean }) {
             <Link
               to={b.url}
               onClick={() => store.track('benefit_click', { benefitId: b.id })}
-              className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-accent"
+              className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-accent lg:text-[11px]"
             >
               Ver más <ArrowUpRight size={12} />
             </Link>
@@ -159,15 +159,15 @@ export default function Beneficios() {
   )
 
   return (
-    <div className="mx-auto max-w-2xl pb-4 lg:max-w-4xl">
+    <div className="mx-auto max-w-2xl pb-4 lg:max-w-4xl lg:pb-14">
       {/* Tabs-container oscuro */}
       <div className="flex border-b border-white/[0.08] bg-ink">
         {(['vip', 'descuentos'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`flex-1 border-b-2 py-3 text-center text-[11px] font-bold uppercase tracking-[0.08em] transition-colors ${
-              tab === t ? 'border-accent text-accent' : 'border-transparent text-[#6b6b6b]'
+            className={`flex-1 border-b-2 py-3 text-center text-[11px] font-bold uppercase tracking-[0.08em] transition-colors lg:py-4 lg:text-[13px] lg:tracking-[0.12em] ${
+              tab === t ? 'border-accent text-accent' : 'border-transparent text-[#6b6b6b] lg:text-night-ink/55'
             }`}
           >
             {t === 'vip' ? 'Beneficios VIP' : 'Descuentos'}
@@ -182,15 +182,25 @@ export default function Beneficios() {
             {VIP_GROUPS.map((g) => (
               <section key={g.label}>
                 <SectionLabel>{g.label}</SectionLabel>
-                <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2 lg:gap-3">
+                {/* Grupos impares (3 items) van 1×3 en desktop para no dejar huérfanos */}
+                <div
+                  className={`grid grid-cols-1 gap-2.5 lg:gap-3 ${
+                    g.items.length % 2 === 1 && g.items.length > 1 ? 'lg:grid-cols-3' : 'lg:grid-cols-2'
+                  }`}
+                >
                   {g.items.map((it) => (
-                    <BeneficioItem key={it.title} icon={<it.icon size={18} />} title={it.title} desc={it.desc} />
+                    <BeneficioItem
+                      key={it.title}
+                      icon={<it.icon size={18} className="lg:h-[22px] lg:w-[22px]" />}
+                      title={it.title}
+                      desc={it.desc}
+                    />
                   ))}
                 </div>
               </section>
             ))}
-            <div className="mt-8">
-              <ButtonLink to="/membresia" className="w-full justify-center">
+            <div className="mt-8 lg:mt-12 lg:flex lg:justify-center">
+              <ButtonLink to="/membresia" className="w-full justify-center lg:w-auto lg:min-w-[300px] lg:px-12">
                 Quiero ser Socio VIP
               </ButtonLink>
             </div>
@@ -209,8 +219,8 @@ export default function Beneficios() {
                     <Lock size={15} />
                   </span>
                   <div>
-                    <div className="type-serif text-[14px] text-night-ink">Inscribite para ver los códigos</div>
-                    <div className="mt-1 text-[10px] text-text-2">Con tu inscripción gratis se desbloquean todos.</div>
+                    <div className="type-serif text-[14px] text-night-ink lg:text-[17px]">Inscribite para ver los códigos</div>
+                    <div className="mt-1 text-[10px] text-text-2 lg:text-[12px]">Con tu inscripción gratis se desbloquean todos.</div>
                   </div>
                 </div>
                 <ArrowUpRight size={16} className="shrink-0 text-accent" />
@@ -218,7 +228,7 @@ export default function Beneficios() {
             )}
 
             {byCat.length === 0 ? (
-              <div className="py-10 text-center text-[11px] text-text-2">
+              <div className="py-10 text-center text-[11px] text-text-2 lg:py-14 lg:text-[13px]">
                 Estamos cerrando acuerdos con hoteles, spas y más.
               </div>
             ) : (

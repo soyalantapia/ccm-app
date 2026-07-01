@@ -19,7 +19,7 @@ export function Img({ src, alt, ratio, priority, className, imgClassName, ...res
   const [status, setStatus] = useState<Status>('loading')
   return (
     <div
-      className={`overflow-hidden bg-ink/8 ${className ?? ''}`}
+      className={`overflow-hidden bg-ink/8 ${status === 'loading' ? 'animate-pulse' : ''} ${className ?? ''}`}
       style={ratio ? { aspectRatio: ratio } : undefined}
     >
       {status === 'error' ? (

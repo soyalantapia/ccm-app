@@ -131,7 +131,7 @@ export default function Membresia() {
       ) : step === 'plans' ? (
         <>
           {/* ─── Comparativa de niveles ─── */}
-          <div className="mt-10 grid items-stretch gap-5 md:grid-cols-2">
+          <div className="mt-10 grid items-stretch gap-5 md:grid-cols-2 lg:gap-8">
             {/* Gratis */}
             <div className="flex flex-col rounded-lg border border-line bg-surface p-6 md:p-7">
               <div className="flex items-baseline justify-between gap-3">
@@ -144,7 +144,12 @@ export default function Membresia() {
                 {FREE_PLAN.benefits.map((b) => (
                   <li key={b.title} className="flex items-start gap-2.5 text-sm text-ink-soft">
                     <Check size={15} strokeWidth={2} className="mt-0.5 shrink-0 text-ink-soft/50" />
-                    {b.title}
+                    <span>
+                      {b.title}
+                      {/* Detalle solo desktop: sin él la card quedaba con ~200px de vacío
+                          frente a la card Socio (items-stretch) */}
+                      <span className="hidden text-xs leading-relaxed text-ink-soft/60 lg:block">{b.detail}</span>
+                    </span>
                   </li>
                 ))}
               </ul>

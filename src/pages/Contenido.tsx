@@ -52,7 +52,7 @@ export default function Contenido() {
               key={t}
               onClick={() => setTab(t)}
               className={`relative flex-1 py-2.5 text-center text-[11px] font-bold uppercase tracking-[0.08em] transition-colors lg:flex-none lg:px-7 lg:py-4 lg:text-[14px] ${
-                tab === t ? 'text-accent' : 'text-[#6b6b6b]'
+                tab === t ? 'text-accent' : 'text-[#6b6b6b] lg:text-night-ink/55'
               }`}
             >
               {t === 'entrevistas' ? 'Entrevistas' : 'Capacitaciones'}
@@ -74,7 +74,7 @@ export default function Contenido() {
                 <VideoCard item={featured} featured />
               </div>
 
-              <AdBanner slot="S2" className="mt-4" />
+              <AdBanner slot="S2" className="mt-4 lg:mt-10" />
 
               {rest.length > 0 && (
                 <>
@@ -88,19 +88,19 @@ export default function Contenido() {
               )}
 
               <SectionLabel>Noticias</SectionLabel>
-              <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:-mx-10 lg:gap-5 lg:px-10">
+              <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:mx-0 lg:grid lg:grid-cols-3 lg:gap-5 lg:overflow-visible lg:px-0">
                 {sorted.slice(0, 6).map((c) => (
                   <VideoThumb key={c.id} c={c} />
                 ))}
               </div>
 
-              <AdBanner slot="S2" index={1} className="mt-6" />
+              <AdBanner slot="S2" index={1} className="mt-6 lg:mt-12" />
             </>
           )
         ) : (
           <>
             {/* Capacitaciones: gate premium (o acceso si es socio) */}
-            <AdBanner slot="S2" className="mt-4" />
+            <AdBanner slot="S2" className="mt-4 lg:mt-10" />
             {isSocio ? (
               <div className="mt-1 rounded-[14px] border border-accent/30 bg-gradient-to-br from-ink to-brown-warm p-4 text-center lg:mx-auto lg:max-w-2xl lg:rounded-[18px] lg:p-8">
                 <div className="type-serif text-[15px] text-night-ink lg:text-[22px]">Ya sos Socio CCM VIP</div>
@@ -113,20 +113,20 @@ export default function Contenido() {
             )}
 
             <SectionLabel>Entrevistas Elukamo</SectionLabel>
-            <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:-mx-10 lg:gap-5 lg:px-10">
+            <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:mx-0 lg:grid lg:grid-cols-3 lg:gap-5 lg:overflow-visible lg:px-0">
               {sorted.slice(0, 6).map((c) => (
                 <VideoThumb key={c.id} c={c} />
               ))}
             </div>
 
             <SectionLabel>Noticias CCM</SectionLabel>
-            <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:-mx-10 lg:gap-5 lg:px-10">
+            <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:mx-0 lg:grid lg:grid-cols-3 lg:gap-5 lg:overflow-visible lg:px-0">
               {sorted.slice(0, 6).map((c) => (
                 <VideoThumb key={`n-${c.id}`} c={c} />
               ))}
             </div>
 
-            <AdBanner slot="S2" index={1} className="mt-6" />
+            <AdBanner slot="S2" index={1} className="mt-6 lg:mt-12" />
           </>
         )}
       </div>

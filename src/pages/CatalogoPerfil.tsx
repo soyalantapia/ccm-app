@@ -95,7 +95,7 @@ export default function CatalogoPerfil() {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => store.track('profile_contact', { profileId: profile.id })}
-                className="inline-flex items-center gap-2 rounded-sm bg-accent px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] text-accent-ink transition active:scale-[0.98]"
+                className="inline-flex items-center gap-2 rounded-sm bg-accent px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] text-accent-ink transition hover:brightness-95 active:scale-[0.98]"
               >
                 <MessageCircle size={14} /> Contactar
               </a>
