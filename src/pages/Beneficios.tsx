@@ -159,7 +159,7 @@ export default function Beneficios() {
   )
 
   return (
-    <div className="mx-auto max-w-2xl pb-4">
+    <div className="mx-auto max-w-2xl pb-4 lg:max-w-4xl">
       {/* Tabs-container oscuro */}
       <div className="flex border-b border-white/[0.08] bg-ink">
         {(['vip', 'descuentos'] as const).map((t) => (
@@ -182,7 +182,7 @@ export default function Beneficios() {
             {VIP_GROUPS.map((g) => (
               <section key={g.label}>
                 <SectionLabel>{g.label}</SectionLabel>
-                <div className="flex flex-col gap-2.5">
+                <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2 lg:gap-3">
                   {g.items.map((it) => (
                     <BeneficioItem key={it.title} icon={<it.icon size={18} />} title={it.title} desc={it.desc} />
                   ))}
@@ -225,7 +225,7 @@ export default function Beneficios() {
               byCat.map((g) => (
                 <section key={g.cat}>
                   <SectionLabel>{CAT_LABEL[g.cat]}</SectionLabel>
-                  <div className="flex flex-col gap-2.5">
+                  <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2 lg:gap-3">
                     {g.items.map((b) => (
                       <DescuentoRow key={b.id} b={b} registered={registered} />
                     ))}

@@ -58,7 +58,7 @@ export default function Eventos() {
   const visible = filter === 'todos' ? rest : rest.filter((e) => e.type === filter)
 
   return (
-    <div className="mx-auto max-w-2xl px-5 py-6">
+    <div className="mx-auto max-w-2xl px-5 py-6 lg:max-w-5xl">
       {/* ─── Banner del evento principal → la compra vive adentro ─── */}
       {principal && (
         <Link
@@ -124,7 +124,7 @@ export default function Eventos() {
           Pronto vas a encontrar nuevos encuentros en esta categoría.
         </EmptyState>
       ) : (
-        <div className="mt-4 flex animate-rise flex-col gap-2.5">
+        <div className="mt-4 grid animate-rise grid-cols-1 gap-2.5 lg:grid-cols-2 lg:gap-4">
           {visible.map((event) => (
             <EventCard
               key={event.id}

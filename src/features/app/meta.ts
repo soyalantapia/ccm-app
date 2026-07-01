@@ -29,7 +29,8 @@ const SOURCE_LABELS: Record<string, string> = {
   edicion_perfil: 'editar tu perfil',
 }
 
-export function sourceLabel(source: string): string {
+export function sourceLabel(source: string | undefined): string {
+  if (!source) return 'registro'
   return SOURCE_LABELS[source] ?? source.replace(/_/g, ' ')
 }
 

@@ -15,7 +15,7 @@ export default function Inicio() {
   const masNoticias = restNotas.slice(2, 6)
 
   return (
-    <div className="mx-auto max-w-2xl pb-6">
+    <div className="mx-auto max-w-2xl pb-6 lg:max-w-4xl">
       {/* Franja evento inline */}
       <div className="flex items-center justify-between gap-3 bg-ink px-5 py-3">
         <div className="min-w-0">
@@ -39,7 +39,7 @@ export default function Inicio() {
         {featured && (
           <>
             <SectionLabel>Noticias</SectionLabel>
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-2 gap-2.5 lg:gap-4">
               <NoticiaCard n={featured} featured />
               {restNotas.slice(0, 2).map((n) => (
                 <NoticiaCard key={n.id} n={n} />
@@ -52,7 +52,7 @@ export default function Inicio() {
 
         {/* Elukamo accesos */}
         <SectionLabel>Elukamo</SectionLabel>
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5 lg:gap-4">
           <Link to="/contenido" className="flex flex-col gap-1.5 rounded-[12px] bg-ink p-3.5">
             <Mic size={20} className="text-accent" />
             <span className="text-[8px] font-bold uppercase tracking-[0.1em] text-accent">Elukamo</span>
@@ -71,7 +71,7 @@ export default function Inicio() {
         {masNoticias.length > 0 && (
           <>
             <SectionLabel>Más noticias</SectionLabel>
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-2 gap-2.5 lg:gap-4">
               {masNoticias.map((n) => (
                 <NoticiaCard key={n.id} n={n} />
               ))}

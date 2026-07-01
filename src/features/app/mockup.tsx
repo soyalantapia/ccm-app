@@ -55,7 +55,7 @@ export function BeneficioItem({
 /** section-empty: hero de estado vacío con tinte dorado (gradiente oscuro cálido). */
 export function SectionEmpty({ icon, title, sub }: { icon: ReactNode; title: ReactNode; sub: ReactNode }) {
   return (
-    <div className="rounded-[14px] border border-accent/20 bg-gradient-to-br from-ink to-brown-warm p-[18px] text-center">
+    <div className="mx-auto max-w-2xl rounded-[14px] border border-accent/20 bg-gradient-to-br from-ink to-brown-warm p-[18px] text-center">
       <div className="text-[40px] leading-none">{icon}</div>
       <div className="type-serif mt-2.5 text-[16px] text-night-ink">{title}</div>
       <div className="mt-1.5 text-[10px] text-text-2">{sub}</div>
@@ -220,7 +220,7 @@ export function CorazonesCta({ to }: { to: string }) {
 /** lanzamiento-card: "Evento especial" (badge + fecha + título Playfair 900 + CTA). */
 export function LanzamientoCard({ event }: { event: EventItem }) {
   return (
-    <div className="rounded-[14px] border border-accent/30 bg-gradient-to-br from-ink to-brown-warm p-[18px]">
+    <div className="mx-auto max-w-2xl rounded-[14px] border border-accent/30 bg-gradient-to-br from-ink to-brown-warm p-[18px]">
       <span className="inline-block rounded-[4px] bg-accent px-2 py-1 text-[8px] font-bold uppercase tracking-[0.08em] text-accent-ink">
         Evento especial
       </span>
@@ -250,7 +250,7 @@ const PAYWALL_BENEFITS = [
 /** paywall-card: gate premium de Capacitaciones (header dorado + beneficios + precio + CTA). */
 export function PaywallCard({ priceLabel }: { priceLabel: string }) {
   return (
-    <div className="overflow-hidden rounded-[18px] border border-accent/30 bg-gradient-to-br from-ink to-brown-warm">
+    <div className="mx-auto max-w-2xl overflow-hidden rounded-[18px] border border-accent/30 bg-gradient-to-br from-ink to-brown-warm">
       <div className="flex items-center justify-between bg-accent px-[18px] py-3">
         <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-white">Socio CCM VIP</span>
         <span className="rounded-full bg-white/20 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.05em] text-white">

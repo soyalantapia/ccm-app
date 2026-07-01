@@ -27,7 +27,7 @@ export default function Contenido() {
   const elukamoSponsor = sponsors[0]
 
   return (
-    <div className="mx-auto max-w-2xl pb-6">
+    <div className="mx-auto max-w-2xl pb-6 lg:max-w-4xl">
       {/* Header ELUKAMO + sponsor-elukamo box + tabs */}
       <div className="bg-ink px-5 pb-2.5 pt-3.5">
         <div className="type-display text-[22px] leading-none text-night-ink">ELUKAMO</div>
@@ -75,7 +75,7 @@ export default function Contenido() {
               {rest.length > 0 && (
                 <>
                   <SectionLabel>Entrevistas</SectionLabel>
-                  <div className="flex flex-col gap-2.5">
+                  <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2 lg:gap-3">
                     {rest.map((item) => (
                       <EntrevistaRow key={item.id} c={item} />
                     ))}

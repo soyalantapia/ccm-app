@@ -35,7 +35,7 @@ export default function Catalogo() {
   const selected = platform ? catalog.filter((p) => p.platform === platform) : []
 
   return (
-    <section className="mx-auto max-w-2xl pb-6">
+    <section className="mx-auto max-w-2xl pb-6 lg:max-w-6xl">
       {/* Filtros (chips scroll horizontal) */}
       <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-5 py-3">
         <Chip active={!platform} onClick={() => setPlatform(null)}>
@@ -56,7 +56,7 @@ export default function Catalogo() {
           <>
             <SectionLabel>Catálogo de {platform}</SectionLabel>
             {selected.length > 0 ? (
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-4">
                 {selected.map((p) => (
                   <DesignerCard key={p.id} profile={p} />
                 ))}
@@ -72,7 +72,7 @@ export default function Catalogo() {
             {sponsors.length > 0 && (
               <>
                 <SectionLabel>Sponsors de la Plataforma</SectionLabel>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-4">
                   {sponsors.slice(0, 4).map((sp) => (
                     <SponsorCuadrado key={sp.id} icon={<Sparkles size={16} />} name={sp.name} label={sp.level} />
                   ))}
@@ -85,7 +85,7 @@ export default function Catalogo() {
           groups.map((g, gi) => (
             <section key={g.platform}>
               <SectionLabel>{g.platform}</SectionLabel>
-              <div className="flex flex-col gap-2.5">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
                 {g.items.map((p) => (
                   <ParticipanteCard key={p.id} profile={p} />
                 ))}
