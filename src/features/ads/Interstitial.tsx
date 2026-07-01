@@ -35,8 +35,15 @@ export function Interstitial() {
   const isAdmin = pathname.includes('/admin')
   const alreadySeen =
     typeof sessionStorage !== 'undefined' && sessionStorage.getItem(SEEN_KEY) === '1'
+  // El interstitial es un takeover full-screen pensado para la PWA en el teléfono.
+  // En desktop se lee como un vacío negro, así que ahí no se muestra: el usuario
+  // ve el contenido al instante (los banners S2/S3 in-feed siguen presentes).
+  const isPhone =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(max-width: 767px)').matches
 
-  const [open, setOpen] = useState(() => !isAdmin && !alreadySeen && !!pair)
+  const [open, setOpen] = useState(() => isPhone && !isAdmin && !alreadySeen && !!pair)
   const [remaining, setRemaining] = useState(SKIP_SECONDS)
   const tracked = useRef(false)
   const panelRef = useRef<HTMLDivElement>(null)
