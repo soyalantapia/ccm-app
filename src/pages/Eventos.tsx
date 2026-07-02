@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, CalendarDays, MapPin, Sparkles, Ticket } from 'lucide-react'
-import { AdBanner, Badge, EmptyState, Eyebrow, Img, SectionTitle, Tabs } from '../components/ui'
+import { Badge, EmptyState, Eyebrow, Img, SectionTitle, Tabs } from '../components/ui'
+import { SponsorCarousel } from '../features/ads/SponsorCarousel'
 import { store, useStore } from '../data/store'
 import { useEvents, useRegistrations } from '../data/queries'
 import { IDS } from '../data/ids'
@@ -113,8 +114,8 @@ export default function Eventos() {
         </Link>
       )}
 
-      {/* Sponsor-banner tras el hero (cadencia del mockup) */}
-      <AdBanner slot="S2" className="mt-8" />
+      {/* Carrusel de sponsors tras el hero (banners horizontales que rotan) */}
+      <SponsorCarousel className="mt-8" />
 
       {/* ─── Camino a CCM ─── */}
       {/* Mobile: eyebrow del mockup. Desktop: cabecera editorial (estándar del sitio). */}
@@ -147,8 +148,6 @@ export default function Eventos() {
           ))}
         </div>
       )}
-
-      <AdBanner slot="S2" index={1} className="mt-4 lg:mt-8" />
 
       {/* Evento especial (lanzamiento-card) */}
       {especial && (
@@ -190,8 +189,6 @@ export default function Eventos() {
           </div>
         </>
       )}
-
-      <AdBanner slot="S2" index={2} className="mt-4 lg:mt-8" />
 
       {/* Prensa */}
       {notas.length > 2 && (

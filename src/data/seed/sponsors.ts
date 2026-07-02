@@ -14,6 +14,7 @@ export const seedSponsors: Sponsor[] = [
     level: 'Principal',
     exclusive: true,
     tagline: 'El banco que invierte en la industria creativa del interior',
+    banner: 'img/sponsors/banco-distrito.svg',
     creatives: [
       {
         slot: 'S1',
@@ -46,6 +47,7 @@ export const seedSponsors: Sponsor[] = [
     level: 'Oro',
     exclusive: false,
     tagline: 'La belleza que se ve en cada pasarela empieza en el backstage',
+    banner: 'img/sponsors/aura-beauty.svg',
     creatives: [
       {
         slot: 'S3',
@@ -68,6 +70,7 @@ export const seedSponsors: Sponsor[] = [
     level: 'Plata',
     exclusive: false,
     tagline: 'Vinos de bodegas boutique para brindar por el diseño argentino',
+    banner: 'img/sponsors/terruno-wines.svg',
     creatives: [
       {
         slot: 'S2',
@@ -88,6 +91,7 @@ export const seedSponsors: Sponsor[] = [
     level: 'Oro',
     exclusive: false,
     tagline: 'Anteojos de autor diseñados para mirar y ser mirado',
+    banner: 'img/sponsors/vialux-eyewear.svg',
     creatives: [
       {
         slot: 'S2',

@@ -175,6 +175,8 @@ export interface Sponsor {
   /** Exclusividad de rubro (D20) */
   exclusive: boolean
   tagline: string
+  /** Banner horizontal (arte del sponsor / ilustrativo) para el carrusel. */
+  banner?: string
   creatives: SponsorCreative[]
 }
 
