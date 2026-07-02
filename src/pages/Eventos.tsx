@@ -66,12 +66,14 @@ export default function Eventos() {
           onClick={() => store.track('event_view', { eventId: principal.id, from: 'banner' })}
           className="group relative block overflow-hidden rounded-md bg-night"
         >
+          {/* El alto se adapta al celular: proporción 4/5 pero nunca más del 62%
+              del viewport — en teléfonos anchos la imagen quedaba gigante. */}
           <Img
             src={principal.cover}
             alt={principal.title}
             priority
             ratio="4/5"
-            className="md:hidden"
+            className="w-full max-h-[62svh] md:hidden"
             imgClassName="transition duration-700 group-hover:scale-[1.03] opacity-90"
           />
           <Img

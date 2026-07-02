@@ -12,13 +12,13 @@
   /* ── Editables por el admin (TOKEN_KEYS en lib/theme.ts) — HEX only ── */
   --t-bg: #f5f0e8; /* canvas crema hueso */
   --t-surface: #ffffff; /* cards elevadas claras */
-  --t-ink: #181410; /* marrón-negro cálido: texto/oscuros */
+  --t-ink: #33261d; /* marrón espresso cálido: texto/oscuros (elegido por el cliente sobre el negro) */
   --t-ink-soft: #666666; /* texto secundario sobre crema */
   --t-line: #e1ddd5; /* hairline sobre crema (≈ rgba(0,0,0,.08)) */
   --t-accent: #b8860b; /* dorado primario (DarkGoldenrod) */
   --t-accent-ink: #ffffff; /* texto/íconos sobre dorado */
-  --t-night: #181410; /* superficie oscura (mismo tono cálido, sin azul) */
-  --t-night-soft: #2a1f0a; /* borde/divisor sobre oscuro */
+  --t-night: #33261d; /* superficie oscura espresso (mismo tono cálido, sin azul) */
+  --t-night-soft: #4c392b; /* borde/divisor sobre oscuro */
   --t-night-ink: #f5f0e8; /* texto crema sobre oscuro */
   --t-radius-sm: 8px;
   --t-radius-md: 12px;
@@ -26,9 +26,9 @@
   /* ── Constantes de marca (NO editables): dorado profundo, marrones de gradiente,
         grises de texto, crema apagado. Ver §1.1 del sistema de diseño. ── */
   --t-gold-deep: #8a6208; /* fin del gradiente dorado */
-  --t-brown-warm: #2a1a00; /* fin de gradientes cálidos (#181410→#2a1a00) */
-  --t-brown-olive: #2a1f0a; /* extremo claro de hero/thumb destacado */
-  --t-brown-gray: #2a2420; /* extremo de gradiente en imgs de card */
+  --t-brown-warm: #4a331f; /* fin de gradientes cálidos (#33261d→#4a331f) */
+  --t-brown-olive: #4c392b; /* extremo claro de hero/thumb destacado */
+  --t-brown-gray: #4a3e35; /* extremo de gradiente en imgs de card */
   --t-cream-muted: #e8e0d0; /* placeholders de imagen / chips inactivos */
   --t-text-2: #888888; /* muted (sb-sub, subtítulos) */
   --t-text-3: #666666; /* terciario/inactivos */

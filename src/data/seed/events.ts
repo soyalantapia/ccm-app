@@ -33,7 +33,7 @@ export const seedEvents: EventItem[] = [
     address: config.venue.address,
     mapsUrl: config.venue.mapsUrl,
     description:
-      'Una tarde para que el ecosistema se encuentre antes de la 14ª edición: charla de apertura con protagonistas de la industria, masterclass de 45 minutos en formato íntimo, ronda de networking entre diseñadores, marcas y prensa, y un desfile cápsula que adelanta lo que se viene en septiembre. Es la puerta de entrada al circuito CCM: acá se conocen los talentos que después brillan en la pasarela central. Cupos limitados por bloque, con inscripción previa. Vení con tu mejor LOOK 🖤',
+      'Una tarde para que el ecosistema se encuentre antes de la 14ª edición: charla de apertura con protagonistas de la industria, masterclass de 45 minutos en formato íntimo, ronda de networking entre diseñadores, marcas y prensa, y un desfile cápsula que adelanta lo que se viene en septiembre. Es la puerta de entrada al circuito CCM: acá se conocen los talentos que después brillan en la pasarela central. Cupos limitados por bloque, con inscripción previa. Vení con tu mejor look.',
     cover: 'img/events/camino-18.jpg',
     sponsorIds: [IDS.sponsors.banco, IDS.sponsors.beauty],
   },
@@ -68,7 +68,7 @@ export const seedEvents: EventItem[] = [
     mapsUrl: config.venue.mapsUrl,
     description:
       'Una jornada completa de formación para diseñadores, artistas y emprendedores que quieren profesionalizar su marca antes de llegar a la pasarela. En cuatro bloques de trabajo intensivo se cubren los pilares del negocio: cómo construir una identidad de autor que se sostenga, cómo poner precio sin regalar el trabajo, cómo contar la marca en redes y cómo armar la ficha técnica que las marcas y la prensa esperan ver. Formato taller con mentoras de la industria, cupos reducidos por bloque para que cada proyecto reciba devolución. Llevá tu colección en proceso: se trabaja con casos reales de las asistentes.',
-    cover: 'img/events/principal.jpg',
+    cover: 'img/gallery/g05.jpg',
     sponsorIds: [IDS.sponsors.eyewear, IDS.sponsors.banco],
     past: true,
   },
@@ -86,7 +86,7 @@ export const seedEvents: EventItem[] = [
     mapsUrl: config.venue.mapsUrl,
     description:
       'Una masterclass intensiva para diseñadores y marcas que quieren dar el salto a la exportación: cómo presentar tu colección a un comprador internacional, cómo poner precio en dólares sin perder margen, qué papeles y certificaciones te piden afuera, y cómo apoyarte en los programas de promoción de exportaciones de la provincia. Con casos reales de marcas cordobesas que ya venden en España, Dubái y Estados Unidos. Reservada a la membresía Socio CCM.',
-    cover: 'img/events/principal.jpg',
+    cover: 'img/gallery/g12.jpg',
     sponsorIds: [IDS.sponsors.banco],
     socioOnly: true,
   },
@@ -104,7 +104,7 @@ export const seedEvents: EventItem[] = [
     mapsUrl: config.venue.mapsUrl,
     description:
       'El taller que más piden los diseñadores: cómo calcular el precio real de una pieza —materiales, horas, diseño y tu marca— para dejar de vender perdiendo. Plantillas de costeo, márgenes por canal (directo, mayorista, exterior) y cómo comunicar el valor para que el cliente no discuta el precio. Formato práctico con tus propios productos. Reservada a la membresía Socio CCM.',
-    cover: 'img/events/principal.jpg',
+    cover: 'img/gallery/g16.jpg',
     sponsorIds: [IDS.sponsors.eyewear],
     socioOnly: true,
   },
