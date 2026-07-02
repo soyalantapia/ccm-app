@@ -24,16 +24,19 @@ interface SectionTitleProps {
   eyebrow?: string
   title: ReactNode
   lead?: ReactNode
+  /** Acción a la derecha (CTA / link "Ver todo"). Se ancla a la fila del título
+   *  —no al pie de la bajada—, así el botón queda a la altura del título. */
+  action?: ReactNode
   align?: 'left' | 'center'
   tone?: 'ink' | 'night'
   className?: string
 }
 
 /** Cabecera editorial estándar: eyebrow dorado + display serif + lead. */
-export function SectionTitle({ eyebrow, title, lead, align = 'left', tone = 'ink', className }: SectionTitleProps) {
+export function SectionTitle({ eyebrow, title, lead, action, align = 'left', tone = 'ink', className }: SectionTitleProps) {
   const center = align === 'center'
-  return (
-    <header className={`${center ? 'flex flex-col items-center text-center' : ''} ${className ?? ''}`}>
+  const heading = (
+    <div className="min-w-0">
       {eyebrow && <Eyebrow tone={tone}>{eyebrow}</Eyebrow>}
       <h2
         className={`type-display mt-4 text-[clamp(2rem,6vw,3.4rem)] text-balance ${
@@ -42,6 +45,18 @@ export function SectionTitle({ eyebrow, title, lead, align = 'left', tone = 'ink
       >
         {title}
       </h2>
+    </div>
+  )
+  return (
+    <header className={`${center ? 'flex flex-col items-center text-center' : ''} ${className ?? ''}`}>
+      {action ? (
+        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+          {heading}
+          <div className="shrink-0 pb-1.5">{action}</div>
+        </div>
+      ) : (
+        heading
+      )}
       {lead && (
         <p
           className={`mt-5 max-w-xl text-[15px] leading-relaxed md:text-base ${

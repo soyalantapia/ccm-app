@@ -18,15 +18,17 @@ export default function Inicio() {
   return (
     <div className="mx-auto max-w-2xl pb-6 lg:max-w-6xl lg:pb-16">
       {/* Cabecera editorial — solo desktop (estándar de página del sitio) */}
-      <div className="hidden lg:flex lg:items-end lg:justify-between lg:gap-8 lg:px-8 lg:pt-14">
+      <div className="hidden lg:block lg:px-8 lg:pt-14">
         <SectionTitle
           eyebrow={`CCM 2026 · ${config.mainDatesLabel}`}
           title="Noticias"
           lead="Lo que pasa en el ecosistema CCM: novedades, plataformas y contenido en video."
+          action={
+            <ButtonLink to="/entradas" size="lg">
+              Inscribite
+            </ButtonLink>
+          }
         />
-        <ButtonLink to="/entradas" size="lg" className="shrink-0">
-          Inscribite
-        </ButtonLink>
       </div>
 
       {/* Franja evento inline — mobile (mockup 1:1) */}

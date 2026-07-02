@@ -20,24 +20,24 @@ export function RecentContent() {
   return (
     <section className="border-t border-line">
       <div className="mx-auto max-w-6xl px-5 py-16 md:py-24">
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <SectionTitle
-            eyebrow="Contenido reciente"
-            title={
-              <>
-                CCM se <em className="text-accent">mira</em>
-              </>
-            }
-            lead="Aftermovies, desfiles y backstage de cada edición — sin salir de la plataforma."
-          />
-          <Link
-            to="/contenido"
-            className="eyebrow group flex items-center gap-1.5 text-[10px] text-ink-soft transition-colors hover:text-ink"
-          >
-            Ver todo el contenido
-            <ArrowUpRight size={13} className="transition-transform duration-200 group-hover:translate-x-0.5" />
-          </Link>
-        </div>
+        <SectionTitle
+          eyebrow="Contenido reciente"
+          title={
+            <>
+              CCM se <em className="text-accent">mira</em>
+            </>
+          }
+          lead="Aftermovies, desfiles y backstage de cada edición — sin salir de la plataforma."
+          action={
+            <Link
+              to="/contenido"
+              className="eyebrow group flex items-center gap-1.5 text-[10px] text-ink-soft transition-colors hover:text-ink"
+            >
+              Ver todo el contenido
+              <ArrowUpRight size={13} className="transition-transform duration-200 group-hover:translate-x-0.5" />
+            </Link>
+          }
+        />
         <div className="mt-10 grid gap-6 md:mt-14 md:grid-cols-2">
           {/* Con exactamente 2 videos, en desktop van lado a lado (sin huérfano). */}
           {videos.map((v, i) => (

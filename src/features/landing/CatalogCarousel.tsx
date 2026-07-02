@@ -12,24 +12,24 @@ export function CatalogCarousel() {
   return (
     <section className="overflow-hidden py-16 md:py-24">
       <div className="mx-auto max-w-6xl px-5">
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <SectionTitle
-            eyebrow="Catálogo CCM"
-            title={
-              <>
-                Los <em className="text-accent">protagonistas</em> del ecosistema
-              </>
-            }
-            lead="Diseñadores, artistas, influencers y marcas verificadas, con su portfolio completo."
-          />
-          <Link
-            to="/catalogo"
-            className="eyebrow group flex items-center gap-1.5 text-[10px] text-ink-soft transition-colors hover:text-ink"
-          >
-            Ver catálogo completo
-            <ArrowUpRight size={13} className="transition-transform duration-200 group-hover:translate-x-0.5" />
-          </Link>
-        </div>
+        <SectionTitle
+          eyebrow="Catálogo CCM"
+          title={
+            <>
+              Los <em className="text-accent">protagonistas</em> del ecosistema
+            </>
+          }
+          lead="Diseñadores, artistas, influencers y marcas verificadas, con su portfolio completo."
+          action={
+            <Link
+              to="/catalogo"
+              className="eyebrow group flex items-center gap-1.5 text-[10px] text-ink-soft transition-colors hover:text-ink"
+            >
+              Ver catálogo completo
+              <ArrowUpRight size={13} className="transition-transform duration-200 group-hover:translate-x-0.5" />
+            </Link>
+          }
+        />
         <div className="no-scrollbar -mx-5 mt-10 flex snap-x snap-mandatory gap-5 overflow-x-auto px-5 pb-2 md:mt-14">
           {profiles.map((p, i) => (
             <Link
