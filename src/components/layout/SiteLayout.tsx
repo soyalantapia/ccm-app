@@ -123,9 +123,13 @@ function Header() {
             ))}
           </nav>
           <div className="flex items-center gap-2.5 lg:flex-1 lg:justify-end">
-            <Button size="sm" onClick={() => void registerFree(navigate)}>
-              {registered ? 'Mi QR' : 'Registrate'}
-            </Button>
+            {/* CTA solo en desktop: en el celular Mi QR ya está en el bottom-nav
+                (botón central) y el registro se alcanza desde ahí y desde el feed. */}
+            <span className="hidden lg:inline-flex">
+              <Button size="sm" onClick={() => void registerFree(navigate)}>
+                {registered ? 'Mi QR' : 'Registrate'}
+              </Button>
+            </span>
             <button
               onClick={() => setMenuOpen(true)}
               aria-label="Abrir menú"
