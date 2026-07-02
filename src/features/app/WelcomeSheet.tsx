@@ -3,26 +3,15 @@ import { useNavigate } from 'react-router-dom'
 import { CalendarDays, Image as ImageIcon, QrCode } from 'lucide-react'
 import { Button, Sheet } from '../../components/ui'
 import { store } from '../../data/store'
-import { bus } from '../../lib/bus'
 import { registerFree } from '../../lib/actions'
 
 const WELCOMED_KEY = 'ccm:welcomed'
-const INTERSTITIAL_DONE = 'ccm:interstitial-done'
 
 function alreadyWelcomed(): boolean {
   try {
     return localStorage.getItem(WELCOMED_KEY) === '1'
   } catch {
     return false
-  }
-}
-
-/** El interstitial S1 ya terminó (o no aplica): seguro mostrar el onboarding. */
-function interstitialDone(): boolean {
-  try {
-    return sessionStorage.getItem(INTERSTITIAL_DONE) === '1'
-  } catch {
-    return true
   }
 }
 
@@ -35,7 +24,7 @@ const STEPS: { icon: ComponentType<{ size?: number; strokeWidth?: number }>; tit
 /**
  * Onboarding de primera vez (PRD §8 — first-aha). Bottom sheet con las 3 cosas
  * que se hacen en la app + la acción principal (registro). Aparece una sola vez
- * por dispositivo y solo cuando el interstitial S1 ya terminó (sin solaparse).
+ * por dispositivo, poco después de abrir la app.
  */
 export function WelcomeSheet() {
   const [open, setOpen] = useState(false)
@@ -44,17 +33,12 @@ export function WelcomeSheet() {
   useEffect(() => {
     if (alreadyWelcomed()) return
     let cancelled = false
-    const tryOpen = () => {
-      if (cancelled || alreadyWelcomed()) return
-      if (interstitialDone()) setOpen(true)
-    }
-    const t = window.setTimeout(tryOpen, 500)
-    // Si el interstitial se cierra estando ya en Inicio, reaccionamos al instante.
-    const off = bus.on((key) => key === 'ui:interstitial-done' && tryOpen())
+    const t = window.setTimeout(() => {
+      if (!cancelled && !alreadyWelcomed()) setOpen(true)
+    }, 500)
     return () => {
       cancelled = true
       window.clearTimeout(t)
-      off()
     }
   }, [])
 
