@@ -1,16 +1,21 @@
 import { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Star } from 'lucide-react'
-import { AdBanner, Badge, Button, EmptyState, SectionTitle } from '../../components/ui'
+import { Check, Minus, Plus, Star } from 'lucide-react'
+import { AdBanner, Badge, Button, EmptyState, SectionTitle, Stat } from '../../components/ui'
 import { store, useStore } from '../../data/store'
 import { IDS } from '../../data/ids'
 import { registerFree } from '../../lib/actions'
+import { FIELD_META } from '../../lib/profileRequest'
 import { AccreditationCard } from '../../features/app/AccreditationCard'
 import { AddToCalendar } from '../../features/app/AddToCalendar'
 import { AppSection } from '../../features/app/AppSection'
+import { ProfileCompleteCard } from '../../features/app/ProfileCompleteCard'
+import { ProfileFieldRow } from '../../features/app/ProfileFieldRow'
 import { InscripcionItem, SectionLabel } from '../../features/app/mockup'
-import { ORDER_STATUS_META, formatDay, registrationSortKey } from '../../features/app/meta'
-import type { Registration } from '../../data/types'
+import { APPLICATION_STATUS_META, ORDER_STATUS_META, formatDay, registrationSortKey } from '../../features/app/meta'
+import type { ProfileFieldKey, Registration } from '../../data/types'
+
+const FIELD_ORDER = Object.keys(FIELD_META) as ProfileFieldKey[]
 
 /** Deriva hora/título/rubro del bloque y renderiza el inscripcion-item del mockup. */
 function InscripcionRow({ registration }: { registration: Registration }) {
@@ -19,7 +24,11 @@ function InscripcionRow({ registration }: { registration: Registration }) {
   return <InscripcionItem hora={block.start} titulo={block.title} plataforma={`${block.kind} · ${block.room}`} />
 }
 
-/** Mi QR — PRD §8.3: acreditación offline, inscripciones, entradas VIP y slot S6. */
+/**
+ * Mi QR — el HUB personal (D-hub): acreditación primero (uso puerta, 1 toque),
+ * después agenda, entradas, membresía, beneficios, fotos y datos. Absorbe el
+ * viejo /perfil (datos, postulaciones, actividad, permisos — plegados al fondo).
+ */
 export default function MiQR() {
   const navigate = useNavigate()
 
@@ -31,11 +40,23 @@ export default function MiQR() {
   const orders = useStore((s) => s.getOrders())
   const mainEvent = useStore((s) => s.getEventById(IDS.events.principal))
   const isSocio = useStore((s) => s.isSocio())
+  const profile = useStore((s) => s.getProfile())
+  const applications = useStore((s) => s.getApplications().filter((a) => !a.fromSeed))
+  const favoritesCount = useStore((s) => s.getFavorites().length)
+  const downloadsCount = useStore((s) => s.getDownloads().length)
   const registered = registrations.length > 0
 
   const blockRegistrations = registrations
     .filter((r) => r.blockId)
     .sort((a, b) => registrationSortKey(a).localeCompare(registrationSortKey(b)))
+
+  const camino = store.getConvocatoria(IDS.convocatoriaSlugs.camino)
+
+  const consents = [
+    { key: 'terms', label: 'Términos y Política de Privacidad', ts: profile.consents.terms },
+    { key: 'news', label: 'Novedades de CCM', ts: profile.consents.news },
+    { key: 'sponsors', label: 'Beneficios de sponsors', ts: profile.consents.sponsors },
+  ]
 
   return (
     <div className="mx-auto max-w-2xl px-5 py-12 md:py-20 lg:max-w-3xl">
@@ -174,8 +195,139 @@ export default function MiQR() {
         </>
       )}
 
+      {/* ── Hub personal: visible con o sin registro ── */}
+
+      {/* Mis Fotos (favoritas + descargas → /fotos) */}
+      <SectionLabel>Mis Fotos</SectionLabel>
+      <div className="grid grid-cols-2 gap-2.5 lg:gap-4">
+        <Link
+          to="/fotos"
+          className="rounded-[12px] border-2 border-transparent bg-white p-3.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform active:scale-[0.98] lg:p-5"
+        >
+          <div className="text-[28px] lg:text-[36px]">🤍</div>
+          <div className="type-serif mt-2 text-[13px] text-ink lg:text-[16px]">
+            {favoritesCount} {favoritesCount === 1 ? 'favorita' : 'favoritas'}
+          </div>
+          <div className="mt-1 text-[9px] leading-[1.4] text-text-3 lg:text-[11px]">Las fotos que marcaste con el corazón</div>
+          <div className="mt-2.5 text-[10px] font-bold text-accent lg:text-[11px]">Ver →</div>
+        </Link>
+        <Link
+          to="/fotos"
+          className="rounded-[12px] border-2 border-transparent bg-white p-3.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform active:scale-[0.98] lg:p-5"
+        >
+          <div className="text-[28px] lg:text-[36px]">📸</div>
+          <div className="type-serif mt-2 text-[13px] text-ink lg:text-[16px]">
+            {downloadsCount} {downloadsCount === 1 ? 'descarga' : 'descargas'}
+          </div>
+          <div className="mt-1 text-[9px] leading-[1.4] text-text-3 lg:text-[11px]">Tus fotos del evento en alta calidad</div>
+          <div className="mt-2.5 text-[10px] font-bold text-accent lg:text-[11px]">Ver →</div>
+        </Link>
+      </div>
+
+      {/* Mis Datos — progressive profiling (antes en /perfil) */}
+      <SectionLabel>Mis Datos</SectionLabel>
+      <ProfileCompleteCard />
+      <p className="mt-4 text-sm leading-relaxed text-ink-soft">
+        Acá podés ver y corregir cada dato por separado cuando quieras.
+      </p>
+      <div className="mt-4 border-b border-line">
+        {FIELD_ORDER.map((field) => (
+          <ProfileFieldRow key={field} field={field} />
+        ))}
+      </div>
+
+      {/* Lo administrativo, plegado al fondo (antes en /perfil) */}
+      <details className="group mt-10 rounded-[12px] border border-line bg-surface">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 [&::-webkit-details-marker]:hidden">
+          <span className="eyebrow text-[10px] text-ink-soft">Postulaciones · Actividad · Permisos</span>
+          <Plus
+            size={16}
+            strokeWidth={1.75}
+            className="shrink-0 text-ink-soft transition-transform duration-300 group-open:rotate-45"
+          />
+        </summary>
+        <div className="space-y-8 border-t border-line px-4 pb-6 pt-5">
+          <div>
+            <div className="eyebrow text-[10px] text-accent-strong">Tus postulaciones</div>
+            {applications.length === 0 ? (
+              <p className="mt-3 text-sm leading-relaxed text-ink-soft">
+                Todavía no te postulaste a ninguna convocatoria.{' '}
+                <Link
+                  to={`/c/${IDS.convocatoriaSlugs.camino}`}
+                  className="text-ink underline decoration-accent underline-offset-4 transition-colors hover:text-accent"
+                >
+                  Conocé el Camino a CCM
+                </Link>
+                .
+              </p>
+            ) : (
+              <div className="mt-2 border-b border-line">
+                {applications.map((a) => {
+                  const meta = APPLICATION_STATUS_META[a.status]
+                  return (
+                    <article key={a.id} className="flex items-center justify-between gap-4 border-t border-line py-4">
+                      <div className="min-w-0">
+                        <h3 className="type-serif truncate text-lg text-ink">
+                          {camino && a.convocatoriaId === camino.id ? camino.title : 'Convocatoria CCM'}
+                        </h3>
+                        <p className="mt-0.5 text-xs text-ink-soft">
+                          Enviada el {formatDay(a.ts)}
+                          {a.decidedAt ? ` · resuelta el ${formatDay(a.decidedAt)}` : ''}
+                        </p>
+                      </div>
+                      <Badge tone={meta.tone}>{meta.label}</Badge>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="eyebrow text-[10px] text-accent-strong">Tu actividad</div>
+            <div className="mt-4 grid grid-cols-3 gap-6">
+              <Stat value={registrations.length} label="Inscripciones" />
+              <Stat value={downloadsCount} label="Descargas" />
+              <Stat value={favoritesCount} label="Favoritos" />
+            </div>
+          </div>
+
+          <div>
+            <div className="eyebrow text-[10px] text-accent-strong">Consentimientos</div>
+            <div className="mt-2 border-b border-line">
+              {consents.map((c) => (
+                <div key={c.key} className="flex items-center justify-between gap-4 border-t border-line py-3.5">
+                  <span className="text-sm text-ink">{c.label}</span>
+                  {c.ts ? (
+                    <span className="flex shrink-0 items-center gap-1.5 text-xs text-success">
+                      <Check size={13} /> {formatDay(c.ts)}
+                    </span>
+                  ) : (
+                    <span className="flex shrink-0 items-center gap-1.5 text-xs text-ink-soft/60">
+                      <Minus size={13} /> No otorgado
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </details>
+
+      {/* Nota legal — sin logout (D22): tu dispositivo es tu cuenta */}
+      <p className="mt-10 text-center text-[11px] leading-relaxed text-ink-soft/70">
+        Tu dispositivo es tu cuenta: no hay contraseñas ni cierre de sesión. Tus datos se usan solo
+        para la experiencia CCM.{' '}
+        <Link
+          to="/privacidad"
+          className="underline decoration-accent underline-offset-2 transition-colors hover:text-ink"
+        >
+          Política de Privacidad
+        </Link>
+      </p>
+
       {/* Slot discreto de sponsor (S6) */}
-      <AdBanner slot="S6" className="mt-16 lg:mt-10" />
+      <AdBanner slot="S6" className="mt-10" />
     </div>
   )
 }

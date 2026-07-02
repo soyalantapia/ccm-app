@@ -1,5 +1,6 @@
 import { Suspense, useEffect, type ReactNode } from 'react'
 import {
+  Navigate,
   Outlet,
   RouterProvider,
   createBrowserRouter,
@@ -39,7 +40,6 @@ const Stand = lazyWithReload(() => import('./pages/Stand'))
 const Legales = lazyWithReload(() => import('./pages/Legales'))
 const Inicio = lazyWithReload(() => import('./pages/app/Inicio'))
 const MiQR = lazyWithReload(() => import('./pages/app/MiQR'))
-const Perfil = lazyWithReload(() => import('./pages/app/Perfil'))
 const Dashboard = lazyWithReload(() => import('./pages/admin/Dashboard'))
 const AdminEventos = lazyWithReload(() => import('./pages/admin/AdminEventos'))
 const AdminEventoDetalle = lazyWithReload(() => import('./pages/admin/AdminEventoDetalle'))
@@ -114,7 +114,8 @@ const router = createBrowserRouter(
             { path: '/privacidad', element: <S><Legales kind="privacidad" /></S> },
             { path: '/app', element: <S><Inicio /></S> },
             { path: '/mi-qr', element: <S><MiQR /></S> },
-            { path: '/perfil', element: <S><Perfil /></S> },
+            // El viejo Perfil vive dentro del hub Mi QR — los links existentes siguen andando
+            { path: '/perfil', element: <Navigate to="/mi-qr" replace /> },
             { path: '*', element: <NotFound /> },
           ],
         },

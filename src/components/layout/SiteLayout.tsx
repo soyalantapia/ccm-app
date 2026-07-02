@@ -23,7 +23,6 @@ const SECONDARY = [
   { to: '/membresia', label: 'Membresías' },
   { to: '/beneficios', label: 'Beneficios' },
   { to: '/fotos', label: 'Fotos' },
-  { to: '/perfil', label: 'Mi perfil' },
 ]
 
 // Nav superior de desktop: las 4 pestañas core + Fotos y Entradas. En pantalla
@@ -130,10 +129,12 @@ function Header() {
                 {registered ? 'Mi QR' : 'Registrate'}
               </Button>
             </span>
+            {/* Menú solo en desktop: en el celular la app entera vive en los
+                5 tabs (el hub Mi QR absorbe Fotos, Perfil, Membresía y Beneficios). */}
             <button
               onClick={() => setMenuOpen(true)}
               aria-label="Abrir menú"
-              className="rounded-sm p-2 text-ink transition-colors hover:bg-ink/5"
+              className="hidden rounded-sm p-2 text-ink transition-colors hover:bg-ink/5 lg:block"
             >
               <Menu size={20} strokeWidth={1.75} />
             </button>
