@@ -3,11 +3,23 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { Badge, ButtonLink, EmptyState, Eyebrow, Img } from '../components/ui'
 import { useStore } from '../data/store'
-import type { Application } from '../data/types'
+import type { Application, ConvocatoriaLogo } from '../data/types'
 import { ConvocatoriaForm } from '../features/convocatoria/ConvocatoriaForm'
 import { ConvocatoriaSuccess } from '../features/convocatoria/ConvocatoriaSuccess'
 import { ApplicationStatusPanel } from '../features/convocatoria/ApplicationStatus'
 import { formatDeadline } from '../features/convocatoria/format'
+
+/** Agrupa los logos por rubro conservando el orden de aparición del primero de cada rubro. */
+function groupByRubro(logos: ConvocatoriaLogo[]): [string, ConvocatoriaLogo[]][] {
+  const groups = new Map<string, ConvocatoriaLogo[]>()
+  for (const l of logos) {
+    const key = l.rubro ?? ''
+    const arr = groups.get(key)
+    if (arr) arr.push(l)
+    else groups.set(key, [l])
+  }
+  return [...groups.entries()]
+}
 
 /** Título display con la última palabra en dorado (énfasis, sin cursiva). */
 function DisplayTitle({ title }: { title: string }) {
@@ -83,6 +95,17 @@ export default function Convocatoria() {
                 </Link>
               )}
             </div>
+            {convocatoria.ctaLabel && convocatoria.ctaUrl && (
+              <a
+                href={convocatoria.ctaUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-7 inline-flex items-center gap-2 rounded-md bg-accent px-5 py-2.5 text-sm font-medium text-accent-ink transition hover:opacity-90"
+              >
+                {convocatoria.ctaLabel}
+                <ArrowRight size={15} aria-hidden />
+              </a>
+            )}
           </div>
 
           {event && (
@@ -115,6 +138,41 @@ export default function Convocatoria() {
           )}
         </div>
       </section>
+
+      {/* ─── Muro de logos (universidades / sponsors), agrupados por rubro ─── */}
+      {convocatoria.logos && convocatoria.logos.length > 0 && (
+        <section className="border-b border-line">
+          <div className="mx-auto max-w-6xl px-5 py-12 md:py-16">
+            <Eyebrow>Quiénes están</Eyebrow>
+            {groupByRubro(convocatoria.logos).map(([rubro, logos]) => (
+              <div key={rubro || 'sin-rubro'} className="mt-8 first:mt-6">
+                {rubro && <p className="eyebrow text-[10px] text-ink-soft">{rubro}</p>}
+                <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+                  {logos.map((l, i) => {
+                    const inner = <Img src={l.logoUrl} alt={l.name} ratio="3/2" imgClassName="object-contain" />
+                    return l.url ? (
+                      <a
+                        key={i}
+                        href={l.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block rounded-md border border-line bg-surface p-4 transition hover:border-accent"
+                        aria-label={l.name}
+                      >
+                        {inner}
+                      </a>
+                    ) : (
+                      <div key={i} className="rounded-md border border-line bg-surface p-4">
+                        {inner}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ─── Form / éxito / estado ─── */}
       <section className="mx-auto max-w-6xl px-5 py-14 md:py-20">

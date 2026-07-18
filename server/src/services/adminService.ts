@@ -213,8 +213,22 @@ function fieldRows(convocatoriaId: string, fields: Convocatoria['fields']) {
   }))
 }
 
+function logoRows(convocatoriaId: string, logos: NonNullable<Convocatoria['logos']>) {
+  return logos.map((l, i) => ({
+    convocatoriaId,
+    name: l.name,
+    logoUrl: l.logoUrl,
+    url: l.url ?? null,
+    rubro: l.rubro ?? null,
+    order: i,
+  }))
+}
+
 async function readConvocatoria(id: string): Promise<Convocatoria> {
-  const cv = await prisma.convocatoria.findUniqueOrThrow({ where: { id }, include: { fields: { orderBy: { order: 'asc' } } } })
+  const cv = await prisma.convocatoria.findUniqueOrThrow({
+    where: { id },
+    include: { fields: { orderBy: { order: 'asc' } }, logos: { orderBy: { order: 'asc' } } },
+  })
   return toConvocatoria(cv)
 }
 
@@ -227,7 +241,10 @@ export async function createConvocatoria(cv: Convocatoria): Promise<Convocatoria
       intro: cv.intro,
       deadline: new Date(cv.deadline),
       eventId: cv.eventId,
+      ctaLabel: cv.ctaLabel ?? null,
+      ctaUrl: cv.ctaUrl ?? null,
       fields: { create: fieldRows(cv.id, cv.fields) },
+      ...(cv.logos && cv.logos.length ? { logos: { create: logoRows(cv.id, cv.logos) } } : {}),
     },
   })
   return readConvocatoria(cv.id)
@@ -235,13 +252,17 @@ export async function createConvocatoria(cv: Convocatoria): Promise<Convocatoria
 
 export async function updateConvocatoria(id: string, patch: Partial<Convocatoria>): Promise<Convocatoria> {
   const data: Record<string, unknown> = {}
-  for (const k of ['slug', 'title', 'intro', 'eventId'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
+  for (const k of ['slug', 'title', 'intro', 'eventId', 'ctaLabel', 'ctaUrl'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   if ('deadline' in patch && patch.deadline) data.deadline = new Date(patch.deadline)
   await prisma.convocatoria.update({ where: { id }, data })
   if (patch.fields) {
     // Reemplazo completo de los campos (createMany con order recalculado).
     await prisma.convocatoriaField.deleteMany({ where: { convocatoriaId: id } })
     if (patch.fields.length) await prisma.convocatoriaField.createMany({ data: fieldRows(id, patch.fields) })
+  }
+  if (patch.logos) {
+    await prisma.convocatoriaLogo.deleteMany({ where: { convocatoriaId: id } })
+    if (patch.logos.length) await prisma.convocatoriaLogo.createMany({ data: logoRows(id, patch.logos) })
   }
   return readConvocatoria(id)
 }

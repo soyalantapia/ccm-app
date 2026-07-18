@@ -24,16 +24,22 @@ type FieldForm = {
   help: string
 }
 
+type LogoForm = { name: string; logoUrl: string; url: string; rubro: string }
+
 type Form = {
   title: string
   slug: string
   intro: string
   deadline: string
   eventId: string
+  ctaLabel: string
+  ctaUrl: string
   fields: FieldForm[]
+  logos: LogoForm[]
 }
 
 const emptyField: FieldForm = { key: '', label: '', type: 'text', required: false, options: '', placeholder: '', help: '' }
+const emptyLogo: LogoForm = { name: '', logoUrl: '', url: '', rubro: '' }
 
 interface Props {
   open: boolean
@@ -52,7 +58,10 @@ export function OpsConvocatoriaForm({ open, convocatoria, onClose }: Props) {
     intro: '',
     deadline: '',
     eventId: events[0]?.id ?? '',
+    ctaLabel: '',
+    ctaUrl: '',
     fields: [{ ...emptyField }],
+    logos: [],
   }
 
   const [f, setF] = useState<Form>(empty)
@@ -68,6 +77,8 @@ export function OpsConvocatoriaForm({ open, convocatoria, onClose }: Props) {
         intro: convocatoria.intro,
         deadline: convocatoria.deadline,
         eventId: convocatoria.eventId,
+        ctaLabel: convocatoria.ctaLabel ?? '',
+        ctaUrl: convocatoria.ctaUrl ?? '',
         fields: convocatoria.fields.map((ff) => ({
           key: ff.key,
           label: ff.label,
@@ -76,6 +87,12 @@ export function OpsConvocatoriaForm({ open, convocatoria, onClose }: Props) {
           options: (ff.options ?? []).join(', '),
           placeholder: ff.placeholder ?? '',
           help: ff.help ?? '',
+        })),
+        logos: (convocatoria.logos ?? []).map((l) => ({
+          name: l.name,
+          logoUrl: l.logoUrl,
+          url: l.url ?? '',
+          rubro: l.rubro ?? '',
         })),
       })
     } else {
@@ -99,6 +116,11 @@ export function OpsConvocatoriaForm({ open, convocatoria, onClose }: Props) {
       return { ...p, fields }
     })
 
+  const setLogo = (i: number, patch: Partial<LogoForm>) =>
+    setF((p) => ({ ...p, logos: p.logos.map((l, idx) => (idx === i ? { ...l, ...patch } : l)) }))
+  const addLogo = () => setF((p) => ({ ...p, logos: [...p.logos, { ...emptyLogo }] }))
+  const removeLogo = (i: number) => setF((p) => ({ ...p, logos: p.logos.filter((_, idx) => idx !== i) }))
+
   const submit = (e: FormEvent) => {
     e.preventDefault()
     if (!f.title.trim() || !f.intro.trim() || !f.deadline.trim() || !f.eventId) {
@@ -121,12 +143,23 @@ export function OpsConvocatoriaForm({ open, convocatoria, onClose }: Props) {
       ...(ff.placeholder.trim() ? { placeholder: ff.placeholder.trim() } : {}),
       ...(ff.help.trim() ? { help: ff.help.trim() } : {}),
     }))
+    const logos = f.logos
+      .filter((l) => l.name.trim() && l.logoUrl.trim())
+      .map((l) => ({
+        name: l.name.trim(),
+        logoUrl: l.logoUrl.trim(),
+        ...(l.url.trim() ? { url: l.url.trim() } : {}),
+        ...(l.rubro.trim() ? { rubro: l.rubro.trim() } : {}),
+      }))
     const data = {
       title: f.title.trim(),
       intro: f.intro.trim(),
       deadline: f.deadline.trim(),
       eventId: f.eventId,
+      ctaLabel: f.ctaLabel.trim() || undefined,
+      ctaUrl: f.ctaUrl.trim() || undefined,
       fields,
+      logos,
       ...(f.slug.trim() ? { slug: f.slug.trim() } : {}),
     }
     if (convocatoria) {
@@ -220,6 +253,50 @@ export function OpsConvocatoriaForm({ open, convocatoria, onClose }: Props) {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* CTA opcional */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Botón CTA · texto" hint="Opcional (ej. Sumá tu universidad)">
+            <Input value={f.ctaLabel} onChange={set('ctaLabel')} placeholder="Sumá tu universidad" />
+          </Field>
+          <Field label="Botón CTA · destino" hint="Opcional — link o wa.me/…">
+            <Input value={f.ctaUrl} onChange={set('ctaUrl')} placeholder="https://…" />
+          </Field>
+        </div>
+
+        {/* Logos por rubro */}
+        <div className="rounded-md border border-line bg-surface p-3">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="eyebrow text-[10px] text-ink-soft">Logos (universidades / sponsors) · {f.logos.length}</p>
+            <Button type="button" variant="ghost" size="sm" onClick={addLogo}>
+              <Plus size={13} /> Agregar logo
+            </Button>
+          </div>
+          {f.logos.length === 0 ? (
+            <p className="text-[13px] text-ink-soft">Sin logos. Agregá universidades o sponsors y agrupalos por rubro.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {f.logos.map((l, i) => (
+                <div key={i} className="rounded-sm border border-line bg-bg p-2.5">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <Input value={l.name} onChange={(e) => setLogo(i, { name: e.target.value })} placeholder="Nombre (ej: Siglo 21)" />
+                    <Input value={l.rubro} onChange={(e) => setLogo(i, { rubro: e.target.value })} placeholder="Rubro (ej: Universidades)" />
+                  </div>
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <Input value={l.logoUrl} onChange={(e) => setLogo(i, { logoUrl: e.target.value })} placeholder="URL del logo: https://…/logo.png" />
+                    <div className="flex items-center gap-1.5">
+                      <Input value={l.url} onChange={(e) => setLogo(i, { url: e.target.value })} placeholder="Link (opcional)" className="flex-1" />
+                      <button type="button" onClick={() => removeLogo(i)} aria-label="Quitar logo"
+                        className="rounded-sm p-1.5 text-ink-soft hover:bg-danger/10 hover:text-danger">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {error && <p className="text-xs text-danger">{error}</p>}

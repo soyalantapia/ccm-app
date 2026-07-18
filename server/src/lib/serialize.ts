@@ -15,6 +15,7 @@ import type {
   SponsorCreative,
   Convocatoria,
   ConvocatoriaField,
+  ConvocatoriaLogo,
   Application,
   Membership,
   Benefit,
@@ -210,7 +211,7 @@ export function toSponsor(s: Sponsor & { creatives?: SponsorCreative[] }): Domai
 }
 
 export function toConvocatoria(
-  cv: Convocatoria & { fields?: ConvocatoriaField[] },
+  cv: Convocatoria & { fields?: ConvocatoriaField[]; logos?: ConvocatoriaLogo[] },
 ): DomainConvocatoria {
   return {
     id: cv.id,
@@ -219,6 +220,18 @@ export function toConvocatoria(
     intro: cv.intro,
     deadline: cv.deadline.toISOString().slice(0, 10),
     eventId: cv.eventId,
+    ...(cv.ctaLabel ? { ctaLabel: cv.ctaLabel } : {}),
+    ...(cv.ctaUrl ? { ctaUrl: cv.ctaUrl } : {}),
+    ...(cv.logos && cv.logos.length
+      ? {
+          logos: cv.logos.map((l) => ({
+            name: l.name,
+            logoUrl: l.logoUrl,
+            ...(l.url ? { url: l.url } : {}),
+            ...(l.rubro ? { rubro: l.rubro } : {}),
+          })),
+        }
+      : {}),
     fields: (cv.fields ?? []).map((f) => ({
       key: f.key,
       label: f.label,
