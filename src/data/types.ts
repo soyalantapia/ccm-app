@@ -125,9 +125,13 @@ export interface CatalogProfile {
   slug: string
   name: string
   role: string // 'Diseñadora' | 'Artista' | 'Influencer' | 'Marca' ...
+  /** participante | expositor — distinto cupo de imágenes (4 vs 2) + campo "cuenta proyectos". */
+  kind?: 'participante' | 'expositor'
   platform: string // 'Moda' | 'Belleza' | 'Arte' | ...
   city: string
   bio: string
+  /** "Cuenta proyectos" — narrativa del expositor (opcional). */
+  projects?: string
   photo: string
   instagram?: string
   /** Contacto directo (wa.me/… o número) — "si quiere se contacta" (Gastón). */

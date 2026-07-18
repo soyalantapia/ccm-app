@@ -53,6 +53,15 @@ export function AuthorBlock({ profile, onViewPieces }: AuthorBlockProps) {
               {profile.bio}
             </p>
 
+            {profile.projects && (
+              <div className="mt-6 max-w-xl border-l-2 border-accent/40 pl-4">
+                <span className="eyebrow block text-[10px] text-night-ink/50">Proyectos</span>
+                <p className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-night-ink/70">
+                  {profile.projects}
+                </p>
+              </div>
+            )}
+
             <div className="mt-8 flex flex-wrap gap-x-12 gap-y-5 border-t border-night-soft pt-6">
               {instagram && (
                 <div>

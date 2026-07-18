@@ -31,12 +31,18 @@ const PORTFOLIO_POOL: string[] = Array.from(
 /** Pieza del portfolio en edición: imagen + título + precio (string para el input). */
 type PieceForm = { image: string; title: string; price: string }
 
+type Kind = 'participante' | 'expositor'
+/** Cupo de imágenes de portfolio por tipo (feedback Gastón: participante 4, expositor 2). */
+const IMG_CAP: Record<Kind, number> = { participante: 4, expositor: 2 }
+
 type Form = {
   name: string
   role: string
+  kind: Kind
   platform: string
   city: string
   bio: string
+  projects: string
   photo: string
   instagram: string
   whatsapp: string
@@ -48,9 +54,11 @@ type Form = {
 const empty: Form = {
   name: '',
   role: '',
+  kind: 'participante',
   platform: PLATFORM_OPTIONS[0].value,
   city: '',
   bio: '',
+  projects: '',
   photo: PHOTO_OPTIONS[0].value,
   instagram: '',
   whatsapp: '',
@@ -63,9 +71,11 @@ function fromProfile(p: CatalogProfile): Form {
   return {
     name: p.name,
     role: p.role,
+    kind: p.kind ?? 'participante',
     platform: p.platform,
     city: p.city,
     bio: p.bio,
+    projects: p.projects ?? '',
     photo: p.photo,
     instagram: p.instagram ?? '',
     whatsapp: p.whatsapp ?? '',
@@ -98,12 +108,13 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
     setF((prev) => ({ ...prev, [k]: e.target.value }))
 
   const togglePortfolio = (image: string) =>
-    setF((prev) => ({
-      ...prev,
-      portfolio: prev.portfolio.some((p) => p.image === image)
-        ? prev.portfolio.filter((p) => p.image !== image)
-        : [...prev.portfolio, { image, title: '', price: '' }],
-    }))
+    setF((prev) => {
+      if (prev.portfolio.some((p) => p.image === image)) {
+        return { ...prev, portfolio: prev.portfolio.filter((p) => p.image !== image) }
+      }
+      if (prev.portfolio.length >= IMG_CAP[prev.kind]) return prev // no exceder el cupo del tipo
+      return { ...prev, portfolio: [...prev.portfolio, { image, title: '', price: '' }] }
+    })
 
   const setPiece = (image: string, key: 'title' | 'price') => (e: { target: { value: string } }) =>
     setF((prev) => ({
@@ -130,9 +141,11 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
     const data = {
       name: f.name.trim(),
       role: f.role.trim(),
+      kind: f.kind,
       platform: f.platform,
       city: f.city.trim(),
       bio: f.bio.trim(),
+      projects: f.kind === 'expositor' && f.projects.trim() ? f.projects.trim() : undefined,
       photo: f.photo,
       instagram: f.instagram.trim() || undefined,
       whatsapp: f.whatsapp.trim() || undefined,
@@ -160,6 +173,21 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
       <form onSubmit={submit} className="space-y-4">
         <Field label="Nombre" required>
           <Input value={f.name} onChange={set('name')} placeholder="Ej: Valentina Roldán" required />
+        </Field>
+        <Field label="Tipo" hint="Participante (hasta 4 imágenes) o expositor (hasta 2 + cuenta proyectos)">
+          <Select
+            options={[
+              { value: 'participante', label: 'Participante' },
+              { value: 'expositor', label: 'Expositor' },
+            ]}
+            value={f.kind}
+            onChange={(e) =>
+              setF((prev) => {
+                const kind = e.target.value as Kind
+                return { ...prev, kind, portfolio: prev.portfolio.slice(0, IMG_CAP[kind]) }
+              })
+            }
+          />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Rol" required>
@@ -189,6 +217,12 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
             required
           />
         </Field>
+
+        {f.kind === 'expositor' && (
+          <Field label="Cuenta proyectos" hint="Opcional — narrativa del expositor: qué proyectos presenta">
+            <Textarea value={f.projects} onChange={set('projects')} rows={3} placeholder="Los proyectos que trae el expositor…" />
+          </Field>
+        )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Retrato" required>
@@ -223,8 +257,8 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
         </label>
 
         <Field
-          label={`Portfolio · ${f.portfolio.length} obras elegidas`}
-          hint="Opcional — elegí las obras que se muestran en su ficha."
+          label={`Portfolio · ${f.portfolio.length}/${IMG_CAP[f.kind]} imágenes`}
+          hint={`Elegí hasta ${IMG_CAP[f.kind]} obras (${f.kind}). Cambiá el tipo arriba para el otro cupo.`}
         >
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
             {PORTFOLIO_POOL.map((image, i) => {

@@ -98,8 +98,12 @@ export function OpsNotaForm({ open, nota, onClose }: Props) {
           <Textarea value={f.excerpt} onChange={set('excerpt')} rows={2} placeholder="Resumen corto…" required />
         </Field>
 
-        <Field label="Cuerpo" required hint="Texto completo. Un salto de línea = párrafo nuevo.">
-          <Textarea value={f.body} onChange={set('body')} rows={8} placeholder="El cuerpo de la nota…" required />
+        <Field
+          label="Cuerpo"
+          required
+          hint="Un salto de línea = párrafo nuevo. Formato: **negrita**, *itálica*, [texto](https://link)."
+        >
+          <Textarea value={f.body} onChange={set('body')} rows={8} placeholder="El cuerpo de la nota…  Podés usar **negrita**." required />
         </Field>
 
         <Field label="Imagen de portada (URL)" hint="Opcional">

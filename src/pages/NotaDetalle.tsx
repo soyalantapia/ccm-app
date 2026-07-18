@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { AdBanner, Badge, ButtonLink, EmptyState, Eyebrow, Img, YouTubeEmbed } from '../components/ui'
 import { store, useStore } from '../data/store'
+import { renderInline } from '../lib/richText'
 
 function fmtDate(iso: string) {
   try {
@@ -72,7 +73,7 @@ export default function NotaDetalle() {
 
       <div className="mt-8 space-y-4 text-[17px] leading-relaxed text-ink">
         {nota.body.split('\n').filter((p) => p.trim()).map((p, i) => (
-          <p key={i}>{p}</p>
+          <p key={i}>{renderInline(p)}</p>
         ))}
       </div>
 
