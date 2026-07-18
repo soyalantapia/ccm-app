@@ -313,9 +313,11 @@ model CatalogProfile {
   slug           String   @unique
   name           String
   role           String
+  kind           String   @default("participante") // participante | expositor (feedback Gastón: distinto cupo de imágenes + "cuenta proyectos")
   platform       String
   city           String
   bio            String   @db.Text
+  projects       String?  @db.Text // "cuenta proyectos" del expositor (narrativa; solo expositores)
   photo          String
   instagram      String?
   whatsapp       String? // contacto directo (wa.me/… o número) — "si quiere se contacta" (Gastón)
