@@ -1,0 +1,60 @@
+{
+  "fuente": "https://drive.google.com/drive/folders/1JcPwitPPPm2ZNV0snpTqcHzL37-1-c6-",
+  "relevado": "2026-07-18",
+  "nota_modelo": "CatalogProfile exige bio Y photo (ambos obligatorios). 'completo' = tiene bio real + al menos 1 foto.",
+  "participantes": [
+    {
+      "categoria": "ARTE", "nombre": "Carolina Curti", "slug": "carolina-curti",
+      "role": "Artista plástica", "platform": "Arte", "city": "Villa Constitución, Santa Fe",
+      "bioResumen": "Artista plástica radicada en Villa Constitución (Santa Fe). Su obra nace de la observación de las riberas del Paraná y de los ciclos de la naturaleza, el tiempo y la transformación. Expuso en ferias y muestras en Argentina y el exterior; en 2025 participó del Qatar International Art Festival y hoy tiene obra en Dubái.",
+      "instagram": null, "whatsapp": null, "fotos": 3, "estado": "completo"
+    },
+    { "categoria": "ARTE", "nombre": "Jorgelina Terreno", "slug": "jorgelina-terreno", "role": "Artista", "platform": "Arte", "city": null, "bioResumen": null, "instagram": null, "whatsapp": null, "fotos": 4, "estado": "sin_bio" },
+    { "categoria": "ARTE", "nombre": "María Laura Lobo", "slug": "maria-laura-lobo", "role": "Artista", "platform": "Arte", "city": null, "bioResumen": null, "instagram": null, "whatsapp": null, "fotos": 3, "estado": "sin_bio" },
+    { "categoria": "ARTE", "nombre": "Miguel Ángel Santos", "slug": "miguel-santos", "role": "Artista", "platform": "Arte", "city": null, "bioResumen": null, "instagram": null, "whatsapp": null, "fotos": 3, "estado": "sin_bio" },
+    { "categoria": "ARTE", "nombre": "Victoria Molina", "slug": "victoria-molina", "role": "Artista", "platform": "Arte", "city": null, "bioResumen": null, "instagram": null, "whatsapp": null, "fotos": 4, "estado": "sin_bio" },
+    { "categoria": "ARTE", "nombre": "Marcela Blangino", "slug": "marcela-blangino", "role": "Artista", "platform": "Arte", "city": null, "bioResumen": null, "instagram": null, "whatsapp": null, "fotos": 3, "estado": "sin_bio", "nota": "fotos son de stands/eventos, no obra" },
+    { "categoria": "ARTE", "nombre": "Alvaro Moyano", "slug": "alvaro-moyano", "role": "Artista", "platform": "Arte", "city": null, "bioResumen": null, "instagram": null, "whatsapp": null, "fotos": 0, "estado": "vacio" },
+    { "categoria": "ARTE", "nombre": "Mauro Kruger", "slug": "mauro-kruger", "role": "Artista", "platform": "Arte", "city": null, "bioResumen": null, "instagram": null, "whatsapp": null, "fotos": 0, "estado": "vacio" },
+
+    {
+      "categoria": "DISEÑADORES", "nombre": "Andrea Destefani", "slug": "andrea-destefani",
+      "role": "Modista", "platform": "Moda", "city": "Mendoza",
+      "bioResumen": "Modista mendocina con 22 años de oficio. Crea soluciones textiles a medida que destacan el perfil único de cada mujer, plasmando sus deseos en prendas de comodidad absoluta y presencia distintiva. Su marca nace de un sueño con dos leonas: fuerza y garra en equilibrio con cuidado y amor.",
+      "instagram": null, "whatsapp": null, "fotos": 3, "estado": "completo"
+    },
+    {
+      "categoria": "DISEÑADORES", "nombre": "Giovanni Textil (María Victoria Giovannini)", "slug": "giovanni-textil",
+      "role": "Diseñadora de indumentaria · Asesora de imagen", "platform": "Moda", "city": "Río Cuarto",
+      "bioResumen": "Diseñadora de indumentaria y textil y asesora de imagen de Río Cuarto. Crea prendas a medida desde una mirada consciente y la escucha, entendiendo siluetas, identidad y el impacto de la imagen en cómo una mujer se siente y se muestra. Su marca lleva su apellido y honra una herencia de mujeres que cosían en secreto.",
+      "instagram": null, "whatsapp": null, "fotos": 0, "estado": "sin_foto"
+    },
+    { "categoria": "DISEÑADORES", "nombre": "Dahyana Funes", "slug": "dahyana-funes", "role": "Diseñadora", "platform": "Moda", "city": null, "bioResumen": null, "instagram": null, "whatsapp": null, "fotos": 0, "estado": "bio_equivocado", "nota": "el docx de su carpeta es el bio de Giovanni/Giovannini, no el suyo" },
+
+    {
+      "categoria": "EMPRESAS", "nombre": "Gin Capicúa", "slug": "gin-capicua",
+      "role": "Marca · Destilería artesanal", "platform": "Gastronomía", "city": "Córdoba",
+      "bioResumen": "Gin boutique London Dry de perfil marcadamente especiado, con una línea de 6 sabores inspirados en la cocina y los condimentos. Receta simétrica: 11 botánicos, 22 horas de maceración y 44% ABV. Su nombre rinde culto al equilibrio de las fases de la destilación (cabezas, corazones y cola).",
+      "instagram": null, "whatsapp": null, "fotos": 0, "estado": "sin_foto"
+    },
+    {
+      "categoria": "EMPRESAS", "nombre": "Piekna", "slug": "piekna",
+      "role": "Marca · Cosmética consciente", "platform": "Belleza", "platformAlt": "Sustentabilidad", "city": "Buenos Aires",
+      "bioResumen": "Cosmética consciente creada por Anahí Czechowicz, ingeniera química con casi 20 años en el área ambiental. Formulaciones seguras, efectivas y responsables con el ambiente, con materias primas naturales, sin derivados del petróleo y con desarrollo bajo aval ANMAT. Ciencia, belleza y naturaleza en equilibrio.",
+      "instagram": null, "whatsapp": null, "fotos": 0, "estado": "sin_foto"
+    },
+    {
+      "categoria": "EMPRESAS", "nombre": "Ryoma", "slug": "ryoma",
+      "role": "Marca · Cosmética natural", "platform": "Belleza", "platformAlt": "Sustentabilidad", "city": "Trelew",
+      "bioResumen": "Cosmética natural y sensorial creada por Carolina Olmedo, cosmiatra y terapeuta holística. Nacida del cuidado de la piel de su hija, une aromaterapia y activos naturales para acompañar el bienestar integral —piel, mente y alma—, honrando la belleza real, sensible e imperfecta.",
+      "instagram": null, "whatsapp": null, "fotos": 2, "estado": "completo",
+      "portfolio": [
+        { "title": "Sérum anti-age de rosas y aloe vera", "caption": "Alta concentración de activos para combatir signos de la edad; textura ligera y aroma suave que aporta luminosidad y vitalidad." },
+        { "title": "Agua de rosas", "caption": "Hidrata, revitaliza y equilibra la piel con un glow instantáneo; aromas naturales que invitan a la calma." },
+        { "title": "Contorno de ojos anti-age roll-on", "caption": "Descongestiona bolsas y ojeras con manzanilla y malva; frescura e iluminación inmediata." }
+      ]
+    },
+    { "categoria": "EMPRESAS", "nombre": "Buen Olivo", "slug": "buen-olivo", "role": "Marca", "platform": "Gastronomía", "city": null, "bioResumen": null, "instagram": null, "whatsapp": null, "fotos": 0, "estado": "vacio" },
+    { "categoria": "EMPRESAS", "nombre": "Impacto Textil", "slug": "impacto-textil", "role": "Marca", "platform": "Moda", "city": null, "bioResumen": null, "instagram": null, "whatsapp": null, "fotos": 0, "estado": "vacio" }
+  ]
+}
