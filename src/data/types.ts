@@ -306,6 +306,14 @@ export interface ConvocatoriaField {
   showIf?: { key: string; equals: string }
 }
 
+/** Logo mostrado en la convocatoria (universidad / sponsor / aliado), agrupable por rubro. */
+export interface ConvocatoriaLogo {
+  name: string
+  logoUrl: string
+  url?: string
+  rubro?: string
+}
+
 export interface Convocatoria {
   id: string
   slug: string
@@ -313,7 +321,11 @@ export interface Convocatoria {
   intro: string
   deadline: string
   eventId: string
+  /** Texto y destino de un botón CTA opcional (ej. "Sumá tu universidad"). */
+  ctaLabel?: string
+  ctaUrl?: string
   fields: ConvocatoriaField[]
+  logos?: ConvocatoriaLogo[]
 }
 
 export type ApplicationStatus = 'preinscripta' | 'aceptada' | 'rechazada'

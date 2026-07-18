@@ -76,7 +76,7 @@ export async function getPlans(): Promise<TicketPlan[]> {
 export async function getConvocatoria(slug: string): Promise<Convocatoria> {
   const cv = await prisma.convocatoria.findUnique({
     where: { slug },
-    include: { fields: { orderBy: { order: 'asc' } } },
+    include: { fields: { orderBy: { order: 'asc' } }, logos: { orderBy: { order: 'asc' } } },
   })
   if (!cv) throw notFound('CONVOCATORIA_NOT_FOUND', 'Convocatoria no encontrada')
   return toConvocatoria(cv)
@@ -85,7 +85,7 @@ export async function getConvocatoria(slug: string): Promise<Convocatoria> {
 /** Todas las convocatorias (para el panel del organizador). */
 export async function getConvocatorias(): Promise<Convocatoria[]> {
   const rows = await prisma.convocatoria.findMany({
-    include: { fields: { orderBy: { order: 'asc' } } },
+    include: { fields: { orderBy: { order: 'asc' } }, logos: { orderBy: { order: 'asc' } } },
     orderBy: { deadline: 'desc' },
   })
   return rows.map(toConvocatoria)

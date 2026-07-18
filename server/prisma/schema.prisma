@@ -632,12 +632,31 @@ model Convocatoria {
   intro    String   @db.Text
   deadline DateTime
   eventId  String
+  ctaLabel String? // texto del botón CTA (ej. "Quiero sumar mi universidad")
+  ctaUrl   String? // destino del CTA (wa.me/… | https://… | formulario)
 
   event        Event               @relation(fields: [eventId], references: [id])
   fields       ConvocatoriaField[]
+  logos        ConvocatoriaLogo[]
   applications Application[]
 
   @@index([eventId])
+}
+
+// Logos que se muestran en la convocatoria, agrupados por rubro (universidades,
+// sponsors, aliados). La imagen es una URL (upload real llega con el storage).
+model ConvocatoriaLogo {
+  id             String  @id @default(cuid())
+  convocatoriaId String
+  name           String
+  logoUrl        String
+  url            String? // link opcional al tocar el logo
+  rubro          String? // para agrupar (ej. "Universidades", "Sponsors")
+  order          Int     @default(0)
+
+  convocatoria Convocatoria @relation(fields: [convocatoriaId], references: [id], onDelete: Cascade)
+
+  @@index([convocatoriaId, order])
 }
 
 model ConvocatoriaField {
