@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { GraduationCap, Mic } from 'lucide-react'
-import { AdBanner, ButtonLink, SectionTitle } from '../../components/ui'
+import { ButtonLink, SectionTitle } from '../../components/ui'
+import { SponsorCarousel } from '../../features/ads/SponsorCarousel'
 import { useStore } from '../../data/store'
 import { config } from '../../config'
 import { NoticiaCard, SectionLabel, VideoThumb } from '../../features/app/mockup'
@@ -48,7 +49,7 @@ export default function Inicio() {
       </div>
 
       <div className="px-5 lg:px-8">
-        <AdBanner slot="S2" className="mt-3.5 lg:mt-6" />
+        <SponsorCarousel className="mt-4 lg:mt-8" />
 
         {/* Noticias: 1 featured (hero full-width en desktop) + 2 */}
         {featured && (
@@ -68,8 +69,6 @@ export default function Inicio() {
             </div>
           </>
         )}
-
-        <AdBanner slot="S2" index={1} className="mt-4 lg:mt-8" />
 
         {/* Elukamo accesos */}
         <SectionLabel>Elukamo</SectionLabel>
@@ -130,7 +129,6 @@ export default function Inicio() {
           </>
         )}
 
-        <AdBanner slot="S2" index={2} className="mt-6 lg:mt-10" />
       </div>
 
       <WelcomeSheet />

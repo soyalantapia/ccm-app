@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Sparkles } from 'lucide-react'
-import { AdBanner, EmptyState } from '../components/ui'
+import { EmptyState } from '../components/ui'
+import { SponsorCarousel } from '../features/ads/SponsorCarousel'
 import { store, useStore } from '../data/store'
 import { VideoCard } from '../features/contenido/VideoCard'
 import { EntrevistaRow, PaywallCard, SectionLabel, VideoThumb } from '../features/app/mockup'
@@ -63,6 +64,7 @@ export default function Contenido() {
       </div>
 
       <div className="px-5 lg:px-10">
+        <SponsorCarousel className="mt-4 lg:mt-8" />
         {tab === 'entrevistas' ? (
           !featured ? (
             <EmptyState title="Todavía no hay videos acá" className="mt-10">
@@ -73,8 +75,6 @@ export default function Contenido() {
               <div className="mt-4 lg:mt-8">
                 <VideoCard item={featured} featured />
               </div>
-
-              <AdBanner slot="S2" className="mt-4 lg:mt-10" />
 
               {rest.length > 0 && (
                 <>
@@ -94,13 +94,11 @@ export default function Contenido() {
                 ))}
               </div>
 
-              <AdBanner slot="S2" index={1} className="mt-6 lg:mt-12" />
             </>
           )
         ) : (
           <>
             {/* Capacitaciones: gate premium (o acceso si es socio) */}
-            <AdBanner slot="S2" className="mt-4 lg:mt-10" />
             {isSocio ? (
               <div className="mt-1 rounded-[14px] border border-accent/30 bg-gradient-to-br from-ink to-brown-warm p-4 text-center lg:mx-auto lg:max-w-2xl lg:rounded-[18px] lg:p-8">
                 <div className="type-serif text-[15px] text-night-ink lg:text-[22px]">Ya sos Socio CCM VIP</div>
@@ -126,7 +124,6 @@ export default function Contenido() {
               ))}
             </div>
 
-            <AdBanner slot="S2" index={1} className="mt-6 lg:mt-12" />
           </>
         )}
       </div>

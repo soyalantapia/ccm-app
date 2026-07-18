@@ -27,6 +27,7 @@ type Form = {
   level: Sponsor['level']
   exclusive: boolean
   tagline: string
+  banner: string
   creatives: CreativeRow[]
 }
 
@@ -40,6 +41,7 @@ const empty: Form = {
   level: 'Oro',
   exclusive: false,
   tagline: '',
+  banner: '',
   creatives: [newRow('S2')],
 }
 
@@ -50,6 +52,7 @@ function fromSponsor(s: Sponsor): Form {
     level: s.level,
     exclusive: s.exclusive,
     tagline: s.tagline,
+    banner: s.banner ?? '',
     creatives: s.creatives.length
       ? s.creatives.map((c) => ({
           _key: newId('cre'),
@@ -81,7 +84,7 @@ export function OpsSponsorForm({ open, sponsor, onClose }: Props) {
     }
   }, [open, sponsor])
 
-  const set = (k: 'name' | 'industry' | 'tagline') => (e: { target: { value: string } }) =>
+  const set = (k: 'name' | 'industry' | 'tagline' | 'banner') => (e: { target: { value: string } }) =>
     setF((prev) => ({ ...prev, [k]: e.target.value }))
 
   const setCreative =
@@ -123,6 +126,7 @@ export function OpsSponsorForm({ open, sponsor, onClose }: Props) {
       level: f.level,
       exclusive: f.exclusive,
       tagline: f.tagline.trim(),
+      banner: f.banner.trim() || undefined,
       creatives,
     }
     if (sponsor) {
@@ -178,6 +182,17 @@ export function OpsSponsorForm({ open, sponsor, onClose }: Props) {
             rows={2}
             placeholder="Lentes que acompañan tu mejor versión"
             required
+          />
+        </Field>
+
+        <Field
+          label="Banner (URL)"
+          hint="Arte horizontal 3:1 para el carrusel. Opcional — sin él se muestra un lockup de marca."
+        >
+          <Input
+            value={f.banner}
+            onChange={set('banner')}
+            placeholder="https://… o img/sponsors/marca.svg"
           />
         </Field>
 

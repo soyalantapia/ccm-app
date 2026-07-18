@@ -197,6 +197,7 @@ export function toSponsor(s: Sponsor & { creatives?: SponsorCreative[] }): Domai
     level: s.level,
     exclusive: s.exclusive,
     tagline: s.tagline,
+    ...(s.banner ? { banner: s.banner } : {}),
     creatives: (s.creatives ?? []).map((c) => ({
       slot: c.slot,
       headline: c.headline,

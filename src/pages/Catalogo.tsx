@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { LayoutGrid, Shirt, Palette, UtensilsCrossed, Sparkles, Leaf, Plane, Cpu, Tag, type LucideIcon } from 'lucide-react'
-import { AdBanner, SectionTitle } from '../components/ui'
+import { SectionTitle } from '../components/ui'
+import { SponsorCarousel } from '../features/ads/SponsorCarousel'
 import { useStore } from '../data/store'
 import { ParticipanteCard } from '../features/catalogo/ParticipanteCard'
 import { DesignerCard, SectionEmpty, SectionLabel, SponsorCuadrado } from '../features/app/mockup'
@@ -93,7 +94,7 @@ export default function Catalogo() {
       </div>
 
       <div className="px-5 lg:px-8">
-        <AdBanner slot="S2" />
+        <SponsorCarousel />
 
         {platform ? (
           /* ── Catálogo por plataforma (designer-grid) ── */
@@ -131,7 +132,7 @@ export default function Catalogo() {
           </>
         ) : (
           /* ── Vista principal: agrupado por plataforma (participante-cards) ── */
-          groups.map((g, gi) => (
+          groups.map((g) => (
             <section key={g.platform}>
               <SectionLabel>
                 <span className="inline-flex items-center gap-1.5">
@@ -144,7 +145,6 @@ export default function Catalogo() {
                   <ParticipanteCard key={p.id} profile={p} />
                 ))}
               </div>
-              {gi % 2 === 1 && <AdBanner slot="S2" index={gi} className="mt-4" />}
             </section>
           ))
         )}

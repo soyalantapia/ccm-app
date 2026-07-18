@@ -3,6 +3,29 @@ import { Link } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Img } from '../../components/ui'
 import { store, useStore } from '../../data/store'
+import type { Sponsor } from '../../data/types'
+
+/**
+ * Lockup de marca on-brand cuando el sponsor todavía no tiene arte (`banner`).
+ * Mantiene el slot vivo en prod —donde el backend aún no persiste banners— en vez
+ * de renderizar un hueco; el cliente lo reemplaza cargando el arte real. Mismo 3:1
+ * que la imagen para que el carrusel no salte.
+ */
+function SponsorLockup({ sponsor }: { sponsor: Sponsor }) {
+  return (
+    <div className="flex aspect-[3/1] w-full flex-col items-center justify-center gap-1 bg-night px-6 text-center">
+      <span className="eyebrow text-[9px] text-accent">
+        {sponsor.level === 'Principal' ? 'Sponsor principal' : `Sponsor · ${sponsor.industry}`}
+      </span>
+      <span className="type-display text-2xl leading-none text-night-ink sm:text-3xl">
+        {sponsor.name}
+      </span>
+      <span className="line-clamp-2 max-w-md text-[11px] leading-snug text-night-ink/60">
+        {sponsor.tagline}
+      </span>
+    </div>
+  )
+}
 
 /**
  * Carrusel de sponsors: banners horizontales ilustrativos (arte del sponsor)
@@ -11,7 +34,10 @@ import { store, useStore } from '../../data/store'
  * Los banners son placeholders on-brand — el cliente los cambia por el arte real.
  */
 export function SponsorCarousel({ className }: { className?: string }) {
-  const sponsors = useStore((s) => s.getSponsors()).filter((s) => s.banner)
+  // Todos los sponsors: con banner → imagen; sin banner → lockup de marca (fallback).
+  // Antes se filtraba por `s.banner`, y como el backend no serializa banner, en prod
+  // quedaba vacío (n===0 → null) y el slot desaparecía. Ver P1 del análisis.
+  const sponsors = useStore((s) => s.getSponsors())
   const n = sponsors.length
   const [i, setI] = useState(0)
   const [paused, setPaused] = useState(false)
@@ -75,9 +101,13 @@ export function SponsorCarousel({ className }: { className?: string }) {
               className="block w-full shrink-0"
               aria-label={`${sp.name} — sponsor de CCM 2026`}
             >
-              {/* priority (eager): el track del carrusel deja slides fuera de
-                  viewport y loading=lazy no las cargaba. */}
-              <Img src={sp.banner!} alt={`${sp.name} — ${sp.industry}`} ratio="3/1" priority />
+              {sp.banner ? (
+                // priority (eager): el track del carrusel deja slides fuera de
+                // viewport y loading=lazy no las cargaba.
+                <Img src={sp.banner} alt={`${sp.name} — ${sp.industry}`} ratio="3/1" priority />
+              ) : (
+                <SponsorLockup sponsor={sp} />
+              )}
             </Link>
           ))}
         </div>

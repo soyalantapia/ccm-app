@@ -419,6 +419,7 @@ model Sponsor {
   level     SponsorLevel
   exclusive Boolean      @default(false) // exclusividad de rubro (D20)
   tagline   String
+  banner    String? // arte horizontal 3:1 para el SponsorCarousel (URL). Sin él, la UI cae a un lockup de marca.
 
   creatives SponsorCreative[]
   galleries Gallery[]
