@@ -4,15 +4,20 @@ import { cleanStoredUrl } from '../lib/url.js'
 import { badRequest } from '../lib/errors.js'
 import type { Banner } from '@domain/types'
 
-/** Banners activos (público), ordenados. La rotación la resuelve el front por slot. */
+/** Banners activos (público), ordenados. La rotación la resuelve el front por slot.
+ *  Desempate por createdAt: si dos banners comparten `order` (default 0), el orden
+ *  deja de ser arbitrario de Postgres y queda estable (feedback Gastón: "que no se pisen"). */
 export async function getBanners(): Promise<Banner[]> {
-  const rows = await prisma.banner.findMany({ where: { active: true }, orderBy: { order: 'asc' } })
+  const rows = await prisma.banner.findMany({
+    where: { active: true },
+    orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+  })
   return rows.map(toBanner)
 }
 
 /** Admin: todos (incl. inactivos) para gestionarlos. */
 export async function getAllBanners(): Promise<Banner[]> {
-  const rows = await prisma.banner.findMany({ orderBy: [{ slot: 'asc' }, { order: 'asc' }] })
+  const rows = await prisma.banner.findMany({ orderBy: [{ slot: 'asc' }, { order: 'asc' }, { createdAt: 'asc' }] })
   return rows.map(toBanner)
 }
 

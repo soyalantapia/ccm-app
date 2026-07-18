@@ -127,8 +127,11 @@ export function OpsEventForm({ open, event, onClose }: Props) {
           <Field label="Tipo" required>
             <Select options={TYPE_OPTIONS} value={f.type} onChange={set('type')} />
           </Field>
-          <Field label="Portada" required>
-            <Select options={COVER_OPTIONS} value={f.cover} onChange={set('cover')} />
+          <Field label="Portada" required hint="Elegí una del set o pegá la URL de tu imagen">
+            <div className="grid gap-2">
+              <Select options={COVER_OPTIONS} value={f.cover} onChange={set('cover')} />
+              <Input value={f.cover} onChange={set('cover')} placeholder="…o pegá una URL: https://…/portada.jpg" />
+            </div>
           </Field>
         </div>
         <Field label="Subtítulo" hint="Opcional, una línea corta">

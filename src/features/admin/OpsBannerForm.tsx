@@ -10,9 +10,11 @@ const SLOT_OPTIONS = [
   { value: 'fotos', label: 'Fotos' },
   { value: 'contenido', label: 'Contenido' },
 ]
+// Destinos de banner: solo link o formulario (feedback Gastón — el WhatsApp va en las
+// fichas de artista/expositor, no en los banners publicitarios). El enum del dominio
+// conserva 'whatsapp' por compatibilidad con datos viejos; acá no se ofrece.
 const DEST_OPTIONS: { value: BannerDestination; label: string }[] = [
   { value: 'link', label: 'Link / sitio web' },
-  { value: 'whatsapp', label: 'WhatsApp' },
   { value: 'form', label: 'Formulario' },
 ]
 
@@ -111,8 +113,8 @@ export function OpsBannerForm({ open, banner, onClose }: Props) {
           <Field label="Tipo de destino" required>
             <Select options={DEST_OPTIONS} value={f.destinationType} onChange={set('destinationType')} />
           </Field>
-          <Field label="Destino (link)" required hint="wa.me/… · https://… · link al formulario">
-            <Input value={f.destinationUrl} onChange={set('destinationUrl')} placeholder="https://wa.me/549…" required />
+          <Field label="Destino (link)" required hint="https://… · link al sitio o al formulario">
+            <Input value={f.destinationUrl} onChange={set('destinationUrl')} placeholder="https://…" required />
           </Field>
         </div>
 
