@@ -316,6 +316,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.hydrateBenefits()
     this.hydrateBanners()
     this.hydrateNotas()
+    this.hydrateApplications() // ahora con vista admin (TODAS) — antes el panel veía solo las del device del admin (≈0)
   }
 
   /* ─── Notas / novedades (públicas; admin ve todas vía /admin/notas) ─── */
@@ -432,10 +433,17 @@ export class RemoteDataStore extends LocalDataStore {
     }
     return super.getConvocatoria(slug)
   }
-  /** Postulaciones del PROPIO device (GET /applications). Antes nunca se hidrataban → el
-   *  Perfil y la convocatoria mostraban el seed local en vez de las reales. */
+  /** Con token de admin en sesión trae TODAS (GET /admin/applications) para revisar/decidir;
+   *  si no, las del PROPIO device (GET /applications, "Mis postulaciones"). Espeja el patrón
+   *  admin-aware de benefits/banners/notas. */
+  private applicationsPath(): string {
+    const hasAdmin = typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('ccm:admin-token')
+    return hasAdmin ? '/admin/applications' : '/applications'
+  }
+  /** Postulaciones (device o admin según sesión). Antes solo device-scoped → el panel del
+   *  organizador (AdminPostulaciones/Dashboard/AdminPersonas) veía vacío en prod. */
   private hydrateApplications(): void {
-    this.api.get<Application[]>('/applications').then((a) => { this.applications = a; bus.emit('applications') }).catch(() => {})
+    this.api.get<Application[]>(this.applicationsPath()).then((a) => { this.applications = a; bus.emit('applications') }).catch(() => {})
   }
 
   override getApplications(): Application[] {
