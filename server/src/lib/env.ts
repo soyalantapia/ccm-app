@@ -24,11 +24,14 @@ const schema = z.object({
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL es obligatoria'),
 
-  // Auth — tres secretos separados (opcionales hasta las fases A/G/H).
+  // Auth — tres secretos separados (canon 10). Hoy SOLO se consume DEVICE_TOKEN_SECRET
+  // (lib/deviceToken.ts). Los tres de abajo están RESERVADOS para fases futuras y todavía
+  // ningún módulo los lee: ADMIN_TOKEN_SECRET + OTP_PEPPER = login OTP del organizador (Fase G,
+  // reemplaza al shared secret ADMIN_TOKEN); ACCREDITATION_TOKEN_SECRET = JWT del QR de puerta (Fase H).
   DEVICE_TOKEN_SECRET: z.string().optional(),
-  ADMIN_TOKEN_SECRET: z.string().optional(),
-  ACCREDITATION_TOKEN_SECRET: z.string().optional(),
-  OTP_PEPPER: z.string().optional(),
+  ADMIN_TOKEN_SECRET: z.string().optional(), // ⏳ sin usar aún (Fase G: OTP)
+  ACCREDITATION_TOKEN_SECRET: z.string().optional(), // ⏳ sin usar aún (Fase H: acreditación QR)
+  OTP_PEPPER: z.string().optional(), // ⏳ sin usar aún (Fase G: OTP)
   // Fase G (auth temporal del organizador): shared secret Bearer hasta que entre el
   // login OTP por email (RESEND). El front lo manda en Authorization: Bearer <token>.
   ADMIN_TOKEN: z.string().optional(),

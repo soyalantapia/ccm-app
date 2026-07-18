@@ -15,7 +15,7 @@ const ingestSchema = z.union([eventSchema, z.array(eventSchema).max(500)])
 
 /**
  * POST /api/v1/analytics — ingesta del event bus (doc 08). Fire-and-forget: responde
- * 202 sin bloquear. deviceId sale del header X-Device-Id (deviceContext, en app.ts).
+ * 202 sin bloquear. deviceId sale del token firmado X-Device-Token (deviceContext, en app.ts).
  */
 analyticsRouter.post('/analytics', async (req, res, next) => {
   try {
