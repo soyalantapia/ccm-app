@@ -274,6 +274,7 @@ export const seedCatalog: CatalogProfile[] = [
   {
     id: 'cat-15',
     slug: 'ryoma',
+    kind: 'expositor',
     name: 'Ryoma',
     role: 'Marca · Cosmética natural',
     platform: 'Belleza',
@@ -289,6 +290,7 @@ export const seedCatalog: CatalogProfile[] = [
   {
     id: 'cat-16',
     slug: 'giovanni-textil',
+    kind: 'expositor',
     name: 'Giovanni Textil',
     role: 'Diseñadora de indumentaria · Asesora de imagen',
     platform: 'Moda',
@@ -302,6 +304,7 @@ export const seedCatalog: CatalogProfile[] = [
   {
     id: 'cat-17',
     slug: 'gin-capicua',
+    kind: 'expositor',
     name: 'Gin Capicúa',
     role: 'Marca · Destilería artesanal',
     platform: 'Gastronomía',
@@ -315,6 +318,7 @@ export const seedCatalog: CatalogProfile[] = [
   {
     id: 'cat-18',
     slug: 'piekna',
+    kind: 'expositor',
     name: 'Piekna',
     role: 'Marca · Cosmética consciente',
     platform: 'Sustentabilidad',
