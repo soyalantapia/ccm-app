@@ -232,7 +232,7 @@ PostgreSQL + Prisma. **29 modelos, 15 enums, 6 migraciones.** Schema: `server/pr
 | Analytics | `AnalyticsEvent` |
 | Admin | `AdminUser` |
 
-### Enums (14)
+### Enums (15)
 `EventType` (principal·camino·capacitacion) · `RegistrationStatus` (confirmada·cancelada) · `PlanDay` (sabado·domingo·combo) · `PlanKind` (general·vip) · `OrderStatus` (iniciada·redirigida_mp·confirmada·cancelada) · `SponsorLevel` (Principal·Oro·Plata) · `AdSlot` (S1·S2·S3·S4·S6 — S5 es hueco intencional) · `MembershipTier` (free·socio) · `ApplicationStatus` (preinscripta·aceptada·rechazada) · `CampaignStatus` (pendiente_pago·activa·expirada·rechazada) · `AdminRole` (OWNER·EDITOR·STAFF·VIEWER) · `PaymentKind` (ticket_order·membership·ad_campaign) · `PaymentStatus` (pending·approved·rejected·refunded) · `ProfileFieldKey` (firstName·lastName·email·profession·phone·dni·city·instagram) · `BannerDestination` (whatsapp·link·form).
 
 ### Reglas de negocio en los datos

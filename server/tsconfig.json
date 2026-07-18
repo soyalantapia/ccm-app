@@ -22,5 +22,6 @@
     "verbatimModuleSyntax": true
   },
   "comment": "prisma/seed.ts se corre con tsx (importa los seed del front, resolución bundler), fuera del typecheck NodeNext del server.",
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
 }

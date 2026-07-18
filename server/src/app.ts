@@ -74,8 +74,9 @@ export function createApp() {
   v1.use(registrationsRouter) // Fase B: /registrations
   v1.use(catalogRouter) // Fase E: /catalog, /galleries, /contents
   v1.use(photosRouter) // Fase E: /favorites, /downloads
-  v1.use(adminRouter) // Fase G: /admin/events|blocks|contents (CRUD, requireAdmin)
-  // TODO(fases C/D/F + resto G): orders, memberships, sponsors/galleries/catalog CRUD, applications ...
+  v1.use(adminRouter) // Fase G: CRUD admin de events|blocks|contents|sponsors|galleries|catalog|notas|banners|benefits|applications|plans
+  // Pendiente real: /orders (Fase C, bloqueada por checkout MP) y CRUD admin de memberships.
+  // (sponsors/galleries/catalog/applications CRUD YA están: los sirven catalogRouter + adminRouter.)
   app.use('/api/v1', v1)
 
   // SPA: si FRONT_DIST está seteada, este service también sirve el front buildeado.

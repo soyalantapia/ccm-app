@@ -93,7 +93,11 @@ export interface DataStore {
   register(eventId: string, blockId?: string): Registration | null
   cancelRegistration(registrationId: string): void
 
-  /* Planes y órdenes */
+  /* Planes y órdenes.
+   * ⚠️ Los PLANES tienen backend (RemoteDataStore: GET /plans, PATCH /admin/plans/:id).
+   * Las ÓRDENES (createOrder/markOrderRedirected/setOrderStatus/getOrders) NO tienen ruta backend
+   * todavía (Fase C, bloqueada por checkout MP): en modo Remote caen a LocalDataStore → viven solo
+   * en el localStorage del comprador, NO persisten en prod. No asumir paridad Local/Remote acá. */
   getPlans(): TicketPlan[]
   getPlan(id: PlanId): TicketPlan | undefined
   updatePlan(id: PlanId, patch: { price?: number | null; mpLink?: string }): void
@@ -134,7 +138,10 @@ export interface DataStore {
   deleteSponsor(id: string): void
   getCreative(slot: AdSlot, index?: number): { sponsor: Sponsor; creative: SponsorCreative } | undefined
 
-  /* Publicidad autogestionada (self-serve) */
+  /* Publicidad autogestionada (self-serve).
+   * ⚠️ Sin ruta backend todavía (no hay /campaigns): en modo Remote cae a LocalDataStore → una
+   * campaña "comprada" por QR vive solo en el localStorage del comprador, NO persiste en prod.
+   * El modelo Prisma AdCampaign existe (índice one_active_per_slot) pero está dormante. */
   createCampaign(input: NewCampaign): AdCampaign
   getCampaigns(): AdCampaign[]
   getActiveCampaign(slot: AdSlot): AdCampaign | undefined

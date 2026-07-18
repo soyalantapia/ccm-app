@@ -1,6 +1,16 @@
+import { timingSafeEqual } from 'node:crypto'
 import type { RequestHandler } from 'express'
 import { env } from '../lib/env.js'
 import { ApiError, forbidden, unauthorized } from '../lib/errors.js'
+
+/** Compara dos strings en tiempo constante (no filtra el largo del prefijo correcto por timing). */
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a)
+  const bb = Buffer.from(b)
+  // timingSafeEqual exige mismo largo; el chequeo de largo NO es constant-time pero solo revela
+  // el LARGO del token, no su contenido — igual que verifyDeviceToken (lib/deviceToken.ts).
+  return ab.length === bb.length && timingSafeEqual(ab, bb)
+}
 
 /**
  * Auth del organizador (Fase G, temporal). Exige Authorization: Bearer <ADMIN_TOKEN>.
@@ -18,7 +28,7 @@ export const requireAdmin: RequestHandler = (req, _res, next) => {
     next(unauthorized('ADMIN_REQUIRED', 'Falta el token de organizador'))
     return
   }
-  if (token !== env.ADMIN_TOKEN) {
+  if (!safeEqual(token, env.ADMIN_TOKEN)) {
     next(forbidden('ADMIN_FORBIDDEN', 'Token de organizador inválido'))
     return
   }
