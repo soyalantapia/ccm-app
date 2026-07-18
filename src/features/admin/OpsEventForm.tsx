@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Button, Field, Input, Select, Sheet, Textarea, toast } from '../../components/ui'
+import { Button, Field, Img, Input, Select, Sheet, Textarea, toast } from '../../components/ui'
 import { store } from '../../data/store'
 import type { EventItem, EventType } from '../../data/types'
 
@@ -120,6 +120,23 @@ export function OpsEventForm({ open, event, onClose }: Props) {
   return (
     <Sheet open={open} onClose={onClose} title={event ? 'Editar evento' : 'Crear evento'} size="lg">
       <form onSubmit={submit} className="space-y-4">
+        {/* Preview en vivo — "ver cómo queda" la ficha mientras se carga (feedback Gastón). */}
+        <div className="overflow-hidden rounded-lg border border-ink/10 bg-bg">
+          <div className="relative">
+            <Img src={f.cover || COVER_OPTIONS[0].value} alt="" ratio="16/9" className="w-full" />
+            <span className="absolute left-2 top-2 rounded bg-ink/80 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-white">
+              {TYPE_OPTIONS.find((t) => t.value === f.type)?.label ?? f.type}
+            </span>
+          </div>
+          <div className="p-3">
+            <p className="type-serif text-lg leading-tight text-ink">{f.title || 'Título del evento'}</p>
+            {f.subtitle && <p className="mt-0.5 text-sm text-ink-soft">{f.subtitle}</p>}
+            <p className="mt-1.5 text-xs text-ink-soft">
+              {[f.dateLabel, f.timeLabel, f.venue].filter(Boolean).join(' · ') || 'Fecha · horario · lugar'}
+            </p>
+          </div>
+        </div>
+
         <Field label="Título" required>
           <Input value={f.title} onChange={set('title')} placeholder="Ej: Camino a CCM · Julio" required />
         </Field>
