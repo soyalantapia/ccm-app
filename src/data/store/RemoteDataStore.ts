@@ -8,6 +8,7 @@ import type {
   NewSponsor,
   NewGallery,
   NewCatalogProfile,
+  NewConvocatoria,
 } from './DataStore'
 import { slugify } from './overlay'
 import { newId } from '../../lib/storage'
@@ -82,6 +83,7 @@ export class RemoteDataStore extends LocalDataStore {
   private notas?: Nota[]
   private convocatorias = new Map<string, Convocatoria>()
   private convoInflight = new Set<string>()
+  private convocatoriasList?: Convocatoria[] // lista admin (GET /admin/convocatorias)
 
   constructor(apiBase: string) {
     super()
@@ -317,6 +319,11 @@ export class RemoteDataStore extends LocalDataStore {
     this.hydrateBanners()
     this.hydrateNotas()
     this.hydrateApplications() // ahora con vista admin (TODAS) — antes el panel veía solo las del device del admin (≈0)
+    this.hydrateConvocatorias() // lista completa para gestionarlas (antes solo venían del seed)
+  }
+
+  private hydrateConvocatorias(): void {
+    this.refetch<Convocatoria[]>('/admin/convocatorias', (v) => (this.convocatoriasList = v), 'convocatorias')
   }
 
   /* ─── Notas / novedades (públicas; admin ve todas vía /admin/notas) ─── */
@@ -422,7 +429,12 @@ export class RemoteDataStore extends LocalDataStore {
   override getPlan(id: PlanId): TicketPlan | undefined {
     return this.plans ? this.plans.find((p) => p.id === id) : super.getPlan(id)
   }
+  override getConvocatorias(): Convocatoria[] {
+    return this.convocatoriasList ?? super.getConvocatorias()
+  }
   override getConvocatoria(slug: string): Convocatoria | undefined {
+    const inList = this.convocatoriasList?.find((c) => c.slug === slug)
+    if (inList) return inList
     const cached = this.convocatorias.get(slug)
     if (cached) return cached
     if (!this.convoInflight.has(slug)) {
@@ -432,6 +444,34 @@ export class RemoteDataStore extends LocalDataStore {
         .catch(() => this.convoInflight.delete(slug))
     }
     return super.getConvocatoria(slug)
+  }
+  override createConvocatoria(input: NewConvocatoria): Convocatoria {
+    if (!this.convocatoriasList) return super.createConvocatoria(input)
+    const taken = new Set(this.convocatoriasList.map((c) => c.slug))
+    const base = input.slug || slugify(input.title)
+    let slug = base
+    for (let i = 2; taken.has(slug); i++) slug = `${base}-${i}`
+    const cv: Convocatoria = { ...input, id: newId('conv'), slug }
+    this.convocatoriasList = [cv, ...this.convocatoriasList]
+    this.track('admin_convocatoria_created', { convocatoriaId: cv.id })
+    bus.emit('convocatorias')
+    this.api.post('/admin/convocatorias', cv).then(() => this.hydrateConvocatorias()).catch(() => this.hydrateConvocatorias())
+    return cv
+  }
+  override updateConvocatoria(id: string, patch: Partial<Convocatoria>): void {
+    if (!this.convocatoriasList) return super.updateConvocatoria(id, patch)
+    this.convocatoriasList = this.convocatoriasList.map((c) => (c.id === id ? { ...c, ...patch } : c))
+    this.track('admin_convocatoria_updated', { convocatoriaId: id })
+    bus.emit('convocatorias')
+    this.api.patch(`/admin/convocatorias/${id}`, patch).then(() => this.hydrateConvocatorias()).catch(() => this.hydrateConvocatorias())
+  }
+  override deleteConvocatoria(id: string): void {
+    if (!this.convocatoriasList) return super.deleteConvocatoria(id)
+    const prev = this.convocatoriasList
+    this.convocatoriasList = this.convocatoriasList.filter((c) => c.id !== id)
+    this.track('admin_convocatoria_deleted', { convocatoriaId: id })
+    bus.emit('convocatorias')
+    this.api.del(`/admin/convocatorias/${id}`).catch(() => { this.convocatoriasList = prev; bus.emit('convocatorias') })
   }
   /** Con token de admin en sesión trae TODAS (GET /admin/applications) para revisar/decidir;
    *  si no, las del PROPIO device (GET /applications, "Mis postulaciones"). Espeja el patrón

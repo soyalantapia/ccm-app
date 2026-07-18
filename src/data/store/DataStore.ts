@@ -56,6 +56,8 @@ export type NewCatalogProfile = Omit<CatalogProfile, 'id' | 'slug'> & { slug?: s
 export type NewContent = Omit<ContentItem, 'id'>
 /** Compra de espacio publicitario autogestionado (el store genera id + ts). */
 export type NewCampaign = Omit<AdCampaign, 'id' | 'ts'>
+/** Alta de convocatoria desde el admin (el store genera id + slug). */
+export type NewConvocatoria = Omit<Convocatoria, 'id' | 'slug'> & { slug?: string }
 
 /**
  * DataStore — única puerta de acceso a datos de TODA la UI (patrón repositorio).
@@ -157,7 +159,11 @@ export interface DataStore {
   deleteBenefit(id: string): void
 
   /* Convocatorias y postulaciones */
+  getConvocatorias(): Convocatoria[]
   getConvocatoria(slug: string): Convocatoria | undefined
+  createConvocatoria(input: NewConvocatoria): Convocatoria
+  updateConvocatoria(id: string, patch: Partial<Convocatoria>): void
+  deleteConvocatoria(id: string): void
   submitApplication(convocatoriaId: string, data: Record<string, string>): Application
   getApplications(): Application[]
   decideApplication(applicationId: string, status: Exclude<ApplicationStatus, 'preinscripta'>): void

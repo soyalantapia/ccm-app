@@ -1,7 +1,7 @@
 import { prisma } from '../lib/prisma.js'
-import { toEventItem, toEventBlock, toContentItem, toSponsor, toGallery, toCatalogProfile } from '../lib/serialize.js'
+import { toEventItem, toEventBlock, toContentItem, toSponsor, toGallery, toCatalogProfile, toConvocatoria } from '../lib/serialize.js'
 import { conflict } from '../lib/errors.js'
-import type { EventItem, EventBlock, ContentItem, Sponsor, Gallery, CatalogProfile, PlanId } from '@domain/types'
+import type { EventItem, EventBlock, ContentItem, Sponsor, Gallery, CatalogProfile, PlanId, Convocatoria } from '@domain/types'
 
 /* ─── Eventos ─── */
 async function readEvent(id: string): Promise<EventItem> {
@@ -193,4 +193,62 @@ export async function updatePlan(id: PlanId, patch: { price?: number | null; mpL
   if ('price' in patch) data.price = patch.price
   if ('mpLink' in patch) data.mpLink = patch.mpLink
   await prisma.ticketPlan.update({ where: { id }, data })
+}
+
+/* ─── Convocatorias (crear/editar desde el admin — antes solo venían del seed) ─── */
+// Mapea los campos del dominio (showIf: {key, equals}) a las columnas de ConvocatoriaField.
+function fieldRows(convocatoriaId: string, fields: Convocatoria['fields']) {
+  return fields.map((f, i) => ({
+    convocatoriaId,
+    key: f.key,
+    label: f.label,
+    type: f.type,
+    required: f.required,
+    options: f.options ?? [],
+    placeholder: f.placeholder ?? null,
+    help: f.help ?? null,
+    showIfKey: f.showIf?.key ?? null,
+    showIfEquals: f.showIf?.equals ?? null,
+    order: i,
+  }))
+}
+
+async function readConvocatoria(id: string): Promise<Convocatoria> {
+  const cv = await prisma.convocatoria.findUniqueOrThrow({ where: { id }, include: { fields: { orderBy: { order: 'asc' } } } })
+  return toConvocatoria(cv)
+}
+
+export async function createConvocatoria(cv: Convocatoria): Promise<Convocatoria> {
+  await prisma.convocatoria.create({
+    data: {
+      id: cv.id,
+      slug: cv.slug,
+      title: cv.title,
+      intro: cv.intro,
+      deadline: new Date(cv.deadline),
+      eventId: cv.eventId,
+      fields: { create: fieldRows(cv.id, cv.fields) },
+    },
+  })
+  return readConvocatoria(cv.id)
+}
+
+export async function updateConvocatoria(id: string, patch: Partial<Convocatoria>): Promise<Convocatoria> {
+  const data: Record<string, unknown> = {}
+  for (const k of ['slug', 'title', 'intro', 'eventId'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
+  if ('deadline' in patch && patch.deadline) data.deadline = new Date(patch.deadline)
+  await prisma.convocatoria.update({ where: { id }, data })
+  if (patch.fields) {
+    // Reemplazo completo de los campos (createMany con order recalculado).
+    await prisma.convocatoriaField.deleteMany({ where: { convocatoriaId: id } })
+    if (patch.fields.length) await prisma.convocatoriaField.createMany({ data: fieldRows(id, patch.fields) })
+  }
+  return readConvocatoria(id)
+}
+
+export async function deleteConvocatoria(id: string): Promise<void> {
+  // No borrar una convocatoria con postulaciones (Application cascada → perdería datos).
+  const apps = await prisma.application.count({ where: { convocatoriaId: id } })
+  if (apps > 0) throw conflict('CONVOCATORIA_HAS_APPLICATIONS', `No se puede borrar: tiene ${apps} postulación(es).`)
+  await prisma.convocatoria.delete({ where: { id } })
 }
