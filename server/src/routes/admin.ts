@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { requireAdmin } from '../middlewares/admin.js'
 import * as admin from '../services/adminService.js'
 import * as applicationService from '../services/applicationService.js'
-import type { EventItem, EventBlock, ContentItem, Sponsor, Gallery, CatalogProfile, PlanId } from '@domain/types'
+import * as catalogService from '../services/catalogService.js'
+import type { EventItem, EventBlock, ContentItem, Sponsor, Gallery, CatalogProfile, PlanId, Convocatoria } from '@domain/types'
 
 export const adminRouter = Router()
 
@@ -112,6 +113,18 @@ adminRouter.delete('/admin/galleries/:id', del((id) => admin.deleteGallery(id)))
 adminRouter.post('/admin/catalog', create<CatalogProfile>((b) => admin.createCatalogProfile(b)))
 adminRouter.patch('/admin/catalog/:id', route<Partial<CatalogProfile>>((b, id) => admin.updateCatalogProfile(id, b)))
 adminRouter.delete('/admin/catalog/:id', del((id) => admin.deleteCatalogProfile(id)))
+
+/* ─── Convocatorias ─── */
+adminRouter.get('/admin/convocatorias', async (_req, res, next) => {
+  try {
+    res.json(await catalogService.getConvocatorias())
+  } catch (err) {
+    next(err)
+  }
+})
+adminRouter.post('/admin/convocatorias', create<Convocatoria>((b) => admin.createConvocatoria(b)))
+adminRouter.patch('/admin/convocatorias/:id', route<Partial<Convocatoria>>((b, id) => admin.updateConvocatoria(id, b)))
+adminRouter.delete('/admin/convocatorias/:id', del((id) => admin.deleteConvocatoria(id)))
 
 /* ─── Planes (precio / mpLink) ─── */
 adminRouter.patch('/admin/plans/:id', async (req, res, next) => {

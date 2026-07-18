@@ -34,6 +34,7 @@ import type {
   NewCampaign,
   NewCatalogProfile,
   NewContent,
+  NewConvocatoria,
   NewEvent,
   NewGallery,
   NewSponsor,
@@ -76,6 +77,7 @@ const K = {
   benefitsOverlay: 'benefitsOverlay',
   bannersOverlay: 'bannersOverlay',
   notasOverlay: 'notasOverlay',
+  convocatoriasOverlay: 'convocatoriasOverlay',
 } as const
 
 /** Una campaña autogestionada se presenta como sponsor sintético en los slots. */
@@ -597,8 +599,33 @@ export class LocalDataStore implements DataStore {
 
   /* ─── Convocatorias ─── */
 
+  getConvocatorias(): Convocatoria[] {
+    return mergeOverlay(seedConvocatorias, K.convocatoriasOverlay)
+  }
+
   getConvocatoria(slug: string): Convocatoria | undefined {
-    return seedConvocatorias.find((c) => c.slug === slug)
+    return this.getConvocatorias().find((c) => c.slug === slug)
+  }
+
+  createConvocatoria(input: NewConvocatoria): Convocatoria {
+    const taken = new Set(this.getConvocatorias().map((c) => c.slug))
+    const base = input.slug || slugify(input.title)
+    let slug = base
+    for (let i = 2; taken.has(slug); i++) slug = `${base}-${i}`
+    const convocatoria: Convocatoria = { ...input, id: newId('conv'), slug }
+    overlayCreate(K.convocatoriasOverlay, convocatoria)
+    this.track('admin_convocatoria_created', { convocatoriaId: convocatoria.id })
+    return convocatoria
+  }
+
+  updateConvocatoria(id: string, patch: Partial<Convocatoria>): void {
+    overlayEdit(K.convocatoriasOverlay, id, patch)
+    this.track('admin_convocatoria_updated', { convocatoriaId: id })
+  }
+
+  deleteConvocatoria(id: string): void {
+    overlayDelete(K.convocatoriasOverlay, id)
+    this.track('admin_convocatoria_deleted', { convocatoriaId: id })
   }
 
   submitApplication(convocatoriaId: string, data: Record<string, string>): Application {

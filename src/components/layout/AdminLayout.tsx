@@ -16,6 +16,7 @@ import {
   Settings,
   Store,
   Ticket,
+  ClipboardList,
   Users,
 } from 'lucide-react'
 import { Button, Field, Input, Sheet } from '../ui'
@@ -24,6 +25,7 @@ import { store } from '../../data/store'
 const SECTIONS = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/admin/eventos', label: 'Eventos', icon: CalendarDays },
+  { to: '/admin/convocatorias', label: 'Convocatorias', icon: ClipboardList },
   { to: '/admin/postulaciones', label: 'Postulaciones', icon: Inbox },
   { to: '/admin/personas', label: 'Personas', icon: Users },
   { to: '/admin/galerias', label: 'Galerías y sponsors', icon: Images },

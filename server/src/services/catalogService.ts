@@ -81,3 +81,12 @@ export async function getConvocatoria(slug: string): Promise<Convocatoria> {
   if (!cv) throw notFound('CONVOCATORIA_NOT_FOUND', 'Convocatoria no encontrada')
   return toConvocatoria(cv)
 }
+
+/** Todas las convocatorias (para el panel del organizador). */
+export async function getConvocatorias(): Promise<Convocatoria[]> {
+  const rows = await prisma.convocatoria.findMany({
+    include: { fields: { orderBy: { order: 'asc' } } },
+    orderBy: { deadline: 'desc' },
+  })
+  return rows.map(toConvocatoria)
+}
