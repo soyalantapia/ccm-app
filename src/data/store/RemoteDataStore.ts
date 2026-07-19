@@ -753,12 +753,16 @@ export class RemoteDataStore extends LocalDataStore {
       super.toggleFavorite(photoId)
       return
     }
+    // Revertir el optimista si el server rechaza (antes el catch era vacío → corazón "lleno"
+    // que el server nunca guardó y desaparece al re-hidratar; espeja el patrón de register()).
+    const prev = this.favorites
+    const revert = () => { this.favorites = prev; bus.emit('favorites') }
     if (this.favorites.includes(photoId)) {
       this.favorites = this.favorites.filter((p) => p !== photoId)
-      this.api.del(`/favorites/${photoId}`).catch(() => {})
+      this.api.del(`/favorites/${photoId}`).catch(revert)
     } else {
       this.favorites = [...this.favorites, photoId]
-      this.api.put(`/favorites/${photoId}`).catch(() => {})
+      this.api.put(`/favorites/${photoId}`).catch(revert)
     }
     bus.emit('favorites')
   }
@@ -768,11 +772,14 @@ export class RemoteDataStore extends LocalDataStore {
       super.recordDownload(photoId, galleryId)
       return
     }
+    const prev = this.downloads
     const sponsorId = this.galleries?.find((g) => g.id === galleryId)?.sponsorId ?? ''
     this.downloads = [{ photoId, galleryId, sponsorId, ts: new Date().toISOString() }, ...this.downloads]
     this.track('photo_download', { photoId, galleryId, sponsorId }) // → local + analytics backend
     bus.emit('downloads')
-    this.api.post('/downloads', { photoId, galleryId }).catch(() => {})
+    // Revertir la fila de "Mis descargas" si el POST falla (no persistió); la descarga del
+    // archivo ya ocurrió aparte, esto solo corrige el registro visible.
+    this.api.post('/downloads', { photoId, galleryId }).catch(() => { this.downloads = prev; bus.emit('downloads') })
   }
 
   /* ─── Fase G: CRUD del organizador (auth Bearer en /admin/*) ─── */
