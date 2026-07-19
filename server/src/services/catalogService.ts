@@ -40,9 +40,14 @@ export async function getGallery(slug: string): Promise<Gallery> {
 }
 
 /* ─── Contenido (videos) ─── */
-export async function getContents(): Promise<ContentItem[]> {
+/** Contenido público. El youtubeId de videos socioOnly se emite SOLO a Socios (gate server-side;
+ *  antes el gate era solo client-side y cualquiera podía sacar el id del video "unlisted"). */
+export async function getContents(deviceId?: string): Promise<ContentItem[]> {
   const rows = await prisma.contentItem.findMany({ orderBy: { publishedAt: 'desc' } })
-  return rows.map(toContentItem)
+  const isSocio = deviceId
+    ? (await prisma.membership.findUnique({ where: { deviceId }, select: { tier: true } }))?.tier === 'socio'
+    : false
+  return rows.map((c) => toContentItem(c, !c.socioOnly || isSocio))
 }
 
 /* ─── Sponsors ─── */

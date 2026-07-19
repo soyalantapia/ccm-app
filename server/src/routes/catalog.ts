@@ -41,9 +41,9 @@ catalogRouter.get('/galleries/:slug', async (req, res, next) => {
 })
 
 /** GET /api/v1/contents — videos del archivo. Público. */
-catalogRouter.get('/contents', async (_req, res, next) => {
+catalogRouter.get('/contents', async (req, res, next) => {
   try {
-    res.json(await catalogService.getContents())
+    res.json(await catalogService.getContents(req.deviceId))
   } catch (err) {
     next(err)
   }
