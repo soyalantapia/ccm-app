@@ -67,9 +67,11 @@ export class RemoteDataStore extends LocalDataStore {
   private regs?: Registration[]
   private availCache = new Map<string, BlockAvailability>()
   private availInflight = new Set<string>()
-  private generalCounts = new Map<string, number>()
-  private generalInflight = new Set<string>()
   private tmpSeq = 0
+  // Provisionales (tmp_) cancelados mientras su POST seguía en vuelo: cuando el POST resuelve
+  // con el id real del server, hay que borrarlo (si no, queda una inscripción fantasma que
+  // consume cupo y el usuario no puede cancelar porque ya no está en su lista local).
+  private cancelledTmp = new Set<string>()
 
   // Caché de Fase E (catálogo / galerías / contenido / favoritos / descargas).
   private catalog?: CatalogProfile[]
@@ -80,7 +82,8 @@ export class RemoteDataStore extends LocalDataStore {
   // Resto de Fase G: sponsors / planes / convocatorias / postulaciones.
   private sponsors?: Sponsor[]
   private plans?: TicketPlan[]
-  private applications?: Application[]
+  private applications?: Application[] // device-scoped ("Mis postulaciones")
+  private adminApplications?: Application[] // admin-scoped (panel del organizador) — caché SEPARADO
   private membership?: Membership
   private benefits?: Benefit[]
   private banners?: Banner[]
@@ -91,9 +94,9 @@ export class RemoteDataStore extends LocalDataStore {
   private adminBenefits?: Benefit[]
   private adminBanners?: Banner[]
   private adminNotas?: Nota[]
-  // Analítica real cross-device (GET /admin/analytics, admin-scoped). Sin esto, getAnalytics caía
-  // al seed fabricado + localStorage del propio admin — mismo hueco de costura que applications.
-  private analytics?: AnalyticsEvent[]
+  private analytics?: AnalyticsEvent[] // analítica real cross-device (GET /admin/analytics), P1
+  private generalCounts = new Map<string, number>() // inscripciones generales server-wide por evento (#13)
+  private generalInflight = new Set<string>()
   private convocatorias = new Map<string, Convocatoria>()
   private convoInflight = new Set<string>()
   private convocatoriasList?: Convocatoria[] // lista admin (GET /admin/convocatorias)
@@ -111,7 +114,10 @@ export class RemoteDataStore extends LocalDataStore {
       this.hydrateRegistrations()
       this.hydrateDeviceContent()
       this.hydrateMembership()
-      this.hydrateApplications()
+      this.hydrateApplications() // device ("Mis postulaciones")
+      // Si ya hay sesión de organizador (token en sessionStorage al recargar), hidratar también
+      // el caché admin — el panel /admin/postulaciones lo necesita sin re-loguear por el gate.
+      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ccm:admin-token')) this.hydrateAdminApplications()
       this.hydrateBenefits()
     })
     if (typeof window !== 'undefined') {
@@ -164,7 +170,10 @@ export class RemoteDataStore extends LocalDataStore {
     this.api
       .get<Registration[]>('/registrations')
       .then((regs) => {
-        this.regs = regs
+        // Preservar los provisionales (tmp_) con POST en vuelo: si el usuario se inscribió durante
+        // la ventana de hidratación, no pisarlos con la lista del server (el .then los reconcilia).
+        const inflight = (this.regs ?? []).filter((r) => r.id.startsWith('tmp_'))
+        this.regs = [...regs, ...inflight]
         bus.emit('registrations')
       })
       .catch(() => {})
@@ -190,18 +199,6 @@ export class RemoteDataStore extends LocalDataStore {
     this.fetchAvailability(blockId)
   }
 
-  /** true mientras el caché del recurso sea undefined (fetch en vuelo). Una vez que el backend
-   *  respondió (aunque sea []), deja de estar "hidratando" → las páginas :slug pueden decidir
-   *  "no existe" sin flashear el EmptyState de "link vencido". */
-  override isHydrating(resource: HydratableResource): boolean {
-    switch (resource) {
-      case 'events': return this.events === undefined
-      case 'catalog': return this.catalog === undefined
-      case 'galleries': return this.galleries === undefined
-      case 'notas': return this.notas === undefined
-    }
-  }
-
   override getEvents(): EventItem[] {
     return this.events ?? super.getEvents()
   }
@@ -223,10 +220,22 @@ export class RemoteDataStore extends LocalDataStore {
     this.fetchAvailability(blockId) // dispara fetch; mientras, estimación local
     return super.blockAvailability(blockId)
   }
+  /** true mientras el caché del recurso sea undefined (fetch en vuelo) → las páginas :slug
+   *  distinguen "cargando" de "no existe" y no flashean el EmptyState de "link vencido" (#20). */
+  override isHydrating(resource: HydratableResource): boolean {
+    switch (resource) {
+      case 'events': return this.events === undefined
+      case 'catalog': return this.catalog === undefined
+      case 'galleries': return this.galleries === undefined
+      case 'notas': return this.notas === undefined
+    }
+  }
+  /** Inscripciones generales (sin bloque) server-wide de un evento (#13). getRegistrations es
+   *  device-scoped; esto agrega todos los devices (stale-while-revalidate, espeja blockAvailability). */
   override generalRegistrationCount(eventId: string): number {
     const cached = this.generalCounts.get(eventId)
     if (cached !== undefined) return cached
-    this.fetchGeneralCount(eventId) // stale-while-revalidate (espeja blockAvailability)
+    this.fetchGeneralCount(eventId)
     return super.generalRegistrationCount(eventId)
   }
   private fetchGeneralCount(eventId: string): void {
@@ -256,10 +265,11 @@ export class RemoteDataStore extends LocalDataStore {
    * dispara el POST. Si el server responde 409 (lleno / ya inscripto), se REVIERTE.
    */
   override register(eventId: string, blockId?: string): Registration | null {
-    // Pre-hidratación (this.regs undefined): tratar como [] y SÍ postear, en vez de super.register
-    // (solo localStorage) — que se perdía al llegar hydrateRegistrations y pisar this.regs.
-    const regs = this.regs ?? []
-    const existing = regs.find(
+    // Antes: si aún no hidrató, caía a super (localStorage, SIN POST) → falso éxito + inscripción
+    // perdida en la ventana de arranque. Ahora seguimos el path optimista con lista vacía y SÍ
+    // pegamos el POST — el server es la fuente de verdad; si está caído, el catch revierte+avisa.
+    this.regs = this.regs ?? []
+    const existing = this.regs.find(
       (r) =>
         r.status === 'confirmada' &&
         r.eventId === eventId &&
@@ -275,19 +285,25 @@ export class RemoteDataStore extends LocalDataStore {
       ts: new Date().toISOString(),
       status: 'confirmada',
     }
-    this.regs = [...regs, provisional]
+    this.regs = [...this.regs, provisional]
     bus.emit('registrations')
 
     this.api
       .post<Registration>('/registrations', { eventId, ...(blockId ? { blockId } : {}) })
       .then((server) => {
-        // Robusto ante una hidratación que haya pisado this.regs mientras el POST estaba en vuelo:
-        // sacar el provisional y cualquier dup del server, y agregar el server reg.
-        this.regs = [...(this.regs ?? []).filter((r) => r.id !== provisional.id && r.id !== server.id), server]
+        // Si el usuario canceló el provisional mientras el POST volaba, la fila ya se sacó de
+        // this.regs pero la inscripción quedó creada en el server → borrarla ahora (anti-fantasma).
+        if (this.cancelledTmp.delete(provisional.id)) {
+          this.api.del(`/registrations/${server.id}`).catch(() => {})
+          this.refreshAvailability(blockId)
+          return
+        }
+        this.regs = (this.regs ?? []).map((r) => (r.id === provisional.id ? server : r))
         this.refreshAvailability(blockId)
         bus.emit('registrations')
-        // El código de beneficios está gateado por inscripción confirmada; re-hidratar para que
-        // aparezca sin recargar la página entera (antes el usuario tenía que hacer F5).
+        // Al pasar a "inscripto", el backend recién ahora sirve los CÓDIGOS de beneficio
+        // (benefitService los gatea por inscripción confirmada). Sin esta re-hidratación el
+        // caché queda stale toda la sesión y el código nunca aparece hasta recargar la PWA.
         this.hydrateBenefits()
       })
       .catch(() => {
@@ -310,10 +326,12 @@ export class RemoteDataStore extends LocalDataStore {
     const reg = this.regs.find((r) => r.id === registrationId)
     this.regs = this.regs.filter((r) => r.id !== registrationId)
     bus.emit('registrations')
-    if (reg && !registrationId.startsWith('tmp_')) {
-      // Re-hidratar beneficios tras confirmar la baja: si era la última inscripción, el código
-      // deja de estar disponible (mismo gate por inscripción que en register()).
-      this.api.del(`/registrations/${registrationId}`).then(() => this.hydrateBenefits()).catch(() => {})
+    if (reg && registrationId.startsWith('tmp_')) {
+      // Provisional con POST todavía en vuelo: no hay id real para borrar aún. Lo marcamos y el
+      // .then del register lo borra en cuanto llega el server (evita la inscripción fantasma).
+      this.cancelledTmp.add(registrationId)
+    } else if (reg) {
+      this.api.del(`/registrations/${registrationId}`).catch(() => {})
       this.refreshAvailability(reg.blockId ?? undefined)
     }
   }
@@ -363,23 +381,30 @@ export class RemoteDataStore extends LocalDataStore {
   /** Tras loguear el organizador, re-trae notas/banners/beneficios con vista admin
    *  (borradores/ocultos/códigos) — antes el panel mostraba el subset público hasta recargar. */
   override refetchAdminScoped(): void {
-    // Cachés ADMIN aparte (los públicos this.benefits/banners/notas ya se cargaron al arranque y
-    // se mantienen públicos → no se contaminan las vistas públicas en el mismo tab, #19).
+    // Cachés ADMIN aparte (los públicos this.benefits/banners/notas siguen públicos → no se
+    // contaminan las vistas públicas en el mismo tab, #19).
     this.hydrateAdminBenefits()
     this.hydrateAdminBanners()
     this.hydrateAdminNotas()
-    this.hydrateApplications() // ahora con vista admin (TODAS) — antes el panel veía solo las del device del admin (≈0)
+    this.hydrateAdminApplications() // lista COMPLETA en un caché aparte (no pisa las del device)
     this.hydrateConvocatorias() // lista completa para gestionarlas (antes solo venían del seed)
-    this.hydrateAnalytics() // analítica REAL del backend — antes Dashboard/SponsorReport leían el seed fabricado
+    this.hydrateAnalytics() // analítica REAL del backend — antes Dashboard/SponsorReport leían el seed (P1)
+  }
+  /** Analítica real cross-device (admin-scoped). El backend NO siembra analytics; una vez hidratado
+   *  dejamos de servir el seed fabricado (P1). */
+  private hydrateAnalytics(): void {
+    this.api.get<AnalyticsEvent[]>('/admin/analytics').then((a) => { this.analytics = a; bus.emit('analytics') }).catch(() => {})
+  }
+  override getAnalytics(): AnalyticsEvent[] {
+    return this.analytics ?? super.getAnalytics()
   }
 
   private hydrateConvocatorias(): void {
     this.refetch<Convocatoria[]>('/admin/convocatorias', (v) => (this.convocatoriasList = v), 'convocatorias')
   }
 
-  /* ─── Notas / novedades. Público (this.notas ← /notas) separado de admin (this.adminNotas ←
-   *  /admin/notas): las vistas públicas nunca ven borradores del organizador (#19). Las mutaciones
-   *  tocan el caché admin y re-hidratan ambos. ─── */
+  /* ─── Notas. Público (this.notas ← /notas) separado de admin (this.adminNotas ← /admin/notas):
+   *  las vistas públicas nunca ven borradores del organizador (#19). ─── */
   private hydrateNotas(): void {
     this.api.get<Nota[]>('/notas').then((n) => { this.notas = n; bus.emit('notas') }).catch(() => {})
   }
@@ -534,32 +559,24 @@ export class RemoteDataStore extends LocalDataStore {
     this.api.del(`/admin/convocatorias/${id}`).catch(() => { this.convocatoriasList = prev; bus.emit('convocatorias') })
   }
   /** Con token de admin en sesión trae TODAS (GET /admin/applications) para revisar/decidir;
-   *  si no, las del PROPIO device (GET /applications, "Mis postulaciones"). Espeja el patrón
-   *  admin-aware de benefits/banners/notas. */
-  private applicationsPath(): string {
-    const hasAdmin = typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('ccm:admin-token')
-    return hasAdmin ? '/admin/applications' : '/applications'
-  }
-  /** Postulaciones (device o admin según sesión). Antes solo device-scoped → el panel del
-   *  organizador (AdminPostulaciones/Dashboard/AdminPersonas) veía vacío en prod. */
+   *  device (this.applications, GET /applications) para "Mis postulaciones" del usuario, y una
+   *  admin SEPARADA (this.adminApplications, GET /admin/applications) para el panel del organizador.
+   *  Cachés distintos: loguearse como admin en la misma pestaña NO debe contaminar las postulaciones
+   *  del usuario (antes applicationsPath() reenrutaba el ÚNICO caché a /admin y filtraba las de todos). */
   private hydrateApplications(): void {
-    this.api.get<Application[]>(this.applicationsPath()).then((a) => { this.applications = a; bus.emit('applications') }).catch(() => {})
+    this.api.get<Application[]>('/applications').then((a) => { this.applications = a; bus.emit('applications') }).catch(() => {})
+  }
+  private hydrateAdminApplications(): void {
+    this.api.get<Application[]>('/admin/applications').then((a) => { this.adminApplications = a; bus.emit('applications') }).catch(() => {})
   }
 
+  /** TODAS (vista del organizador): la lista admin si está cargada, si no cae al device/seed. */
   override getApplications(): Application[] {
-    return this.applications ?? super.getApplications()
+    return this.adminApplications ?? this.applications ?? super.getApplications()
   }
-
-  /** Analítica real cross-device del backend (admin-scoped). El backend NO siembra analytics, así
-   *  que devuelve solo eventos reales; una vez hidratado dejamos de servir el seed fabricado. */
-  private hydrateAnalytics(): void {
-    this.api.get<AnalyticsEvent[]>('/admin/analytics').then((a) => { this.analytics = a; bus.emit('analytics') }).catch(() => {})
-  }
-
-  override getAnalytics(): AnalyticsEvent[] {
-    // Una vez hidratada la analítica real (this.analytics), NO concatenar el seed: el seed es
-    // scaffolding de demo y contaminaría las métricas y el Reporte de Impacto pago a sponsors.
-    return this.analytics ?? super.getAnalytics()
+  /** Solo las del PROPIO device (vistas de usuario): NUNCA la lista admin. */
+  override getMyApplications(): Application[] {
+    return this.applications ?? super.getMyApplications()
   }
 
   /* ─── Membresía (Fase D parcial): persiste server-side, antes solo en localStorage ─── */
@@ -578,21 +595,17 @@ export class RemoteDataStore extends LocalDataStore {
     const prev = this.membership
     const optimistic: Membership = { tier: 'socio', since: new Date().toISOString(), paid }
     this.membership = optimistic
+    this.track('membership_purchased', { tier: 'socio', total: paid })
     bus.emit('membership')
     this.api
       .post<Membership>('/memberships', { paid })
-      // El track de conversión va SOLO ante éxito real (antes se disparaba antes del POST →
-      // contaba socios fantasma si el POST fallaba).
-      .then((server) => {
-        this.membership = server
-        this.track('membership_purchased', { tier: 'socio', total: paid })
-        bus.emit('membership')
-        // Ahora el youtubeId de videos socioOnly se sirve server-side según membresía; re-fetch
-        // para desbloquearlos sin recargar (antes el id venía siempre en el payload).
-        this.refetchContents()
-      })
+      // refetchContents: el youtubeId de videos socioOnly se sirve server-side según membresía (#8),
+      // re-fetch para desbloquearlos sin recargar.
+      .then((server) => { this.membership = server; bus.emit('membership'); this.refetchContents() })
       .catch(() => {
-        this.membership = prev // revertir el optimista (antes quedaba 'socio' toda la sesión)
+        // Si el server no registró la membresía, revertir el estado optimista y AVISAR — si no,
+        // isSocio() queda true y desbloquea contenido socioOnly cross-app hasta el próximo reload.
+        this.membership = prev
         bus.emit('membership')
         bus.emit('membership:rejected')
       })
@@ -602,8 +615,8 @@ export class RemoteDataStore extends LocalDataStore {
   /* ─── Beneficios (descuentos para registrados) ─── */
 
   /* ─── Beneficios. Público (this.benefits ← /benefits: solo activos; código solo si el device
-   *  está registrado) separado de admin (this.adminBenefits ← /admin/benefits: todos + códigos).
-   *  Así el organizador no ve todos los códigos en su vista pública del mismo tab (#19). ─── */
+   *  está registrado) vs admin (this.adminBenefits ← /admin/benefits: todos + códigos), para que el
+   *  organizador no vea todos los códigos en su vista pública del mismo tab (#19). ─── */
   private hydrateBenefits(): void {
     this.api.get<Benefit[]>('/benefits').then((b) => { this.benefits = b; bus.emit('benefits') }).catch(() => {})
   }
@@ -646,7 +659,6 @@ export class RemoteDataStore extends LocalDataStore {
     const app: Application = { id: newId('app'), convocatoriaId, ts: new Date().toISOString(), status: 'preinscripta', data }
     // Cachea SIEMPRE (antes, si applications no estaba hidratado, la postulación se perdía de
     // la vista del usuario). Reconcilia el id local con el del server (espeja register()).
-    const prev = this.applications
     this.applications = [app, ...(this.applications ?? [])]
     this.track('application_submitted', { convocatoriaId, applicationId: app.id })
     bus.emit('applications')
@@ -657,22 +669,23 @@ export class RemoteDataStore extends LocalDataStore {
         bus.emit('applications')
       })
       .catch(() => {
-        // Antes: .catch(()=>{}) → falso "preinscripta" sin aviso ni persistencia. Espeja register():
-        // revertir el optimista y AVISAR (el usuario creía que se postuló y no).
-        this.applications = prev
+        // El POST falló: sacar la postulación optimista y AVISAR. Antes el catch vacío la dejaba
+        // como "preinscripta" → el usuario creía haberse postulado pero el organizador nunca la
+        // veía (lead perdido en silencio). Espeja el revert+aviso de register().
+        this.applications = (this.applications ?? []).filter((a) => a.id !== app.id)
         bus.emit('applications')
         bus.emit('application:rejected', { convocatoriaId })
       })
     return app
   }
   override decideApplication(applicationId: string, status: Exclude<ApplicationStatus, 'preinscripta'>): void {
-    if (!this.applications) {
+    if (!this.adminApplications) {
       // hidratar bajo demanda (el admin abrió postulaciones)
-      this.refetch<Application[]>('/admin/applications', (v) => (this.applications = v), 'applications')
+      this.refetch<Application[]>('/admin/applications', (v) => (this.adminApplications = v), 'applications')
     }
-    if (this.applications) this.applications = this.applications.map((a) => (a.id === applicationId ? { ...a, status, decidedAt: new Date().toISOString() } : a))
+    if (this.adminApplications) this.adminApplications = this.adminApplications.map((a) => (a.id === applicationId ? { ...a, status, decidedAt: new Date().toISOString() } : a))
     bus.emit('applications')
-    this.api.patch(`/admin/applications/${applicationId}`, { status }).then(() => this.refetch<Application[]>('/admin/applications', (v) => (this.applications = v), 'applications')).catch(() => {})
+    this.api.patch(`/admin/applications/${applicationId}`, { status }).then(() => this.refetch<Application[]>('/admin/applications', (v) => (this.adminApplications = v), 'applications')).catch(() => {})
   }
 
   override createSponsor(input: NewSponsor): Sponsor {
@@ -702,7 +715,12 @@ export class RemoteDataStore extends LocalDataStore {
 
   override createGallery(input: NewGallery): Gallery {
     if (!this.galleries) return super.createGallery(input)
-    const gallery: Gallery = { ...input, id: newId('gal'), slug: input.slug || slugify(input.title) }
+    // Dedup de slug (como notas/convocatorias): sin esto, dos galerías con el mismo título
+    // chocan con el @unique del server → 409 → el ítem optimista desaparece en silencio.
+    const gtaken = new Set(this.galleries.map((g) => g.slug))
+    let gslug = input.slug || slugify(input.title)
+    for (let i = 2, base = gslug; gtaken.has(gslug); i++) gslug = `${base}-${i}`
+    const gallery: Gallery = { ...input, id: newId('gal'), slug: gslug }
     this.galleries = [...this.galleries, gallery]
     this.track('admin_gallery_created', { galleryId: gallery.id })
     bus.emit('galleries')
@@ -727,7 +745,12 @@ export class RemoteDataStore extends LocalDataStore {
 
   override createCatalogProfile(input: NewCatalogProfile): CatalogProfile {
     if (!this.catalog) return super.createCatalogProfile(input)
-    const profile: CatalogProfile = { ...input, id: newId('cat'), slug: input.slug || slugify(input.name) }
+    // Dedup de slug: dos expositores con el mismo nombre chocan con el @unique → 409 → el ítem
+    // desaparece del panel sin aviso. Espeja el dedup de notas/convocatorias.
+    const ctaken = new Set(this.catalog.map((c) => c.slug))
+    let cslug = input.slug || slugify(input.name)
+    for (let i = 2, base = cslug; ctaken.has(cslug); i++) cslug = `${base}-${i}`
+    const profile: CatalogProfile = { ...input, id: newId('cat'), slug: cslug }
     this.catalog = [...this.catalog, profile]
     this.track('admin_catalog_created', { profileId: profile.id })
     bus.emit('catalog')

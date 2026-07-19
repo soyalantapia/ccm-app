@@ -41,7 +41,7 @@ export default function MiQR() {
   const mainEvent = useStore((s) => s.getEventById(IDS.events.principal))
   const isSocio = useStore((s) => s.isSocio())
   const profile = useStore((s) => s.getProfile())
-  const applications = useStore((s) => s.getApplications().filter((a) => !a.fromSeed))
+  const applications = useStore((s) => s.getMyApplications().filter((a) => !a.fromSeed))
   const favoritesCount = useStore((s) => s.getFavorites().length)
   const downloadsCount = useStore((s) => s.getDownloads().length)
   const registered = registrations.length > 0

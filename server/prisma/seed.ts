@@ -29,8 +29,8 @@ async function main() {
   for (const s of seedSponsors) {
     await prisma.sponsor.upsert({
       where: { id: s.id },
-      create: { id: s.id, name: s.name, industry: s.industry, level: s.level, exclusive: s.exclusive, tagline: s.tagline },
-      update: { name: s.name, industry: s.industry, level: s.level, exclusive: s.exclusive, tagline: s.tagline },
+      create: { id: s.id, name: s.name, industry: s.industry, level: s.level, exclusive: s.exclusive, tagline: s.tagline, banner: s.banner ?? null },
+      update: { name: s.name, industry: s.industry, level: s.level, exclusive: s.exclusive, tagline: s.tagline, banner: s.banner ?? null },
     })
     await prisma.sponsorCreative.deleteMany({ where: { sponsorId: s.id } })
     await prisma.sponsorCreative.createMany({
@@ -77,8 +77,8 @@ async function main() {
   // ── Catálogo de expositores (+ portfolio) ──
   for (const c of seedCatalog) {
     const data = {
-      slug: c.slug, name: c.name, role: c.role, platform: c.platform, city: c.city,
-      bio: c.bio, photo: c.photo, instagram: c.instagram ?? null, whatsapp: c.whatsapp ?? null, verified: c.verified, participatesIn: c.participatesIn,
+      slug: c.slug, name: c.name, role: c.role, kind: c.kind ?? 'participante', platform: c.platform, city: c.city,
+      bio: c.bio, projects: c.projects ?? null, photo: c.photo, instagram: c.instagram ?? null, whatsapp: c.whatsapp ?? null, verified: c.verified, participatesIn: c.participatesIn,
     }
     await prisma.catalogProfile.upsert({ where: { id: c.id }, create: { id: c.id, ...data }, update: data })
     await prisma.portfolioPiece.deleteMany({ where: { profileId: c.id } })

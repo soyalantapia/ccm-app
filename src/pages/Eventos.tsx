@@ -36,7 +36,7 @@ export default function Eventos() {
   const principal = events.find((e) => e.type === 'principal')
   // Un evento especial (capacitación destacada) se muestra como lanzamiento-card
   // y se excluye de la lista de Caminos para no duplicarlo.
-  const especial = events.find((e) => e.type === 'capacitacion')
+  const especial = events.find((e) => e.type === 'capacitacion' && !e.past)
   const rest = events.filter((e) => e.type !== 'principal' && e.id !== especial?.id)
 
   /** Inscripto al evento o a alguno de sus bloques (toda registration lleva eventId). */

@@ -17,7 +17,7 @@ export interface ApiClient {
 export function createApi(apiBase: string): ApiClient {
   const base = apiBase.replace(/\/+$/, '') + '/api/v1'
 
-  async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  async function call<T>(method: string, path: string, body?: unknown, keepalive = false): Promise<T> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     }
@@ -33,6 +33,9 @@ export function createApi(apiBase: string): ApiClient {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      // keepalive: el flush de analytics corre en pagehide/visibilitychange; sin esto el
+      // navegador aborta el fetch al descartar el documento y se pierde el último batch.
+      ...(keepalive ? { keepalive: true } : {}),
     })
     if (!res.ok) {
       // Token de device inválido/corrupto (401 en ruta no-admin): purgar credenciales para que el
@@ -50,6 +53,6 @@ export function createApi(apiBase: string): ApiClient {
     patch: (p, b) => call('PATCH', p, b),
     put: (p) => call<void>('PUT', p).then(() => undefined),
     del: (p) => call<void>('DELETE', p).then(() => undefined),
-    postBatch: (p, b) => call<void>('POST', p, b).then(() => undefined),
+    postBatch: (p, b) => call<void>('POST', p, b, true).then(() => undefined),
   }
 }

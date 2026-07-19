@@ -30,11 +30,13 @@ export default function Fotos() {
     )
   }, [galleries, favorites])
 
-  /* Mis descargas: más recientes primero, con thumbnail resuelto. */
+  /* Mis descargas: más recientes primero, con thumbnail resuelto. Ordenamos por ts (no
+     .reverse()): el orden del array difiere entre Local (append) y Remote (prepend), así que
+     reverse mostraba las descargas invertidas en prod. Ordenar por ts es correcto en ambos. */
   const downloadEntries = useMemo(
     () =>
       [...downloads]
-        .reverse()
+        .sort((a, b) => b.ts.localeCompare(a.ts))
         .flatMap((d) => {
           const gallery = galleries.find((g) => g.id === d.galleryId)
           const index = gallery ? gallery.photos.findIndex((p) => p.id === d.photoId) : -1

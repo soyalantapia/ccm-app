@@ -16,7 +16,7 @@ export function UpdatePrompt() {
   if (!needRefresh) return null
 
   return (
-    <div className="fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[70] flex justify-center px-4 md:bottom-8">
+    <div className="fixed inset-x-0 bottom-[calc(9rem+env(safe-area-inset-bottom))] z-[70] flex justify-center px-4 md:bottom-8">
       <div className="flex items-center gap-3 rounded-md bg-night px-4 py-3 text-sm text-night-ink shadow-2xl animate-rise">
         <RefreshCw size={15} className="shrink-0 text-accent" aria-hidden />
         <span>Hay una versión nueva de la app</span>
