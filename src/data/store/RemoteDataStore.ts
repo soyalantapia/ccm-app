@@ -247,6 +247,9 @@ export class RemoteDataStore extends LocalDataStore {
         this.regs = (this.regs ?? []).map((r) => (r.id === provisional.id ? server : r))
         this.refreshAvailability(blockId)
         bus.emit('registrations')
+        // El código de beneficios está gateado por inscripción confirmada; re-hidratar para que
+        // aparezca sin recargar la página entera (antes el usuario tenía que hacer F5).
+        this.hydrateBenefits()
       })
       .catch(() => {
         // 409 lleno / ya inscripto / 403 socio → revertir el provisional y AVISAR (antes el
@@ -269,7 +272,9 @@ export class RemoteDataStore extends LocalDataStore {
     this.regs = this.regs.filter((r) => r.id !== registrationId)
     bus.emit('registrations')
     if (reg && !registrationId.startsWith('tmp_')) {
-      this.api.del(`/registrations/${registrationId}`).catch(() => {})
+      // Re-hidratar beneficios tras confirmar la baja: si era la última inscripción, el código
+      // deja de estar disponible (mismo gate por inscripción que en register()).
+      this.api.del(`/registrations/${registrationId}`).then(() => this.hydrateBenefits()).catch(() => {})
       this.refreshAvailability(reg.blockId ?? undefined)
     }
   }
@@ -520,14 +525,27 @@ export class RemoteDataStore extends LocalDataStore {
     return this.membership ? this.membership.tier === 'socio' : super.isSocio()
   }
   override becomeSocio(paid: number): Membership {
+    const prev = this.membership
     const optimistic: Membership = { tier: 'socio', since: new Date().toISOString(), paid }
     this.membership = optimistic
-    this.track('membership_purchased', { tier: 'socio', total: paid })
     bus.emit('membership')
     this.api
       .post<Membership>('/memberships', { paid })
-      .then((server) => { this.membership = server; bus.emit('membership') })
-      .catch(() => {})
+      // El track de conversión va SOLO ante éxito real (antes se disparaba antes del POST →
+      // contaba socios fantasma si el POST fallaba).
+      .then((server) => {
+        this.membership = server
+        this.track('membership_purchased', { tier: 'socio', total: paid })
+        bus.emit('membership')
+        // Ahora el youtubeId de videos socioOnly se sirve server-side según membresía; re-fetch
+        // para desbloquearlos sin recargar (antes el id venía siempre en el payload).
+        this.refetchContents()
+      })
+      .catch(() => {
+        this.membership = prev // revertir el optimista (antes quedaba 'socio' toda la sesión)
+        bus.emit('membership')
+        bus.emit('membership:rejected')
+      })
     return optimistic
   }
 
@@ -574,6 +592,7 @@ export class RemoteDataStore extends LocalDataStore {
     const app: Application = { id: newId('app'), convocatoriaId, ts: new Date().toISOString(), status: 'preinscripta', data }
     // Cachea SIEMPRE (antes, si applications no estaba hidratado, la postulación se perdía de
     // la vista del usuario). Reconcilia el id local con el del server (espeja register()).
+    const prev = this.applications
     this.applications = [app, ...(this.applications ?? [])]
     this.track('application_submitted', { convocatoriaId, applicationId: app.id })
     bus.emit('applications')
@@ -583,7 +602,13 @@ export class RemoteDataStore extends LocalDataStore {
         this.applications = (this.applications ?? []).map((a) => (a.id === app.id ? server : a))
         bus.emit('applications')
       })
-      .catch(() => {})
+      .catch(() => {
+        // Antes: .catch(()=>{}) → falso "preinscripta" sin aviso ni persistencia. Espeja register():
+        // revertir el optimista y AVISAR (el usuario creía que se postuló y no).
+        this.applications = prev
+        bus.emit('applications')
+        bus.emit('application:rejected', { convocatoriaId })
+      })
     return app
   }
   override decideApplication(applicationId: string, status: Exclude<ApplicationStatus, 'preinscripta'>): void {

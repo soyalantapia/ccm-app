@@ -54,6 +54,10 @@ export function ToastHost() {
     const off = bus.on((key) => {
       if (key === 'registration:rejected') {
         toast('No pudimos confirmar tu lugar — puede que se haya llenado o sea solo para Socios.', 'info')
+      } else if (key === 'application:rejected') {
+        toast('No pudimos enviar tu postulación — probá de nuevo en un momento.', 'info')
+      } else if (key === 'membership:rejected') {
+        toast('No pudimos confirmar tu membresía — probá de nuevo en un momento.', 'info')
       }
     })
     return () => {
