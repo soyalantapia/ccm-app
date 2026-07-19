@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "deploy": "npm run build && gh-pages -d dist --dotfiles -m \"Deploy to GitHub Pages\""
+    "deploy": "echo 'GH Pages RETIRADO (redirect a Railway). El deploy real es: railway up --path-as-root . -s ccm-api -c' && exit 1"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.2.8",
