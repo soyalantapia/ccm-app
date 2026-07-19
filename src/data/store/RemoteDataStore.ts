@@ -37,6 +37,7 @@ import type {
   NewNota,
   PlanId,
   ApplicationStatus,
+  AnalyticsEvent,
 } from '../types'
 
 interface BufferedEvent {
@@ -81,6 +82,9 @@ export class RemoteDataStore extends LocalDataStore {
   private benefits?: Benefit[]
   private banners?: Banner[]
   private notas?: Nota[]
+  // Analítica real cross-device (GET /admin/analytics, admin-scoped). Sin esto, getAnalytics caía
+  // al seed fabricado + localStorage del propio admin — mismo hueco de costura que applications.
+  private analytics?: AnalyticsEvent[]
   private convocatorias = new Map<string, Convocatoria>()
   private convoInflight = new Set<string>()
   private convocatoriasList?: Convocatoria[] // lista admin (GET /admin/convocatorias)
@@ -320,6 +324,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.hydrateNotas()
     this.hydrateApplications() // ahora con vista admin (TODAS) — antes el panel veía solo las del device del admin (≈0)
     this.hydrateConvocatorias() // lista completa para gestionarlas (antes solo venían del seed)
+    this.hydrateAnalytics() // analítica REAL del backend — antes Dashboard/SponsorReport leían el seed fabricado
   }
 
   private hydrateConvocatorias(): void {
@@ -488,6 +493,18 @@ export class RemoteDataStore extends LocalDataStore {
 
   override getApplications(): Application[] {
     return this.applications ?? super.getApplications()
+  }
+
+  /** Analítica real cross-device del backend (admin-scoped). El backend NO siembra analytics, así
+   *  que devuelve solo eventos reales; una vez hidratado dejamos de servir el seed fabricado. */
+  private hydrateAnalytics(): void {
+    this.api.get<AnalyticsEvent[]>('/admin/analytics').then((a) => { this.analytics = a; bus.emit('analytics') }).catch(() => {})
+  }
+
+  override getAnalytics(): AnalyticsEvent[] {
+    // Una vez hidratada la analítica real (this.analytics), NO concatenar el seed: el seed es
+    // scaffolding de demo y contaminaría las métricas y el Reporte de Impacto pago a sponsors.
+    return this.analytics ?? super.getAnalytics()
   }
 
   /* ─── Membresía (Fase D parcial): persiste server-side, antes solo en localStorage ─── */
