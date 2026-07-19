@@ -17,13 +17,16 @@ const PROFILE_KEYS = [
 ] as const
 
 const fieldsSchema = z.object({
+  // Validación por campo: email con formato + tope; el resto con .max (columnas text indexadas
+  // en btree — sin cota se persistía PII basura arbitrariamente larga).
   values: z
-    .object(Object.fromEntries(PROFILE_KEYS.map((k) => [k, z.string()])) as Record<
-      (typeof PROFILE_KEYS)[number],
-      z.ZodString
-    >)
+    .object(
+      Object.fromEntries(
+        PROFILE_KEYS.map((k) => [k, k === 'email' ? z.string().trim().email().max(254) : z.string().max(200)]),
+      ) as Record<(typeof PROFILE_KEYS)[number], z.ZodString>,
+    )
     .partial(),
-  source: z.string().min(1),
+  source: z.string().min(1).max(80),
 })
 
 const consentsSchema = z.object({

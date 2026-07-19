@@ -14,7 +14,9 @@ membershipsRouter.get('/memberships/me', requireDevice, async (req, res, next) =
   }
 })
 
-const becomeSchema = z.object({ paid: z.number().int().nonnegative().default(0) })
+// .max acota al rango de int4 de Postgres: sin esto un paid enorme (vector público) desbordaba
+// la columna Int y tiraba 500 en vez de un 400 de validación.
+const becomeSchema = z.object({ paid: z.number().int().nonnegative().max(2_147_483_647).default(0) })
 
 /** POST /api/v1/memberships — hacerse Socio CCM (persiste server-side). */
 membershipsRouter.post('/memberships', requireDevice, async (req, res, next) => {
