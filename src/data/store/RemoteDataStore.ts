@@ -66,6 +66,10 @@ export class RemoteDataStore extends LocalDataStore {
   private availCache = new Map<string, BlockAvailability>()
   private availInflight = new Set<string>()
   private tmpSeq = 0
+  // Provisionales (tmp_) cancelados mientras su POST seguía en vuelo: cuando el POST resuelve
+  // con el id real del server, hay que borrarlo (si no, queda una inscripción fantasma que
+  // consume cupo y el usuario no puede cancelar porque ya no está en su lista local).
+  private cancelledTmp = new Set<string>()
 
   // Caché de Fase E (catálogo / galerías / contenido / favoritos / descargas).
   private catalog?: CatalogProfile[]
@@ -155,7 +159,10 @@ export class RemoteDataStore extends LocalDataStore {
     this.api
       .get<Registration[]>('/registrations')
       .then((regs) => {
-        this.regs = regs
+        // Preservar los provisionales (tmp_) con POST en vuelo: si el usuario se inscribió durante
+        // la ventana de hidratación, no pisarlos con la lista del server (el .then los reconcilia).
+        const inflight = (this.regs ?? []).filter((r) => r.id.startsWith('tmp_'))
+        this.regs = [...regs, ...inflight]
         bus.emit('registrations')
       })
       .catch(() => {})
@@ -221,7 +228,10 @@ export class RemoteDataStore extends LocalDataStore {
    * dispara el POST. Si el server responde 409 (lleno / ya inscripto), se REVIERTE.
    */
   override register(eventId: string, blockId?: string): Registration | null {
-    if (!this.regs) return super.register(eventId, blockId) // pre-hidratación: local
+    // Antes: si aún no hidrató, caía a super (localStorage, SIN POST) → falso éxito + inscripción
+    // perdida en la ventana de arranque. Ahora seguimos el path optimista con lista vacía y SÍ
+    // pegamos el POST — el server es la fuente de verdad; si está caído, el catch revierte+avisa.
+    this.regs = this.regs ?? []
     const existing = this.regs.find(
       (r) =>
         r.status === 'confirmada' &&
@@ -244,6 +254,13 @@ export class RemoteDataStore extends LocalDataStore {
     this.api
       .post<Registration>('/registrations', { eventId, ...(blockId ? { blockId } : {}) })
       .then((server) => {
+        // Si el usuario canceló el provisional mientras el POST volaba, la fila ya se sacó de
+        // this.regs pero la inscripción quedó creada en el server → borrarla ahora (anti-fantasma).
+        if (this.cancelledTmp.delete(provisional.id)) {
+          this.api.del(`/registrations/${server.id}`).catch(() => {})
+          this.refreshAvailability(blockId)
+          return
+        }
         this.regs = (this.regs ?? []).map((r) => (r.id === provisional.id ? server : r))
         this.refreshAvailability(blockId)
         bus.emit('registrations')
@@ -272,7 +289,11 @@ export class RemoteDataStore extends LocalDataStore {
     const reg = this.regs.find((r) => r.id === registrationId)
     this.regs = this.regs.filter((r) => r.id !== registrationId)
     bus.emit('registrations')
-    if (reg && !registrationId.startsWith('tmp_')) {
+    if (reg && registrationId.startsWith('tmp_')) {
+      // Provisional con POST todavía en vuelo: no hay id real para borrar aún. Lo marcamos y el
+      // .then del register lo borra en cuanto llega el server (evita la inscripción fantasma).
+      this.cancelledTmp.add(registrationId)
+    } else if (reg) {
       this.api.del(`/registrations/${registrationId}`).catch(() => {})
       this.refreshAvailability(reg.blockId ?? undefined)
     }
