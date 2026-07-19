@@ -486,6 +486,12 @@ export class LocalDataStore implements DataStore {
       .sort((a, b) => a.order - b.order || b.publishedAt.localeCompare(a.publishedAt))
   }
 
+  getAdminNotas(): Nota[] {
+    return mergeOverlay(seedNotas, K.notasOverlay).sort(
+      (a, b) => a.order - b.order || b.publishedAt.localeCompare(a.publishedAt),
+    )
+  }
+
   getNota(slug: string): Nota | undefined {
     return mergeOverlay(seedNotas, K.notasOverlay).find((n) => n.slug === slug && n.published)
   }
@@ -522,6 +528,10 @@ export class LocalDataStore implements DataStore {
       .sort((a, b) => a.order - b.order)
   }
 
+  getAdminBanners(): Banner[] {
+    return mergeOverlay(seedBanners, K.bannersOverlay).sort((a, b) => a.order - b.order)
+  }
+
   createBanner(input: NewBanner): Banner {
     const banner: Banner = { ...input, id: newId('bnr') }
     overlayCreate(K.bannersOverlay, banner)
@@ -547,6 +557,10 @@ export class LocalDataStore implements DataStore {
       .filter((b) => b.active)
       .sort((a, b) => a.order - b.order)
       .map((b) => (registered ? b : { ...b, code: undefined }))
+  }
+
+  getAdminBenefits(): Benefit[] {
+    return mergeOverlay(seedBenefits, K.benefitsOverlay).sort((a, b) => a.order - b.order)
   }
 
   createBenefit(input: NewBenefit): Benefit {

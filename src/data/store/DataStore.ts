@@ -161,6 +161,11 @@ export interface DataStore {
 
   /* Banners gestionados (publicidad simple) */
   getBanners(): Banner[]
+  /** Vista ADMIN (todos, incl. ocultos/borradores). Las páginas públicas usan getBanners/getNotas/
+   *  getBenefits (subset público); el panel usa estos para no contaminar el público en el mismo tab. */
+  getAdminBanners(): Banner[]
+  getAdminNotas(): Nota[]
+  getAdminBenefits(): Benefit[]
   createBanner(input: NewBanner): Banner
   updateBanner(id: string, patch: Partial<Banner>): void
   deleteBanner(id: string): void
