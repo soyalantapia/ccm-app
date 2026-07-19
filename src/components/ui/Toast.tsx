@@ -67,7 +67,12 @@ export function ToastHost() {
   }, [])
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[60] flex flex-col items-center gap-2 px-6 md:bottom-8">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[60] flex flex-col items-center gap-2 px-6 md:bottom-8"
+    >
       {items.map((t) => (
         <div
           key={t.id}

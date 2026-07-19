@@ -22,6 +22,7 @@ type FieldForm = {
   options: string // coma-separado (solo para 'select')
   placeholder: string
   help: string
+  showIf?: ConvocatoriaField['showIf'] // lógica condicional — preservada al editar (no editable en el form)
 }
 
 type LogoForm = { name: string; logoUrl: string; url: string; rubro: string }
@@ -87,6 +88,7 @@ export function OpsConvocatoriaForm({ open, convocatoria, onClose }: Props) {
           options: (ff.options ?? []).join(', '),
           placeholder: ff.placeholder ?? '',
           help: ff.help ?? '',
+          showIf: ff.showIf, // preservar la lógica condicional al editar
         })),
         logos: (convocatoria.logos ?? []).map((l) => ({
           name: l.name,
@@ -142,6 +144,7 @@ export function OpsConvocatoriaForm({ open, convocatoria, onClose }: Props) {
         : {}),
       ...(ff.placeholder.trim() ? { placeholder: ff.placeholder.trim() } : {}),
       ...(ff.help.trim() ? { help: ff.help.trim() } : {}),
+      ...(ff.showIf ? { showIf: ff.showIf } : {}),
     }))
     const logos = f.logos
       .filter((l) => l.name.trim() && l.logoUrl.trim())

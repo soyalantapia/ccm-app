@@ -124,7 +124,7 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    if (!f.name.trim() || !f.role.trim() || !f.platform || !f.city.trim() || !f.bio.trim() || !f.photo) {
+    if (!f.name.trim() || !f.role.trim() || !f.platform || !f.bio.trim() || !f.photo) {
       setError('Completá los campos obligatorios.')
       return
     }
@@ -198,8 +198,8 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
           </Field>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Ciudad" required>
-            <Input value={f.city} onChange={set('city')} placeholder="Ej: Córdoba" required />
+          <Field label="Ciudad" hint="Opcional">
+            <Input value={f.city} onChange={set('city')} placeholder="Ej: Córdoba" />
           </Field>
           <Field label="Instagram" hint="Opcional">
             <Input value={f.instagram} onChange={set('instagram')} placeholder="@usuario" />

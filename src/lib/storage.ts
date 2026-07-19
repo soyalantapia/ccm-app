@@ -13,7 +13,13 @@ export function readJSON<T>(key: string, fallback: T): T {
 }
 
 export function writeJSON(key: string, value: unknown): void {
-  localStorage.setItem(PREFIX + key, JSON.stringify(value))
+  try {
+    localStorage.setItem(PREFIX + key, JSON.stringify(value))
+  } catch {
+    // setItem puede lanzar QuotaExceededError (cuota agotada) o SecurityError (modo privado /
+    // storage bloqueado). Antes esto reventaba el bootstrap ANTES del render → pantalla blanca.
+    // Best-effort: los suscriptores en memoria siguen actualizándose vía el bus de abajo.
+  }
   bus.emit(key)
 }
 
