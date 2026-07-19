@@ -108,6 +108,10 @@ export class RemoteDataStore extends LocalDataStore {
       // el caché admin — el panel /admin/postulaciones lo necesita sin re-loguear por el gate.
       if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ccm:admin-token')) this.hydrateAdminApplications()
       this.hydrateBenefits()
+      // Re-fetch de /contents YA CON el device token: el backend gatea el youtubeId de los videos
+      // socioOnly según la membresía. El fetch público inicial pudo ir sin token (device nuevo) →
+      // socios verían su contenido enmascarado hasta este re-fetch.
+      this.refetchContents()
     })
     if (typeof window !== 'undefined') {
       const flush = () => this.flush()
@@ -543,7 +547,11 @@ export class RemoteDataStore extends LocalDataStore {
     bus.emit('membership')
     this.api
       .post<Membership>('/memberships', { paid })
-      .then((server) => { this.membership = server; bus.emit('membership') })
+      .then((server) => {
+        this.membership = server
+        bus.emit('membership')
+        this.refetchContents() // ahora socio → re-fetch para desenmascarar el youtubeId de contenido socioOnly
+      })
       .catch(() => {
         // Si el server no registró la membresía, revertir el estado optimista y AVISAR — si no,
         // isSocio() queda true y desbloquea contenido socioOnly cross-app hasta el próximo reload.

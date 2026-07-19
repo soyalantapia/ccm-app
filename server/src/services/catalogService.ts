@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma.js'
-import { toCatalogProfile, toGallery, toContentItem, toSponsor, toConvocatoria } from '../lib/serialize.js'
+import { toCatalogProfile, toGallery, toContentItem, toSponsor, toConvocatoria, gateSocioContents } from '../lib/serialize.js'
 import { notFound } from '../lib/errors.js'
 import type { CatalogProfile, Gallery, ContentItem, Sponsor, TicketPlan, Convocatoria } from '@domain/types'
 
@@ -40,9 +40,12 @@ export async function getGallery(slug: string): Promise<Gallery> {
 }
 
 /* ─── Contenido (videos) ─── */
-export async function getContents(): Promise<ContentItem[]> {
+export async function getContents(deviceId?: string): Promise<ContentItem[]> {
   const rows = await prisma.contentItem.findMany({ orderBy: { publishedAt: 'desc' } })
-  return rows.map(toContentItem)
+  const isSocio = deviceId
+    ? (await prisma.membership.findUnique({ where: { deviceId }, select: { tier: true } }))?.tier === 'socio'
+    : false
+  return gateSocioContents(rows.map(toContentItem), isSocio)
 }
 
 /* ─── Sponsors ─── */

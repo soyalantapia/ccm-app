@@ -188,6 +188,17 @@ export function toContentItem(c: ContentItem): DomainContentItem {
   }
 }
 
+/**
+ * Gate de contenido premium (server-side). A los NO socios les vaciamos el youtubeId de los
+ * items socioOnly: el paywall del front (LockedVideoCard) era solo cosmético y el localizador
+ * del video viajaba igual en el payload público de /contents, así que cualquiera lo miraba en
+ * YouTube. El item sigue apareciendo (con su portada + candado); lo que no sale es el asset.
+ */
+export function gateSocioContents(items: DomainContentItem[], isSocio: boolean): DomainContentItem[] {
+  if (isSocio) return items
+  return items.map((c) => (c.socioOnly ? { ...c, youtubeId: '' } : c))
+}
+
 export function toPhotoDownload(d: PhotoDownload): DomainPhotoDownload {
   return { photoId: d.photoId, galleryId: d.galleryId, sponsorId: d.sponsorId, ts: d.ts.toISOString() }
 }

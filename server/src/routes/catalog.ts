@@ -41,9 +41,11 @@ catalogRouter.get('/galleries/:slug', async (req, res, next) => {
 })
 
 /** GET /api/v1/contents — videos del archivo. Público. */
-catalogRouter.get('/contents', async (_req, res, next) => {
+catalogRouter.get('/contents', async (req, res, next) => {
   try {
-    res.json(await catalogService.getContents())
+    // deviceContext ya seteó req.deviceId si vino un X-Device-Token válido (público: no lo exige).
+    // El servicio gatea el youtubeId de items socioOnly según la membresía de ese device.
+    res.json(await catalogService.getContents(req.deviceId))
   } catch (err) {
     next(err)
   }
