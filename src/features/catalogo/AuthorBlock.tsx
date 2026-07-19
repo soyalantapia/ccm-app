@@ -44,9 +44,11 @@ export function AuthorBlock({ profile, onViewPieces }: AuthorBlockProps) {
               <span className="eyebrow inline-flex items-center rounded-sm border border-night-soft px-2.5 py-1 text-[10px] text-night-ink/80">
                 {profile.role}
               </span>
-              <span className="eyebrow inline-flex items-center gap-1.5 text-[10px] text-night-ink/60">
-                <MapPin size={12} strokeWidth={1.5} /> {profile.city}
-              </span>
+              {profile.city && (
+                <span className="eyebrow inline-flex items-center gap-1.5 text-[10px] text-night-ink/60">
+                  <MapPin size={12} strokeWidth={1.5} /> {profile.city}
+                </span>
+              )}
             </div>
 
             <p className="mt-6 max-w-xl text-[15px] leading-relaxed text-night-ink/70">
