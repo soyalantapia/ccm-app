@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { Badge, Button, Card, toast } from '../../components/ui'
 import type { BadgeTone } from '../../components/ui/Badge'
-import { store } from '../../data/store'
-import type { Application, ApplicationStatus } from '../../data/types'
+import { store, useStore } from '../../data/store'
+import type { Application, ApplicationStatus, ConvocatoriaField } from '../../data/types'
 import { OpsDangerButton } from './OpsDangerButton'
 import { formatDateTime, relativeTime } from './opsFormat'
 
@@ -13,23 +13,32 @@ const STATUS_META: Record<ApplicationStatus, { label: string; tone: BadgeTone }>
   rechazada: { label: 'Rechazada', tone: 'danger' },
 }
 
-/** Filas de la ficha = TODOS los campos del form real "Camino a CCM 2026" (PRD §10.3). */
-const FICHA_ROWS: { key: string; label: string }[] = [
-  { key: 'dni', label: 'DNI' },
-  { key: 'telefono', label: 'Teléfono' },
-  { key: 'email', label: 'Email' },
-  { key: 'instagram', label: 'Instagram' },
-  { key: 'portfolio', label: 'Portfolio' },
-  { key: 'acompanante', label: '¿Solo o con acompañante?' },
-  { key: 'acompananteDatos', label: 'Acompañante' },
-  { key: 'desfile', label: '¿Desfile previo?' },
-  { key: 'extra', label: 'Algo más' },
-]
+/** Humaniza una key sin label (ej. "acompananteDatos" → "Acompañante datos"). */
+function humanize(key: string): string {
+  const s = key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').trim()
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
 
-/** Card de postulación: resumen + ficha completa expandible + decisión (PRD §10.4). */
+/** Card de postulación: resumen + ficha completa expandible + decisión.
+ *  Se arma DINÁMICAMENTE con los campos de la convocatoria real — antes estaba clavada al
+ *  form semilla, así que cualquier convocatoria creada por el organizador rendía "Sin nombre"
+ *  + todo "—". Ahora deriva título, historia y filas de convocatoria.fields (o de app.data). */
 export function OpsApplicationCard({ app }: { app: Application }) {
   const [open, setOpen] = useState(false)
   const meta = STATUS_META[app.status]
+
+  const convocatoria = useStore((s) => s.getConvocatorias().find((c) => c.id === app.convocatoriaId))
+  const fields: ConvocatoriaField[] = convocatoria?.fields ?? []
+  const labelOf = (key: string) => fields.find((f) => f.key === key)?.label ?? humanize(key)
+
+  // Título: un campo tipo nombre; historia: un textarea largo. Con fallback a las keys de app.data.
+  const nameKey = ['nombre', 'name', 'firstName'].find((k) => app.data[k]) ??
+    fields.find((f) => /nombre|name/i.test(f.key))?.key
+  const storyKey = ['historia', 'bio', 'mensaje', 'story'].find((k) => app.data[k]) ??
+    fields.find((f) => f.type === 'textarea')?.key
+  const title = (nameKey && app.data[nameKey]) || 'Postulación'
+  const story = (storyKey && app.data[storyKey]) || ''
+  const rowKeys = Object.keys(app.data).filter((k) => k !== nameKey && k !== storyKey)
 
   const decide = (status: 'aceptada' | 'rechazada') => {
     store.decideApplication(app.id, status)
@@ -42,7 +51,7 @@ export function OpsApplicationCard({ app }: { app: Application }) {
   return (
     <Card className="p-5 md:p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <h3 className="type-serif text-xl text-ink">{app.data.nombre ?? 'Sin nombre'}</h3>
+        <h3 className="type-serif text-xl text-ink">{title}</h3>
         <div className="flex items-center gap-3">
           <span className="text-xs text-ink-soft">{relativeTime(app.ts)}</span>
           <Badge tone={meta.tone}>{meta.label}</Badge>
@@ -52,20 +61,18 @@ export function OpsApplicationCard({ app }: { app: Application }) {
       {/* Historia: truncada de entrada, destacada en serif al expandir */}
       {open ? (
         <blockquote className="mt-4 border-l-2 border-accent pl-4">
-          <p className="type-serif text-lg leading-relaxed text-ink">{app.data.historia ?? '—'}</p>
+          <p className="type-serif text-lg leading-relaxed text-ink">{story || '—'}</p>
         </blockquote>
       ) : (
-        <p className="mt-3 line-clamp-2 text-[15px] leading-relaxed text-ink-soft">
-          {app.data.historia ?? '—'}
-        </p>
+        <p className="mt-3 line-clamp-2 text-[15px] leading-relaxed text-ink-soft">{story || '—'}</p>
       )}
 
-      {open && (
+      {open && rowKeys.length > 0 && (
         <dl className="mt-6 grid gap-x-8 gap-y-4 border-t border-line pt-5 sm:grid-cols-2">
-          {FICHA_ROWS.map((row) => (
-            <div key={row.key}>
-              <dt className="eyebrow text-[10px] text-ink-soft">{row.label}</dt>
-              <dd className="mt-1 break-words text-[15px] text-ink">{app.data[row.key] || '—'}</dd>
+          {rowKeys.map((key) => (
+            <div key={key}>
+              <dt className="eyebrow text-[10px] text-ink-soft">{labelOf(key)}</dt>
+              <dd className="mt-1 break-words text-[15px] text-ink">{app.data[key] || '—'}</dd>
             </div>
           ))}
         </dl>

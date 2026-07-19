@@ -68,19 +68,25 @@ export default function Convocatoria() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  // ¿Ya cerró? El deadline es el ÚLTIMO día hábil (hasta las 23:59). Antes no se chequeaba:
+  // la página decía "Convocatoria abierta" para siempre y aceptaba postulaciones tarde.
+  const closed = new Date(`${convocatoria.deadline}T23:59:59`) < new Date()
+
   return (
     <>
       {/* ─── Hero editorial ─── */}
       <section className="border-b border-line">
         <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 md:grid-cols-12 md:gap-12 md:py-20">
           <div className="md:col-span-7 animate-rise">
-            <Eyebrow>Convocatoria abierta</Eyebrow>
+            <Eyebrow>{closed ? 'Convocatoria cerrada' : 'Convocatoria abierta'}</Eyebrow>
             <DisplayTitle title={convocatoria.title} />
             <p className="mt-6 max-w-xl text-[15px] leading-relaxed text-ink-soft md:text-base">
               {convocatoria.intro}
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
-              <Badge tone="accent">Cierra el {formatDeadline(convocatoria.deadline)}</Badge>
+              <Badge tone={closed ? 'neutral' : 'accent'}>
+                {closed ? 'Cerró el' : 'Cierra el'} {formatDeadline(convocatoria.deadline)}
+              </Badge>
               {event && (
                 <Link
                   to={`/eventos/${event.slug}`}
@@ -184,6 +190,13 @@ export default function Convocatoria() {
             application={existingApplication}
             event={event}
           />
+        ) : closed ? (
+          <EmptyState
+            title="La convocatoria ya cerró"
+            action={<ButtonLink to="/" variant="outline">Volver al inicio</ButtonLink>}
+          >
+            Cerró el {formatDeadline(convocatoria.deadline)}. Seguí las novedades para la próxima edición.
+          </EmptyState>
         ) : (
           <div className="grid gap-10 md:grid-cols-12 md:gap-12">
             <aside className="md:col-span-4">
