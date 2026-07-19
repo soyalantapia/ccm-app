@@ -29,6 +29,10 @@ export async function register(
   const event = await prisma.event.findUnique({ where: { id: eventId } })
   if (!event) throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
 
+  // Evento finalizado: cerrar la inscripción (antes se podía inscribir a un evento pasado y
+  // recibir un QR para algo que ya sucedió). El front revierte el optimista ante este 409.
+  if (event.past) throw conflict('EVENT_PAST', 'Este evento ya finalizó; las inscripciones están cerradas.')
+
   // Gate socioOnly a nivel evento (el bloque lo hereda).
   if (event.socioOnly) {
     const membership = await prisma.membership.findUnique({ where: { deviceId } })
