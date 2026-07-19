@@ -217,6 +217,12 @@ export class LocalDataStore implements DataStore {
     return readJSON<Registration[]>(K.registrations, [])
   }
 
+  generalRegistrationCount(eventId: string): number {
+    return this.getRegistrations().filter(
+      (r) => r.eventId === eventId && !r.blockId && r.status === 'confirmada',
+    ).length
+  }
+
   isRegistered(eventId: string, blockId?: string): boolean {
     return this.getRegistrations().some(
       (r) =>

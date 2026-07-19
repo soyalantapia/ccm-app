@@ -41,6 +41,12 @@ export interface Availability {
   full: boolean
 }
 
+/** Inscripciones GENERALES (sin bloque) confirmadas de un evento, server-wide (todos los devices).
+ *  El admin lo necesita porque getRegistrations del front es device-scoped (solo las del admin ≈0). */
+export async function generalRegistrationCount(eventId: string): Promise<number> {
+  return prisma.registration.count({ where: { eventId, blockId: null, status: 'confirmada' } })
+}
+
 /** Cupo real = seedTaken (baseline) + inscripciones confirmadas. Lo calcula el SERVER. */
 export async function blockAvailability(blockId: string): Promise<Availability> {
   const block = await prisma.eventBlock.findUnique({ where: { id: blockId } })

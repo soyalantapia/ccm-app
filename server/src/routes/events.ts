@@ -38,3 +38,13 @@ eventsRouter.get('/blocks/:id/availability', async (req, res, next) => {
     next(err)
   }
 })
+
+/** GET /api/v1/events/:id/general-count — inscripciones generales (sin bloque) confirmadas,
+ *  server-wide. Público como availability (solo un conteo, sin PII). */
+eventsRouter.get('/events/:id/general-count', async (req, res, next) => {
+  try {
+    res.json({ general: await eventService.generalRegistrationCount(req.params.id) })
+  } catch (err) {
+    next(err)
+  }
+})

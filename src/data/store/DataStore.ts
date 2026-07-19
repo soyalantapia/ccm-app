@@ -98,6 +98,9 @@ export interface DataStore {
   updateBlock(id: string, patch: Partial<EventBlock>): void
   deleteBlock(id: string): void
   blockAvailability(blockId: string): BlockAvailability
+  /** Inscripciones generales (sin bloque) confirmadas de un evento, server-wide (para el admin).
+   *  getRegistrations() es device-scoped; esto agrega todos los devices (como blockAvailability). */
+  generalRegistrationCount(eventId: string): number
   getRegistrations(): Registration[]
   isRegistered(eventId: string, blockId?: string): boolean
   register(eventId: string, blockId?: string): Registration | null

@@ -67,6 +67,8 @@ export class RemoteDataStore extends LocalDataStore {
   private regs?: Registration[]
   private availCache = new Map<string, BlockAvailability>()
   private availInflight = new Set<string>()
+  private generalCounts = new Map<string, number>()
+  private generalInflight = new Set<string>()
   private tmpSeq = 0
 
   // Caché de Fase E (catálogo / galerías / contenido / favoritos / descargas).
@@ -214,6 +216,20 @@ export class RemoteDataStore extends LocalDataStore {
     if (cached) return cached
     this.fetchAvailability(blockId) // dispara fetch; mientras, estimación local
     return super.blockAvailability(blockId)
+  }
+  override generalRegistrationCount(eventId: string): number {
+    const cached = this.generalCounts.get(eventId)
+    if (cached !== undefined) return cached
+    this.fetchGeneralCount(eventId) // stale-while-revalidate (espeja blockAvailability)
+    return super.generalRegistrationCount(eventId)
+  }
+  private fetchGeneralCount(eventId: string): void {
+    if (this.generalInflight.has(eventId)) return
+    this.generalInflight.add(eventId)
+    this.api
+      .get<{ general: number }>(`/events/${eventId}/general-count`)
+      .then((r) => { this.generalCounts.set(eventId, r.general); this.generalInflight.delete(eventId); bus.emit('registrations') })
+      .catch(() => this.generalInflight.delete(eventId))
   }
   override getRegistrations(): Registration[] {
     return this.regs ?? super.getRegistrations()
