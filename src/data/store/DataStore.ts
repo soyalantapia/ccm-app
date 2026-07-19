@@ -172,7 +172,11 @@ export interface DataStore {
   updateConvocatoria(id: string, patch: Partial<Convocatoria>): void
   deleteConvocatoria(id: string): void
   submitApplication(convocatoriaId: string, data: Record<string, string>): Application
+  /** TODAS las postulaciones (vista del organizador). */
   getApplications(): Application[]
+  /** Solo las del PROPIO device ("Mis postulaciones" / guard "ya te postulaste"). NUNCA la
+   *  lista admin, aunque haya sesión de organizador en la misma pestaña. */
+  getMyApplications(): Application[]
   decideApplication(applicationId: string, status: Exclude<ApplicationStatus, 'preinscripta'>): void
 
   /* Analytics */

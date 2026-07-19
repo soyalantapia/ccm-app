@@ -76,7 +76,8 @@ export class RemoteDataStore extends LocalDataStore {
   // Resto de Fase G: sponsors / planes / convocatorias / postulaciones.
   private sponsors?: Sponsor[]
   private plans?: TicketPlan[]
-  private applications?: Application[]
+  private applications?: Application[] // device-scoped ("Mis postulaciones")
+  private adminApplications?: Application[] // admin-scoped (panel del organizador) — caché SEPARADO
   private membership?: Membership
   private benefits?: Benefit[]
   private banners?: Banner[]
@@ -98,7 +99,10 @@ export class RemoteDataStore extends LocalDataStore {
       this.hydrateRegistrations()
       this.hydrateDeviceContent()
       this.hydrateMembership()
-      this.hydrateApplications()
+      this.hydrateApplications() // device ("Mis postulaciones")
+      // Si ya hay sesión de organizador (token en sessionStorage al recargar), hidratar también
+      // el caché admin — el panel /admin/postulaciones lo necesita sin re-loguear por el gate.
+      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ccm:admin-token')) this.hydrateAdminApplications()
       this.hydrateBenefits()
     })
     if (typeof window !== 'undefined') {
@@ -318,7 +322,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.hydrateBenefits()
     this.hydrateBanners()
     this.hydrateNotas()
-    this.hydrateApplications() // ahora con vista admin (TODAS) — antes el panel veía solo las del device del admin (≈0)
+    this.hydrateAdminApplications() // lista COMPLETA en un caché aparte (no pisa las del device)
     this.hydrateConvocatorias() // lista completa para gestionarlas (antes solo venían del seed)
   }
 
@@ -474,20 +478,24 @@ export class RemoteDataStore extends LocalDataStore {
     this.api.del(`/admin/convocatorias/${id}`).catch(() => { this.convocatoriasList = prev; bus.emit('convocatorias') })
   }
   /** Con token de admin en sesión trae TODAS (GET /admin/applications) para revisar/decidir;
-   *  si no, las del PROPIO device (GET /applications, "Mis postulaciones"). Espeja el patrón
-   *  admin-aware de benefits/banners/notas. */
-  private applicationsPath(): string {
-    const hasAdmin = typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('ccm:admin-token')
-    return hasAdmin ? '/admin/applications' : '/applications'
-  }
-  /** Postulaciones (device o admin según sesión). Antes solo device-scoped → el panel del
-   *  organizador (AdminPostulaciones/Dashboard/AdminPersonas) veía vacío en prod. */
+   *  device (this.applications, GET /applications) para "Mis postulaciones" del usuario, y una
+   *  admin SEPARADA (this.adminApplications, GET /admin/applications) para el panel del organizador.
+   *  Cachés distintos: loguearse como admin en la misma pestaña NO debe contaminar las postulaciones
+   *  del usuario (antes applicationsPath() reenrutaba el ÚNICO caché a /admin y filtraba las de todos). */
   private hydrateApplications(): void {
-    this.api.get<Application[]>(this.applicationsPath()).then((a) => { this.applications = a; bus.emit('applications') }).catch(() => {})
+    this.api.get<Application[]>('/applications').then((a) => { this.applications = a; bus.emit('applications') }).catch(() => {})
+  }
+  private hydrateAdminApplications(): void {
+    this.api.get<Application[]>('/admin/applications').then((a) => { this.adminApplications = a; bus.emit('applications') }).catch(() => {})
   }
 
+  /** TODAS (vista del organizador): la lista admin si está cargada, si no cae al device/seed. */
   override getApplications(): Application[] {
-    return this.applications ?? super.getApplications()
+    return this.adminApplications ?? this.applications ?? super.getApplications()
+  }
+  /** Solo las del PROPIO device (vistas de usuario): NUNCA la lista admin. */
+  override getMyApplications(): Application[] {
+    return this.applications ?? super.getMyApplications()
   }
 
   /* ─── Membresía (Fase D parcial): persiste server-side, antes solo en localStorage ─── */
@@ -570,13 +578,13 @@ export class RemoteDataStore extends LocalDataStore {
     return app
   }
   override decideApplication(applicationId: string, status: Exclude<ApplicationStatus, 'preinscripta'>): void {
-    if (!this.applications) {
+    if (!this.adminApplications) {
       // hidratar bajo demanda (el admin abrió postulaciones)
-      this.refetch<Application[]>('/admin/applications', (v) => (this.applications = v), 'applications')
+      this.refetch<Application[]>('/admin/applications', (v) => (this.adminApplications = v), 'applications')
     }
-    if (this.applications) this.applications = this.applications.map((a) => (a.id === applicationId ? { ...a, status, decidedAt: new Date().toISOString() } : a))
+    if (this.adminApplications) this.adminApplications = this.adminApplications.map((a) => (a.id === applicationId ? { ...a, status, decidedAt: new Date().toISOString() } : a))
     bus.emit('applications')
-    this.api.patch(`/admin/applications/${applicationId}`, { status }).then(() => this.refetch<Application[]>('/admin/applications', (v) => (this.applications = v), 'applications')).catch(() => {})
+    this.api.patch(`/admin/applications/${applicationId}`, { status }).then(() => this.refetch<Application[]>('/admin/applications', (v) => (this.adminApplications = v), 'applications')).catch(() => {})
   }
 
   override createSponsor(input: NewSponsor): Sponsor {

@@ -655,6 +655,11 @@ export class LocalDataStore implements DataStore {
     return [...seeded, ...local].sort((a, b) => b.ts.localeCompare(a.ts))
   }
 
+  /** Demo: no hay backend admin, así que "mis" = todas (los consumidores filtran !fromSeed). */
+  getMyApplications(): Application[] {
+    return this.getApplications()
+  }
+
   decideApplication(applicationId: string, status: Exclude<ApplicationStatus, 'preinscripta'>): void {
     const overrides = readJSON<Record<string, AppOverride>>(K.applicationOverrides, {})
     overrides[applicationId] = { status, decidedAt: new Date().toISOString() }

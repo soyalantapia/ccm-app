@@ -41,7 +41,7 @@ export default function Convocatoria() {
   /** Postulación previa de ESTE dispositivo (las del seed no cuentan). */
   const existingApplication = useStore((s) =>
     convocatoria
-      ? s.getApplications().find((a) => a.convocatoriaId === convocatoria.id && !a.fromSeed)
+      ? s.getMyApplications().find((a) => a.convocatoriaId === convocatoria.id && !a.fromSeed)
       : undefined,
   )
   const [justSubmitted, setJustSubmitted] = useState<Application | null>(null)
