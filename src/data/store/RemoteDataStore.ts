@@ -9,6 +9,7 @@ import type {
   NewGallery,
   NewCatalogProfile,
   NewConvocatoria,
+  HydratableResource,
 } from './DataStore'
 import { slugify } from './overlay'
 import { newId } from '../../lib/storage'
@@ -181,6 +182,18 @@ export class RemoteDataStore extends LocalDataStore {
     this.fetchAvailability(blockId)
   }
 
+  /** true mientras el caché del recurso sea undefined (fetch en vuelo). Una vez que el backend
+   *  respondió (aunque sea []), deja de estar "hidratando" → las páginas :slug pueden decidir
+   *  "no existe" sin flashear el EmptyState de "link vencido". */
+  override isHydrating(resource: HydratableResource): boolean {
+    switch (resource) {
+      case 'events': return this.events === undefined
+      case 'catalog': return this.catalog === undefined
+      case 'galleries': return this.galleries === undefined
+      case 'notas': return this.notas === undefined
+    }
+  }
+
   override getEvents(): EventItem[] {
     return this.events ?? super.getEvents()
   }
@@ -221,8 +234,10 @@ export class RemoteDataStore extends LocalDataStore {
    * dispara el POST. Si el server responde 409 (lleno / ya inscripto), se REVIERTE.
    */
   override register(eventId: string, blockId?: string): Registration | null {
-    if (!this.regs) return super.register(eventId, blockId) // pre-hidratación: local
-    const existing = this.regs.find(
+    // Pre-hidratación (this.regs undefined): tratar como [] y SÍ postear, en vez de super.register
+    // (solo localStorage) — que se perdía al llegar hydrateRegistrations y pisar this.regs.
+    const regs = this.regs ?? []
+    const existing = regs.find(
       (r) =>
         r.status === 'confirmada' &&
         r.eventId === eventId &&
@@ -238,13 +253,15 @@ export class RemoteDataStore extends LocalDataStore {
       ts: new Date().toISOString(),
       status: 'confirmada',
     }
-    this.regs = [...this.regs, provisional]
+    this.regs = [...regs, provisional]
     bus.emit('registrations')
 
     this.api
       .post<Registration>('/registrations', { eventId, ...(blockId ? { blockId } : {}) })
       .then((server) => {
-        this.regs = (this.regs ?? []).map((r) => (r.id === provisional.id ? server : r))
+        // Robusto ante una hidratación que haya pisado this.regs mientras el POST estaba en vuelo:
+        // sacar el provisional y cualquier dup del server, y agregar el server reg.
+        this.regs = [...(this.regs ?? []).filter((r) => r.id !== provisional.id && r.id !== server.id), server]
         this.refreshAvailability(blockId)
         bus.emit('registrations')
         // El código de beneficios está gateado por inscripción confirmada; re-hidratar para que

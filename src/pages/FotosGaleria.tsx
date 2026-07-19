@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Heart } from 'lucide-react'
-import { ButtonLink, EmptyState, Eyebrow, Img } from '../components/ui'
+import { ButtonLink, EmptyState, Eyebrow, Img, PagePending } from '../components/ui'
 import { useStore } from '../data/store'
 import { PhotoLightbox } from '../features/fotos'
 
@@ -10,9 +10,11 @@ export default function FotosGaleria() {
   const gallery = useStore((s) => (slug ? s.getGallery(slug) : undefined))
   const sponsor = useStore((s) => (gallery ? s.getSponsor(gallery.sponsorId) : undefined))
   const favorites = useStore((s) => s.getFavorites())
+  const hydrating = useStore((s) => s.isHydrating('galleries'))
   const [index, setIndex] = useState<number | null>(null)
 
   if (!gallery) {
+    if (hydrating) return <PagePending />
     return (
       <section className="mx-auto max-w-6xl px-5 py-16 md:py-24">
         <EmptyState

@@ -30,6 +30,7 @@ import type {
 import type {
   BlockAvailability,
   DataStore,
+  HydratableResource,
   NewBlock,
   NewCampaign,
   NewCatalogProfile,
@@ -133,6 +134,11 @@ export class LocalDataStore implements DataStore {
     writeJSON(K.membership, membership)
     this.track('membership_purchased', { tier: 'socio', total: paid })
     return membership
+  }
+
+  /** Demo/seed: nunca "hidratando" — el seed es autoritativo al instante. */
+  isHydrating(_resource: HydratableResource): boolean {
+    return false
   }
 
   /* ─── Eventos ─── */

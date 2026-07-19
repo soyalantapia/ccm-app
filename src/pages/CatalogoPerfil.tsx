@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowDown, ArrowLeft, ArrowRight, Maximize2, MessageCircle } from 'lucide-react'
-import { ButtonLink, EmptyState, Eyebrow, Img } from '../components/ui'
+import { ButtonLink, EmptyState, Eyebrow, Img, PagePending } from '../components/ui'
 import { store, useStore } from '../data/store'
 import { AuthorBlock, PortfolioViewer } from '../features/catalogo'
 import { formatMoney } from '../features/tickets/format'
@@ -23,6 +23,7 @@ export default function CatalogoPerfil() {
   const { slug = '' } = useParams()
   const catalog = useStore((s) => s.getCatalog())
   const profile = useStore((s) => s.getCatalogProfile(slug))
+  const hydrating = useStore((s) => s.isHydrating('catalog'))
   const [openIndex, setOpenIndex] = useState<number | null>(null)
 
   const profileId = profile?.id
@@ -35,6 +36,7 @@ export default function CatalogoPerfil() {
   }, [slug])
 
   if (!profile) {
+    if (hydrating) return <PagePending />
     return (
       <section className="mx-auto max-w-6xl px-5 py-16 md:py-24">
         <EmptyState

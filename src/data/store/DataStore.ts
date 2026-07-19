@@ -59,6 +59,9 @@ export type NewCampaign = Omit<AdCampaign, 'id' | 'ts'>
 /** Alta de convocatoria desde el admin (el store genera id + slug). */
 export type NewConvocatoria = Omit<Convocatoria, 'id' | 'slug'> & { slug?: string }
 
+/** Recursos hidratados en bloque desde el backend (para isHydrating → páginas :slug). */
+export type HydratableResource = 'events' | 'catalog' | 'galleries' | 'notas'
+
 /**
  * DataStore — única puerta de acceso a datos de TODA la UI (patrón repositorio).
  * Fase 0: seed estático + localStorage. Fase 1: se enchufa un backend real
@@ -74,6 +77,13 @@ export interface DataStore {
   getMembership(): Membership
   isSocio(): boolean
   becomeSocio(paid: number): Membership
+
+  /**
+   * ¿El recurso todavía se está hidratando del backend? Sirve para distinguir "cargando" de
+   * "no existe" en las páginas :slug (evita el flash de "link vencido" cuando el slug existe en
+   * prod pero aún no en el caché). Local siempre false (el seed es autoritativo al instante).
+   */
+  isHydrating(resource: HydratableResource): boolean
 
   /* Eventos e inscripciones */
   getEvents(): EventItem[]
