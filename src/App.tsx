@@ -15,7 +15,7 @@ import { ProfileSheetProvider } from './components/profile/ProfileSheetProvider'
 import { InstallBanner } from './components/layout/InstallBanner'
 import { AdminPending, PagePending, ToastHost } from './components/ui'
 import { lazyWithReload } from './lib/lazyWithReload'
-import { track } from './lib/track'
+import { store } from './data/store'
 import NotFound from './pages/NotFound'
 
 // Landing is the entry route: imported eagerly so the first paint skips a
@@ -68,7 +68,7 @@ function SA({ children }: { children: ReactNode }) {
 function Root() {
   const location = useLocation()
   useEffect(() => {
-    track('page_view', { path: location.pathname })
+    store.track('page_view', { path: location.pathname })
   }, [location.pathname])
 
   return (

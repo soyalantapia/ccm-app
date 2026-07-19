@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Play } from 'lucide-react'
-import { track } from '../../lib/track'
+import { store } from '../../data/store'
 
 interface YouTubeEmbedProps {
   youtubeId: string
@@ -34,7 +34,7 @@ export function YouTubeEmbed({ youtubeId, title, trackPayload, className }: YouT
     <button
       onClick={() => {
         setPlaying(true)
-        track('video_play', { youtubeId, title, ...trackPayload })
+        store.track('video_play', { youtubeId, title, ...trackPayload })
       }}
       className={`group relative block aspect-video w-full overflow-hidden rounded-md bg-night text-left ${className ?? ''}`}
       aria-label={`Reproducir: ${title}`}
