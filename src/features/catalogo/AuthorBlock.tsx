@@ -26,6 +26,7 @@ export function AuthorBlock({ profile, onViewPieces }: AuthorBlockProps) {
               alt={profile.name}
               ratio="4/5"
               className="rounded-md"
+              imgClassName={profile.photo.endsWith('.svg') ? 'object-contain' : undefined}
             />
           </div>
 

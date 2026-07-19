@@ -71,13 +71,18 @@ export default function Fotos() {
         onChange={(id) => setTab(id as TabId)}
       />
 
-      {tab === 'galerias' && (
-        <div className="mt-8 grid animate-rise gap-5 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
-          {galleries.map((gallery, i) => (
-            <GalleryCard key={gallery.id} gallery={gallery} featured={i === 0} />
-          ))}
-        </div>
-      )}
+      {tab === 'galerias' &&
+        (galleries.length > 0 ? (
+          <div className="mt-8 grid animate-rise gap-5 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
+            {galleries.map((gallery, i) => (
+              <GalleryCard key={gallery.id} gallery={gallery} featured={i === 0} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="Todavía no hay galerías publicadas">
+            Las fotos de cada jornada se publican acá cuando el evento arranca.
+          </EmptyState>
+        ))}
 
       {tab === 'favoritos' &&
         (favoriteEntries.length > 0 ? (
