@@ -14,8 +14,10 @@ export async function submitApplication(
   if (!cv) throw notFound('CONVOCATORIA_NOT_FOUND', 'Convocatoria no encontrada')
   // Rechazar después del cierre (fin del día del deadline). El front también lo gatea, pero la
   // fuente de verdad es el server: sin esto se aceptaban postulaciones tarde (bug cazabug).
-  const closeOfDay = new Date(cv.deadline)
-  closeOfDay.setHours(23, 59, 59, 999)
+  // Fin del día del deadline anclado a la TZ de Córdoba (UTC-3), NO a la del proceso: en Railway
+  // (UTC) setHours(23,59,59) cerraba a las 20:59 ART (~3h antes) y rechazaba postulaciones válidas.
+  const dateStr = cv.deadline.toISOString().slice(0, 10) // 'YYYY-MM-DD' (deadline date-only)
+  const closeOfDay = new Date(`${dateStr}T23:59:59.999-03:00`)
   if (new Date() > closeOfDay) throw conflict('CONVOCATORIA_CLOSED', 'La convocatoria ya cerró.')
   const row = await prisma.application.create({
     data: { id: `app_${randomUUID()}`, convocatoriaId, deviceId: deviceId ?? null, status: 'preinscripta', data, fromSeed: false },

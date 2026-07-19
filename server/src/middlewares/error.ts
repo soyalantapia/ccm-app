@@ -54,6 +54,14 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
       return
     }
   }
+  // PrismaClientValidationError: input con tipo/forma equivocada (campo required ausente, enum
+  // inválido, string donde va número). Es culpa del cliente → 400, no un 500 INTERNAL. Cubre los
+  // writes admin/públicos que no tienen zod por-campo (defensa transversal). No filtra el detalle
+  // de Prisma al cliente (puede tener nombres de columnas), solo un 400 genérico.
+  if (err && typeof err === 'object' && (err as { name?: unknown }).name === 'PrismaClientValidationError') {
+    res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'Datos inválidos o incompletos.' } })
+    return
+  }
   // No filtrar internals ni PII al cliente; loguear server-side (sin payloads crudos).
   console.error('[error]', err instanceof Error ? err.stack : err)
   res.status(500).json({ error: { code: 'INTERNAL', message: 'Error interno' } })

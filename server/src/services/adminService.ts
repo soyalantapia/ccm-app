@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js'
 import { toEventItem, toEventBlock, toContentItem, toSponsor, toGallery, toCatalogProfile, toConvocatoria } from '../lib/serialize.js'
 import { conflict } from '../lib/errors.js'
 import { parseDate } from '../lib/dates.js'
+import { cleanStoredUrl } from '../lib/url.js'
 import type { EventItem, EventBlock, ContentItem, Sponsor, Gallery, CatalogProfile, PlanId, Convocatoria } from '@domain/types'
 
 /* ─── Eventos ─── */
@@ -18,7 +19,7 @@ export async function createEvent(e: EventItem): Promise<EventItem> {
     data: {
       id: e.id, slug: e.slug, type: e.type, title: e.title, subtitle: e.subtitle ?? null,
       dateLabel: e.dateLabel, startDate: parseDate(e.startDate, 'fecha del evento'), timeLabel: e.timeLabel ?? null,
-      venue: e.venue, address: e.address, mapsUrl: e.mapsUrl, description: e.description,
+      venue: e.venue, address: e.address, mapsUrl: cleanStoredUrl(e.mapsUrl, 'mapa') ?? '', description: e.description,
       cover: e.cover, price: e.price ?? null, past: e.past ?? false, socioOnly: e.socioOnly ?? false,
     },
   })
@@ -33,26 +34,33 @@ export async function createEvent(e: EventItem): Promise<EventItem> {
 
 export async function updateEvent(id: string, patch: Partial<EventItem>): Promise<EventItem> {
   const data: Record<string, unknown> = {}
-  for (const k of ['type', 'title', 'subtitle', 'dateLabel', 'timeLabel', 'venue', 'address', 'mapsUrl', 'description', 'cover', 'price', 'past', 'socioOnly', 'slug'] as const) {
+  for (const k of ['type', 'title', 'subtitle', 'dateLabel', 'timeLabel', 'venue', 'address', 'description', 'cover', 'price', 'past', 'socioOnly', 'slug'] as const) {
     if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   }
+  if ('mapsUrl' in patch) data.mapsUrl = cleanStoredUrl(patch.mapsUrl, 'mapa') ?? '' // valida esquema (no javascript:/data:)
   if (patch.startDate) data.startDate = parseDate(patch.startDate, 'fecha del evento')
-  await prisma.event.update({ where: { id }, data })
-  if (patch.sponsorIds) {
-    await prisma.eventSponsor.deleteMany({ where: { eventId: id } })
-    if (patch.sponsorIds.length) {
-      await prisma.eventSponsor.createMany({
-        data: patch.sponsorIds.map((sponsorId) => ({ eventId: id, sponsorId })),
-        skipDuplicates: true,
-      })
+  await prisma.$transaction(async (tx) => {
+    await tx.event.update({ where: { id }, data })
+    if (patch.sponsorIds) {
+      await tx.eventSponsor.deleteMany({ where: { eventId: id } })
+      if (patch.sponsorIds.length) {
+        await tx.eventSponsor.createMany({
+          data: patch.sponsorIds.map((sponsorId) => ({ eventId: id, sponsorId })),
+          skipDuplicates: true,
+        })
+      }
     }
-  }
+  })
   return readEvent(id)
 }
 
 export async function deleteEvent(id: string): Promise<void> {
   const regs = await prisma.registration.count({ where: { eventId: id, status: 'confirmada' } })
   if (regs > 0) throw conflict('HAS_REGISTRATIONS', `No se puede borrar: tiene ${regs} inscripciones confirmadas`)
+  // Convocatoria.eventId es FK RESTRICT: sin este pre-chequeo el delete tira P2003 y el errorHandler
+  // lo mapea al mensaje genérico de "galerías". Damos un 409 claro.
+  const convs = await prisma.convocatoria.count({ where: { eventId: id } })
+  if (convs > 0) throw conflict('HAS_CONVOCATORIAS', `No se puede borrar: tiene ${convs} convocatoria(s) asociada(s)`)
   await prisma.event.delete({ where: { id } }) // cascade a bloques sin inscripciones
 }
 
@@ -125,11 +133,13 @@ export async function createSponsor(s: Sponsor): Promise<Sponsor> {
 export async function updateSponsor(id: string, patch: Partial<Sponsor>): Promise<Sponsor> {
   const data: Record<string, unknown> = {}
   for (const k of ['name', 'industry', 'level', 'exclusive', 'tagline', 'banner'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
-  await prisma.sponsor.update({ where: { id }, data })
-  if (patch.creatives) {
-    await prisma.sponsorCreative.deleteMany({ where: { sponsorId: id } })
-    if (patch.creatives.length) await prisma.sponsorCreative.createMany({ data: creativeRows(id, patch.creatives) })
-  }
+  await prisma.$transaction(async (tx) => {
+    await tx.sponsor.update({ where: { id }, data })
+    if (patch.creatives) {
+      await tx.sponsorCreative.deleteMany({ where: { sponsorId: id } })
+      if (patch.creatives.length) await tx.sponsorCreative.createMany({ data: creativeRows(id, patch.creatives) })
+    }
+  })
   return readSponsor(id)
 }
 export async function deleteSponsor(id: string): Promise<void> {
@@ -153,11 +163,13 @@ export async function createGallery(g: Gallery): Promise<Gallery> {
 export async function updateGallery(id: string, patch: Partial<Gallery>): Promise<Gallery> {
   const data: Record<string, unknown> = {}
   for (const k of ['slug', 'title', 'eventLabel', 'date', 'cover', 'sponsorId'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
-  await prisma.gallery.update({ where: { id }, data })
-  if (patch.photos) {
-    await prisma.photo.deleteMany({ where: { galleryId: id } })
-    if (patch.photos.length) await prisma.photo.createMany({ data: patch.photos.map((p, i) => ({ id: p.id, galleryId: id, src: p.src, alt: p.alt, order: i })) })
-  }
+  await prisma.$transaction(async (tx) => {
+    await tx.gallery.update({ where: { id }, data })
+    if (patch.photos) {
+      await tx.photo.deleteMany({ where: { galleryId: id } })
+      if (patch.photos.length) await tx.photo.createMany({ data: patch.photos.map((p, i) => ({ id: p.id, galleryId: id, src: p.src, alt: p.alt, order: i })) })
+    }
+  })
   return readGallery(id)
 }
 export async function deleteGallery(id: string): Promise<void> {
@@ -177,11 +189,13 @@ export async function createCatalogProfile(c: CatalogProfile): Promise<CatalogPr
 export async function updateCatalogProfile(id: string, patch: Partial<CatalogProfile>): Promise<CatalogProfile> {
   const data: Record<string, unknown> = {}
   for (const k of ['slug', 'name', 'role', 'kind', 'platform', 'city', 'bio', 'projects', 'photo', 'instagram', 'whatsapp', 'verified', 'participatesIn'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
-  await prisma.catalogProfile.update({ where: { id }, data })
-  if (patch.portfolio) {
-    await prisma.portfolioPiece.deleteMany({ where: { profileId: id } })
-    if (patch.portfolio.length) await prisma.portfolioPiece.createMany({ data: patch.portfolio.map((p, i) => ({ id: p.id, profileId: id, image: p.image, title: p.title, caption: p.caption ?? null, price: p.price ?? null, order: i })) })
-  }
+  await prisma.$transaction(async (tx) => {
+    await tx.catalogProfile.update({ where: { id }, data })
+    if (patch.portfolio) {
+      await tx.portfolioPiece.deleteMany({ where: { profileId: id } })
+      if (patch.portfolio.length) await tx.portfolioPiece.createMany({ data: patch.portfolio.map((p, i) => ({ id: p.id, profileId: id, image: p.image, title: p.title, caption: p.caption ?? null, price: p.price ?? null, order: i })) })
+    }
+  })
   return readCatalog(id)
 }
 export async function deleteCatalogProfile(id: string): Promise<void> {
@@ -192,7 +206,7 @@ export async function deleteCatalogProfile(id: string): Promise<void> {
 export async function updatePlan(id: PlanId, patch: { price?: number | null; mpLink?: string }): Promise<void> {
   const data: Record<string, unknown> = {}
   if ('price' in patch) data.price = patch.price
-  if ('mpLink' in patch) data.mpLink = patch.mpLink
+  if ('mpLink' in patch) data.mpLink = cleanStoredUrl(patch.mpLink, 'link de pago')
   await prisma.ticketPlan.update({ where: { id }, data })
 }
 
@@ -219,7 +233,7 @@ function logoRows(logos: NonNullable<Convocatoria['logos']>) {
   return logos.map((l, i) => ({
     name: l.name,
     logoUrl: l.logoUrl,
-    url: l.url ?? null,
+    url: cleanStoredUrl(l.url, 'link del logo'),
     rubro: l.rubro ?? null,
     order: i,
   }))
@@ -243,7 +257,7 @@ export async function createConvocatoria(cv: Convocatoria): Promise<Convocatoria
       deadline: parseDate(cv.deadline, 'fecha límite'),
       eventId: cv.eventId,
       ctaLabel: cv.ctaLabel ?? null,
-      ctaUrl: cv.ctaUrl ?? null,
+      ctaUrl: cleanStoredUrl(cv.ctaUrl, 'CTA'),
       fields: { create: fieldRows(cv.fields) },
       ...(cv.logos && cv.logos.length ? { logos: { create: logoRows(cv.logos) } } : {}),
     },
@@ -253,19 +267,22 @@ export async function createConvocatoria(cv: Convocatoria): Promise<Convocatoria
 
 export async function updateConvocatoria(id: string, patch: Partial<Convocatoria>): Promise<Convocatoria> {
   const data: Record<string, unknown> = {}
-  for (const k of ['slug', 'title', 'intro', 'eventId', 'ctaLabel', 'ctaUrl'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
+  for (const k of ['slug', 'title', 'intro', 'eventId', 'ctaLabel'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
+  if ('ctaUrl' in patch) data.ctaUrl = cleanStoredUrl(patch.ctaUrl, 'CTA')
   if ('deadline' in patch && patch.deadline) data.deadline = parseDate(patch.deadline, 'fecha límite')
-  await prisma.convocatoria.update({ where: { id }, data })
-  if (patch.fields) {
-    // Reemplazo completo de los campos (createMany con order recalculado). createMany NO es
-    // relacional → necesita la FK convocatoriaId en cada fila (a diferencia del nested create).
-    await prisma.convocatoriaField.deleteMany({ where: { convocatoriaId: id } })
-    if (patch.fields.length) await prisma.convocatoriaField.createMany({ data: fieldRows(patch.fields).map((r) => ({ ...r, convocatoriaId: id })) })
-  }
-  if (patch.logos) {
-    await prisma.convocatoriaLogo.deleteMany({ where: { convocatoriaId: id } })
-    if (patch.logos.length) await prisma.convocatoriaLogo.createMany({ data: logoRows(patch.logos).map((r) => ({ ...r, convocatoriaId: id })) })
-  }
+  await prisma.$transaction(async (tx) => {
+    await tx.convocatoria.update({ where: { id }, data })
+    if (patch.fields) {
+      // Reemplazo completo de los campos (createMany con order recalculado). createMany NO es
+      // relacional → necesita la FK convocatoriaId en cada fila (a diferencia del nested create).
+      await tx.convocatoriaField.deleteMany({ where: { convocatoriaId: id } })
+      if (patch.fields.length) await tx.convocatoriaField.createMany({ data: fieldRows(patch.fields).map((r) => ({ ...r, convocatoriaId: id })) })
+    }
+    if (patch.logos) {
+      await tx.convocatoriaLogo.deleteMany({ where: { convocatoriaId: id } })
+      if (patch.logos.length) await tx.convocatoriaLogo.createMany({ data: logoRows(patch.logos).map((r) => ({ ...r, convocatoriaId: id })) })
+    }
+  })
   return readConvocatoria(id)
 }
 
