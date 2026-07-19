@@ -37,6 +37,23 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
       return
     }
   }
+  // Errores de http-errors que emite express.json() ANTES de tocar una ruta: JSON malformado
+  // (400) y body > límite (413). Sin esto caían al 500 INTERNAL de abajo (respuesta engañosa +
+  // ruido en los logs de error por lo que en realidad es una request malformada del cliente).
+  if (err && typeof err === 'object' && ('status' in err || 'statusCode' in err)) {
+    const raw = (err as { status?: unknown; statusCode?: unknown })
+    const status = typeof raw.status === 'number' ? raw.status : typeof raw.statusCode === 'number' ? raw.statusCode : undefined
+    if (status !== undefined && status >= 400 && status < 500) {
+      const tooLarge = status === 413 || (err as { type?: unknown }).type === 'entity.too.large'
+      res.status(status).json({
+        error: {
+          code: tooLarge ? 'PAYLOAD_TOO_LARGE' : 'BAD_REQUEST',
+          message: tooLarge ? 'El cuerpo de la solicitud es demasiado grande.' : 'Solicitud malformada (JSON inválido).',
+        },
+      })
+      return
+    }
+  }
   // No filtrar internals ni PII al cliente; loguear server-side (sin payloads crudos).
   console.error('[error]', err instanceof Error ? err.stack : err)
   res.status(500).json({ error: { code: 'INTERNAL', message: 'Error interno' } })
