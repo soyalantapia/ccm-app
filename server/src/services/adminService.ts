@@ -197,9 +197,10 @@ export async function updatePlan(id: PlanId, patch: { price?: number | null; mpL
 
 /* ─── Convocatorias (crear/editar desde el admin — antes solo venían del seed) ─── */
 // Mapea los campos del dominio (showIf: {key, equals}) a las columnas de ConvocatoriaField.
-function fieldRows(convocatoriaId: string, fields: Convocatoria['fields']) {
+// SIN convocatoriaId: Prisma pone la FK sola en el nested `create`. Para el `createMany`
+// del update (que sí necesita la FK) se agrega convocatoriaId al vuelo (ver updateConvocatoria).
+function fieldRows(fields: Convocatoria['fields']) {
   return fields.map((f, i) => ({
-    convocatoriaId,
     key: f.key,
     label: f.label,
     type: f.type,
@@ -213,9 +214,8 @@ function fieldRows(convocatoriaId: string, fields: Convocatoria['fields']) {
   }))
 }
 
-function logoRows(convocatoriaId: string, logos: NonNullable<Convocatoria['logos']>) {
+function logoRows(logos: NonNullable<Convocatoria['logos']>) {
   return logos.map((l, i) => ({
-    convocatoriaId,
     name: l.name,
     logoUrl: l.logoUrl,
     url: l.url ?? null,
@@ -243,8 +243,8 @@ export async function createConvocatoria(cv: Convocatoria): Promise<Convocatoria
       eventId: cv.eventId,
       ctaLabel: cv.ctaLabel ?? null,
       ctaUrl: cv.ctaUrl ?? null,
-      fields: { create: fieldRows(cv.id, cv.fields) },
-      ...(cv.logos && cv.logos.length ? { logos: { create: logoRows(cv.id, cv.logos) } } : {}),
+      fields: { create: fieldRows(cv.fields) },
+      ...(cv.logos && cv.logos.length ? { logos: { create: logoRows(cv.logos) } } : {}),
     },
   })
   return readConvocatoria(cv.id)
@@ -256,13 +256,14 @@ export async function updateConvocatoria(id: string, patch: Partial<Convocatoria
   if ('deadline' in patch && patch.deadline) data.deadline = new Date(patch.deadline)
   await prisma.convocatoria.update({ where: { id }, data })
   if (patch.fields) {
-    // Reemplazo completo de los campos (createMany con order recalculado).
+    // Reemplazo completo de los campos (createMany con order recalculado). createMany NO es
+    // relacional → necesita la FK convocatoriaId en cada fila (a diferencia del nested create).
     await prisma.convocatoriaField.deleteMany({ where: { convocatoriaId: id } })
-    if (patch.fields.length) await prisma.convocatoriaField.createMany({ data: fieldRows(id, patch.fields) })
+    if (patch.fields.length) await prisma.convocatoriaField.createMany({ data: fieldRows(patch.fields).map((r) => ({ ...r, convocatoriaId: id })) })
   }
   if (patch.logos) {
     await prisma.convocatoriaLogo.deleteMany({ where: { convocatoriaId: id } })
-    if (patch.logos.length) await prisma.convocatoriaLogo.createMany({ data: logoRows(id, patch.logos) })
+    if (patch.logos.length) await prisma.convocatoriaLogo.createMany({ data: logoRows(patch.logos).map((r) => ({ ...r, convocatoriaId: id })) })
   }
   return readConvocatoria(id)
 }
