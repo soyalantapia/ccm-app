@@ -21,7 +21,16 @@ export async function getEvent(slug: string): Promise<EventItem> {
 }
 
 export async function getBlocks(eventId: string): Promise<EventBlock[]> {
-  const rows = await prisma.eventBlock.findMany({ where: { eventId } })
+  // Padre inexistente → 404 (antes devolvía 200 [], rompiendo la convención notFound del backend).
+  const parent = await prisma.event.findUnique({ where: { id: eventId }, select: { id: true } })
+  if (!parent) throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
+  // orderBy determinístico: sin él Postgres devuelve heap-order (agenda barajada en prod; en la
+  // demo salía cronológica porque el seed preserva el array). day='19/09'/start='17:00' son
+  // strings zero-padded del mismo mes → el sort lexical coincide con el cronológico del evento.
+  const rows = await prisma.eventBlock.findMany({
+    where: { eventId },
+    orderBy: [{ day: 'asc' }, { start: 'asc' }],
+  })
   return rows.map(toEventBlock)
 }
 
