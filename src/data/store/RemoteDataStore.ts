@@ -37,6 +37,7 @@ import type {
   NewNota,
   PlanId,
   ApplicationStatus,
+  AnalyticsEvent,
 } from '../types'
 
 interface BufferedEvent {
@@ -89,6 +90,8 @@ export class RemoteDataStore extends LocalDataStore {
   private convocatorias = new Map<string, Convocatoria>()
   private convoInflight = new Set<string>()
   private convocatoriasList?: Convocatoria[] // lista admin (GET /admin/convocatorias)
+  private analytics?: AnalyticsEvent[] // analítica REAL cross-device (GET /admin/analytics) — el
+  // backend NO siembra analytics, así que sin esto Dashboard + SponsorReport leían el seed fabricado
 
   constructor(apiBase: string) {
     super()
@@ -106,7 +109,10 @@ export class RemoteDataStore extends LocalDataStore {
       this.hydrateApplications() // device ("Mis postulaciones")
       // Si ya hay sesión de organizador (token en sessionStorage al recargar), hidratar también
       // el caché admin — el panel /admin/postulaciones lo necesita sin re-loguear por el gate.
-      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ccm:admin-token')) this.hydrateAdminApplications()
+      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ccm:admin-token')) {
+        this.hydrateAdminApplications()
+        this.hydrateAnalytics() // reporte a sponsors con datos reales sin re-loguear
+      }
       this.hydrateBenefits()
       // Re-fetch de /contents YA CON el device token: el backend gatea el youtubeId de los videos
       // socioOnly según la membresía. El fetch público inicial pudo ir sin token (device nuevo) →
@@ -353,6 +359,16 @@ export class RemoteDataStore extends LocalDataStore {
     this.hydrateNotas()
     this.hydrateAdminApplications() // lista COMPLETA en un caché aparte (no pisa las del device)
     this.hydrateConvocatorias() // lista completa para gestionarlas (antes solo venían del seed)
+    this.hydrateAnalytics() // analítica REAL — antes Dashboard/SponsorReport leían el seed fabricado (P1)
+  }
+
+  /** Analítica real cross-device (admin-scoped). Una vez hidratada, getAnalytics deja de servir el
+   *  seed (~6400 eventos fabricados) → el reporte a sponsors muestra números reales. */
+  private hydrateAnalytics(): void {
+    this.api.get<AnalyticsEvent[]>('/admin/analytics').then((a) => { this.analytics = a; bus.emit('analytics') }).catch(() => {})
+  }
+  override getAnalytics(): AnalyticsEvent[] {
+    return this.analytics ?? super.getAnalytics()
   }
 
   private hydrateConvocatorias(): void {
