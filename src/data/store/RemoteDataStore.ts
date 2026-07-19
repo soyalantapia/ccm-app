@@ -247,6 +247,10 @@ export class RemoteDataStore extends LocalDataStore {
         this.regs = (this.regs ?? []).map((r) => (r.id === provisional.id ? server : r))
         this.refreshAvailability(blockId)
         bus.emit('registrations')
+        // Al pasar a "inscripto", el backend recién ahora sirve los CÓDIGOS de beneficio
+        // (benefitService los gatea por inscripción confirmada). Sin esta re-hidratación el
+        // caché queda stale toda la sesión y el código nunca aparece hasta recargar la PWA.
+        this.hydrateBenefits()
       })
       .catch(() => {
         // 409 lleno / ya inscripto / 403 socio → revertir el provisional y AVISAR (antes el
@@ -511,6 +515,7 @@ export class RemoteDataStore extends LocalDataStore {
     return this.membership ? this.membership.tier === 'socio' : super.isSocio()
   }
   override becomeSocio(paid: number): Membership {
+    const prev = this.membership
     const optimistic: Membership = { tier: 'socio', since: new Date().toISOString(), paid }
     this.membership = optimistic
     this.track('membership_purchased', { tier: 'socio', total: paid })
@@ -518,7 +523,13 @@ export class RemoteDataStore extends LocalDataStore {
     this.api
       .post<Membership>('/memberships', { paid })
       .then((server) => { this.membership = server; bus.emit('membership') })
-      .catch(() => {})
+      .catch(() => {
+        // Si el server no registró la membresía, revertir el estado optimista y AVISAR — si no,
+        // isSocio() queda true y desbloquea contenido socioOnly cross-app hasta el próximo reload.
+        this.membership = prev
+        bus.emit('membership')
+        bus.emit('membership:rejected')
+      })
     return optimistic
   }
 
@@ -574,7 +585,14 @@ export class RemoteDataStore extends LocalDataStore {
         this.applications = (this.applications ?? []).map((a) => (a.id === app.id ? server : a))
         bus.emit('applications')
       })
-      .catch(() => {})
+      .catch(() => {
+        // El POST falló: sacar la postulación optimista y AVISAR. Antes el catch vacío la dejaba
+        // como "preinscripta" → el usuario creía haberse postulado pero el organizador nunca la
+        // veía (lead perdido en silencio). Espeja el revert+aviso de register().
+        this.applications = (this.applications ?? []).filter((a) => a.id !== app.id)
+        bus.emit('applications')
+        bus.emit('application:rejected', { convocatoriaId })
+      })
     return app
   }
   override decideApplication(applicationId: string, status: Exclude<ApplicationStatus, 'preinscripta'>): void {
@@ -614,7 +632,12 @@ export class RemoteDataStore extends LocalDataStore {
 
   override createGallery(input: NewGallery): Gallery {
     if (!this.galleries) return super.createGallery(input)
-    const gallery: Gallery = { ...input, id: newId('gal'), slug: input.slug || slugify(input.title) }
+    // Dedup de slug (como notas/convocatorias): sin esto, dos galerías con el mismo título
+    // chocan con el @unique del server → 409 → el ítem optimista desaparece en silencio.
+    const gtaken = new Set(this.galleries.map((g) => g.slug))
+    let gslug = input.slug || slugify(input.title)
+    for (let i = 2, base = gslug; gtaken.has(gslug); i++) gslug = `${base}-${i}`
+    const gallery: Gallery = { ...input, id: newId('gal'), slug: gslug }
     this.galleries = [...this.galleries, gallery]
     this.track('admin_gallery_created', { galleryId: gallery.id })
     bus.emit('galleries')
@@ -639,7 +662,12 @@ export class RemoteDataStore extends LocalDataStore {
 
   override createCatalogProfile(input: NewCatalogProfile): CatalogProfile {
     if (!this.catalog) return super.createCatalogProfile(input)
-    const profile: CatalogProfile = { ...input, id: newId('cat'), slug: input.slug || slugify(input.name) }
+    // Dedup de slug: dos expositores con el mismo nombre chocan con el @unique → 409 → el ítem
+    // desaparece del panel sin aviso. Espeja el dedup de notas/convocatorias.
+    const ctaken = new Set(this.catalog.map((c) => c.slug))
+    let cslug = input.slug || slugify(input.name)
+    for (let i = 2, base = cslug; ctaken.has(cslug); i++) cslug = `${base}-${i}`
+    const profile: CatalogProfile = { ...input, id: newId('cat'), slug: cslug }
     this.catalog = [...this.catalog, profile]
     this.track('admin_catalog_created', { profileId: profile.id })
     bus.emit('catalog')
