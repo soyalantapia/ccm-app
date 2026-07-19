@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js'
 import { toEventItem, toEventBlock, toContentItem, toSponsor, toGallery, toCatalogProfile, toConvocatoria } from '../lib/serialize.js'
 import { conflict } from '../lib/errors.js'
+import { parseDate } from '../lib/dates.js'
 import type { EventItem, EventBlock, ContentItem, Sponsor, Gallery, CatalogProfile, PlanId, Convocatoria } from '@domain/types'
 
 /* ─── Eventos ─── */
@@ -16,7 +17,7 @@ export async function createEvent(e: EventItem): Promise<EventItem> {
   await prisma.event.create({
     data: {
       id: e.id, slug: e.slug, type: e.type, title: e.title, subtitle: e.subtitle ?? null,
-      dateLabel: e.dateLabel, startDate: new Date(e.startDate), timeLabel: e.timeLabel ?? null,
+      dateLabel: e.dateLabel, startDate: parseDate(e.startDate, 'fecha del evento'), timeLabel: e.timeLabel ?? null,
       venue: e.venue, address: e.address, mapsUrl: e.mapsUrl, description: e.description,
       cover: e.cover, price: e.price ?? null, past: e.past ?? false, socioOnly: e.socioOnly ?? false,
     },
@@ -35,7 +36,7 @@ export async function updateEvent(id: string, patch: Partial<EventItem>): Promis
   for (const k of ['type', 'title', 'subtitle', 'dateLabel', 'timeLabel', 'venue', 'address', 'mapsUrl', 'description', 'cover', 'price', 'past', 'socioOnly', 'slug'] as const) {
     if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   }
-  if (patch.startDate) data.startDate = new Date(patch.startDate)
+  if (patch.startDate) data.startDate = parseDate(patch.startDate, 'fecha del evento')
   await prisma.event.update({ where: { id }, data })
   if (patch.sponsorIds) {
     await prisma.eventSponsor.deleteMany({ where: { eventId: id } })
@@ -88,7 +89,7 @@ export async function createContent(c: ContentItem): Promise<ContentItem> {
     data: {
       id: c.id, type: c.type, title: c.title, description: c.description, youtubeId: c.youtubeId,
       duration: c.duration ?? null, platform: c.platform ?? null, sponsorId: c.sponsorId ?? null,
-      publishedAt: new Date(c.publishedAt), socioOnly: c.socioOnly ?? false,
+      publishedAt: parseDate(c.publishedAt, 'fecha de publicación'), socioOnly: c.socioOnly ?? false,
     },
   })
   return toContentItem(row)
@@ -99,7 +100,7 @@ export async function updateContent(id: string, patch: Partial<ContentItem>): Pr
   for (const k of ['title', 'description', 'youtubeId', 'duration', 'platform', 'sponsorId', 'socioOnly'] as const) {
     if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   }
-  if (patch.publishedAt) data.publishedAt = new Date(patch.publishedAt)
+  if (patch.publishedAt) data.publishedAt = parseDate(patch.publishedAt, 'fecha de publicación')
   const row = await prisma.contentItem.update({ where: { id }, data })
   return toContentItem(row)
 }
@@ -239,7 +240,7 @@ export async function createConvocatoria(cv: Convocatoria): Promise<Convocatoria
       slug: cv.slug,
       title: cv.title,
       intro: cv.intro,
-      deadline: new Date(cv.deadline),
+      deadline: parseDate(cv.deadline, 'fecha límite'),
       eventId: cv.eventId,
       ctaLabel: cv.ctaLabel ?? null,
       ctaUrl: cv.ctaUrl ?? null,
@@ -253,7 +254,7 @@ export async function createConvocatoria(cv: Convocatoria): Promise<Convocatoria
 export async function updateConvocatoria(id: string, patch: Partial<Convocatoria>): Promise<Convocatoria> {
   const data: Record<string, unknown> = {}
   for (const k of ['slug', 'title', 'intro', 'eventId', 'ctaLabel', 'ctaUrl'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
-  if ('deadline' in patch && patch.deadline) data.deadline = new Date(patch.deadline)
+  if ('deadline' in patch && patch.deadline) data.deadline = parseDate(patch.deadline, 'fecha límite')
   await prisma.convocatoria.update({ where: { id }, data })
   if (patch.fields) {
     // Reemplazo completo de los campos (createMany con order recalculado). createMany NO es
