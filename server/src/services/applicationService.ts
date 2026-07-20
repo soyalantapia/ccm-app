@@ -25,9 +25,11 @@ export async function submitApplication(
   return toApplication(row)
 }
 
-/** Admin: todas las postulaciones (más recientes primero). */
+/** Admin: todas las postulaciones (más recientes primero).
+ *  take=500 previene un full-table-scan cuando crecen; suficiente para todo evento CCM.
+ *  Sin él, findMany sin cota lee la tabla entera en cada hidratación admin. */
 export async function getApplications(): Promise<Application[]> {
-  const rows = await prisma.application.findMany({ orderBy: { ts: 'desc' } })
+  const rows = await prisma.application.findMany({ orderBy: { ts: 'desc' }, take: 500 })
   return rows.map(toApplication)
 }
 

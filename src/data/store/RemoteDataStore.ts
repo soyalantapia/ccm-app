@@ -67,6 +67,11 @@ export class RemoteDataStore extends LocalDataStore {
   private regs?: Registration[]
   private availCache = new Map<string, BlockAvailability>()
   private availInflight = new Set<string>()
+  /** Negative cache: ms timestamp del último fallo por blockId. Re-intenta después de 30s. */
+  private availFailed = new Map<string, number>()
+  /** Cache de batch availability por eventId (GET /events/:id/blocks-availability). */
+  private availBatchInflight = new Set<string>()
+  private availBatchFailed = new Map<string, number>()
   private tmpSeq = 0
   // Provisionales (tmp_) cancelados mientras su POST seguía en vuelo: cuando el POST resuelve
   // con el id real del server, hay que borrarlo (si no, queda una inscripción fantasma que
@@ -97,6 +102,9 @@ export class RemoteDataStore extends LocalDataStore {
   private analytics?: AnalyticsEvent[] // analítica real cross-device (GET /admin/analytics), P1
   private generalCounts = new Map<string, number>() // inscripciones generales server-wide por evento (#13)
   private generalInflight = new Set<string>()
+  /** Negative cache: ms timestamp del último fallo de general-count por eventId. */
+  private generalFailed = new Map<string, number>()
+  private static readonly FETCH_RETRY_MS = 30_000 // backoff 30s para fetches fallidos
   private convocatorias = new Map<string, Convocatoria>()
   private convoInflight = new Set<string>()
   private convocatoriasList?: Convocatoria[] // lista admin (GET /admin/convocatorias)
@@ -142,7 +150,25 @@ export class RemoteDataStore extends LocalDataStore {
 
   /* ─── Fase B: hidratación + lecturas desde caché ─── */
 
+  /** Bootstrap con /events/with-blocks (1 query vs 1+N); fallback a /events + N bloques
+   *  si el endpoint no existe aún en prod (deploy incremental seguro). */
   private hydrateEvents(): void {
+    this.api
+      .get<(EventItem & { blocks: EventBlock[] })[]>('/events/with-blocks')
+      .then((eventsWithBlocks) => {
+        this.events = eventsWithBlocks.map(({ blocks: _b, ...e }) => e as EventItem)
+        for (const e of eventsWithBlocks) {
+          this.blocksByEvent.set(e.id, e.blocks)
+          for (const b of e.blocks) this.blocksById.set(b.id, b)
+        }
+        bus.emit('events')
+        bus.emit('blocks')
+      })
+      .catch(() => this.hydrateEventsFallback())
+  }
+
+  /** Fallback para deploy incremental: /events + N GET /events/:id/blocks. */
+  private hydrateEventsFallback(): void {
     this.api
       .get<EventItem[]>('/events')
       .then(async (events) => {
@@ -161,9 +187,7 @@ export class RemoteDataStore extends LocalDataStore {
         )
         bus.emit('blocks')
       })
-      .catch(() => {
-        /* backend caído: seguimos con el seed local */
-      })
+      .catch(() => { /* backend caído: seguimos con el seed local */ })
   }
 
   private hydrateRegistrations(): void {
@@ -179,18 +203,51 @@ export class RemoteDataStore extends LocalDataStore {
       .catch(() => {})
   }
 
-  /** Trae el cupo real del server (stale-while-revalidate, dedupe en vuelo). */
+  /** Cupo de TODOS los bloques de un evento en 1 request (vs N).
+   *  Llamado desde blockAvailability cuando conocemos el eventId.
+   *  Negative cache: si el endpoint 404ea o falla, espera 30s antes de reintentar. */
+  private fetchEventAvailability(eventId: string): void {
+    if (this.availBatchInflight.has(eventId)) return
+    const failed = this.availBatchFailed.get(eventId)
+    if (failed && Date.now() - failed < RemoteDataStore.FETCH_RETRY_MS) return
+    this.availBatchInflight.add(eventId)
+    this.api
+      .get<{ blocks: (BlockAvailability & { id: string })[]; generals: number }>(`/events/${eventId}/blocks-availability`)
+      .then((r) => {
+        for (const b of r.blocks) this.availCache.set(b.id, b)
+        this.generalCounts.set(eventId, r.generals)
+        this.availBatchInflight.delete(eventId)
+        this.availBatchFailed.delete(eventId)
+        bus.emit('availability')
+      })
+      .catch(() => {
+        this.availBatchInflight.delete(eventId)
+        this.availBatchFailed.set(eventId, Date.now())
+        // Fallback: fetch individuales (p.ej. si endpoint no deployado aún)
+        const blocks = this.blocksByEvent.get(eventId) ?? []
+        for (const b of blocks) this.fetchAvailability(b.id)
+      })
+  }
+
+  /** Fetch individual de cupo (fallback / rutas fuera de admin). */
   private fetchAvailability(blockId: string): void {
     if (this.availInflight.has(blockId)) return
+    // Negative cache: no re-disparar si el endpoint falló hace menos de 30s.
+    const failed = this.availFailed.get(blockId)
+    if (failed && Date.now() - failed < RemoteDataStore.FETCH_RETRY_MS) return
     this.availInflight.add(blockId)
     this.api
       .get<BlockAvailability>(`/blocks/${blockId}/availability`)
       .then((av) => {
         this.availCache.set(blockId, av)
         this.availInflight.delete(blockId)
+        this.availFailed.delete(blockId)
         bus.emit('availability')
       })
-      .catch(() => this.availInflight.delete(blockId))
+      .catch(() => {
+        this.availInflight.delete(blockId)
+        this.availFailed.set(blockId, Date.now())
+      })
   }
 
   private refreshAvailability(blockId?: string): void {
@@ -217,7 +274,14 @@ export class RemoteDataStore extends LocalDataStore {
   override blockAvailability(blockId: string): BlockAvailability {
     const cached = this.availCache.get(blockId)
     if (cached) return cached
-    this.fetchAvailability(blockId) // dispara fetch; mientras, estimación local
+    // Batch preferido: si conocemos el eventId usamos /events/:id/blocks-availability (1 req/evento).
+    // Fallback: fetch individual (deploy incremental / bloque desconocido aún).
+    const block = this.blocksById.get(blockId)
+    if (block) {
+      this.fetchEventAvailability(block.eventId)
+    } else {
+      this.fetchAvailability(blockId)
+    }
     return super.blockAvailability(blockId)
   }
   /** true mientras el caché del recurso sea undefined (fetch en vuelo) → las páginas :slug
@@ -231,20 +295,38 @@ export class RemoteDataStore extends LocalDataStore {
     }
   }
   /** Inscripciones generales (sin bloque) server-wide de un evento (#13). getRegistrations es
-   *  device-scoped; esto agrega todos los devices (stale-while-revalidate, espeja blockAvailability). */
+   *  device-scoped; esto agrega todos los devices (stale-while-revalidate, espeja blockAvailability).
+   *  Si hay bloques cargados para el evento, usa fetchEventAvailability (batch) para obtener
+   *  generals + avail de todos los bloques en 1 request. */
   override generalRegistrationCount(eventId: string): number {
     const cached = this.generalCounts.get(eventId)
     if (cached !== undefined) return cached
-    this.fetchGeneralCount(eventId)
+    // Preferir batch si ya tenemos bloques del evento; si no, fallback individual.
+    if (this.blocksByEvent.has(eventId)) {
+      this.fetchEventAvailability(eventId)
+    } else {
+      this.fetchGeneralCount(eventId)
+    }
     return super.generalRegistrationCount(eventId)
   }
   private fetchGeneralCount(eventId: string): void {
     if (this.generalInflight.has(eventId)) return
+    // Negative cache: si 404ea (endpoint no deployado), esperar 30s antes de reintentar.
+    const failed = this.generalFailed.get(eventId)
+    if (failed && Date.now() - failed < RemoteDataStore.FETCH_RETRY_MS) return
     this.generalInflight.add(eventId)
     this.api
       .get<{ general: number }>(`/events/${eventId}/general-count`)
-      .then((r) => { this.generalCounts.set(eventId, r.general); this.generalInflight.delete(eventId); bus.emit('registrations') })
-      .catch(() => this.generalInflight.delete(eventId))
+      .then((r) => {
+        this.generalCounts.set(eventId, r.general)
+        this.generalInflight.delete(eventId)
+        this.generalFailed.delete(eventId)
+        bus.emit('registrations')
+      })
+      .catch(() => {
+        this.generalInflight.delete(eventId)
+        this.generalFailed.set(eventId, Date.now())
+      })
   }
   override getRegistrations(): Registration[] {
     return this.regs ?? super.getRegistrations()
@@ -350,9 +432,13 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override track(event: string, payload?: Record<string, unknown>): void {
-    super.track(event, payload) // local + bus (dashboard en otra pestaña)
+    // En RemoteDataStore NO llamamos super.track() (que hace read-parse-push-write O(N) sobre
+    // el historial de analytics local en cada evento). En prod el backend es la fuente de
+    // verdad; getAnalytics() ya apunta al caché del backend, no al localStorage.
+    // El bus.emit('analytics') mantiene la reactividad del Dashboard en la misma sesión.
     this.buffer.push({ event, ...(payload ? { payload } : {}), ts: new Date().toISOString() })
     this.scheduleFlush()
+    bus.emit('analytics')
   }
 
   override saveProfileFields(values: Partial<Record<ProfileFieldKey, string>>, source: string): void {

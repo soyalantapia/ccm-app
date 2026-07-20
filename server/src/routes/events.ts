@@ -12,6 +12,26 @@ eventsRouter.get('/events', async (_req, res, next) => {
   }
 })
 
+/** GET /api/v1/events/with-blocks — eventos con bloques embebidos (1 query vs 1+N).
+ *  DEBE ir antes de /events/:slug para que Express no capture "with-blocks" como slug. */
+eventsRouter.get('/events/with-blocks', async (_req, res, next) => {
+  try {
+    res.json(await eventService.getEventsWithBlocks())
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** GET /api/v1/events/:id/blocks-availability — cupo de TODOS los bloques + generales
+ *  de un evento en 3 queries (vs N+1 individuales). Público. */
+eventsRouter.get('/events/:id/blocks-availability', async (req, res, next) => {
+  try {
+    res.json(await eventService.getEventAvailability(req.params.id))
+  } catch (err) {
+    next(err)
+  }
+})
+
 /** GET /api/v1/events/:slug — ficha de un evento. */
 eventsRouter.get('/events/:slug', async (req, res, next) => {
   try {
