@@ -13,7 +13,7 @@ import type {
 } from './DataStore'
 import { slugify } from './overlay'
 import { newId, writeJSON } from '../../lib/storage'
-import { createApi, type ApiClient } from '../../lib/api'
+import { createApi, ApiError, type ApiClient } from '../../lib/api'
 import { bus } from '../../lib/bus'
 import { hydrateFromRemote, getDeviceToken, setDeviceCredentials } from '../../lib/identity'
 import type {
@@ -154,6 +154,24 @@ export class RemoteDataStore extends LocalDataStore {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') flush()
       })
+    }
+  }
+
+  /**
+   * Envuelve el `.catch` de una escritura para que el rechazo del backend NO sea silencioso.
+   *
+   * Las escrituras del admin son fire-and-forget y el form ya toasteó "✓ guardado" de forma
+   * síncrona, así que un 400 del backend (URL inválida, key duplicada, campo fuera de rango)
+   * se descartaba y la re-hidratación borraba el ítem optimista sin decir nada: el organizador
+   * veía el éxito, después el ítem desaparecía, y no había forma de saber por qué.
+   * Ahora emitimos el mensaje del backend —que ya viene redactado en español— y recién
+   * después re-hidratamos.
+   */
+  private trasFallo(rehidratar: () => void): (err: unknown) => void {
+    return (err: unknown) => {
+      const msg = err instanceof ApiError ? err.userMessage : 'No se pudo guardar. Revisá tu conexión y probá de nuevo.'
+      bus.emit('admin:write-failed', { message: msg })
+      rehidratar()
     }
   }
 
@@ -539,7 +557,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.adminNotas = [nota, ...this.adminNotas]
     this.track('admin_nota_created', { notaId: nota.id })
     bus.emit('notas')
-    this.api.post('/admin/notas', nota).then(() => this.refetchNotas()).catch(() => this.refetchNotas())
+    this.api.post('/admin/notas', nota).then(() => this.refetchNotas()).catch(this.trasFallo(() => this.refetchNotas()))
     return nota
   }
   override updateNota(id: string, patch: Partial<Nota>): void {
@@ -547,7 +565,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.adminNotas = this.adminNotas.map((n) => (n.id === id ? { ...n, ...patch } : n))
     this.track('admin_nota_updated', { notaId: id })
     bus.emit('notas')
-    this.api.patch(`/admin/notas/${id}`, patch).then(() => this.refetchNotas()).catch(() => this.refetchNotas())
+    this.api.patch(`/admin/notas/${id}`, patch).then(() => this.refetchNotas()).catch(this.trasFallo(() => this.refetchNotas()))
   }
   override deleteNota(id: string): void {
     this.adminNotas = this.adminNotas ?? [] // nunca caer al camino local: seria un falso exito
@@ -579,7 +597,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.adminBanners = [...this.adminBanners, banner].sort((a, b) => a.order - b.order)
     this.track('admin_banner_created', { bannerId: banner.id, slot: banner.slot })
     bus.emit('banners')
-    this.api.post('/admin/banners', banner).then(() => this.refetchBanners()).catch(() => this.refetchBanners())
+    this.api.post('/admin/banners', banner).then(() => this.refetchBanners()).catch(this.trasFallo(() => this.refetchBanners()))
     return banner
   }
   override updateBanner(id: string, patch: Partial<Banner>): void {
@@ -587,7 +605,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.adminBanners = this.adminBanners.map((b) => (b.id === id ? { ...b, ...patch } : b)).sort((a, b) => a.order - b.order)
     this.track('admin_banner_updated', { bannerId: id })
     bus.emit('banners')
-    this.api.patch(`/admin/banners/${id}`, patch).then(() => this.refetchBanners()).catch(() => this.refetchBanners())
+    this.api.patch(`/admin/banners/${id}`, patch).then(() => this.refetchBanners()).catch(this.trasFallo(() => this.refetchBanners()))
   }
   override deleteBanner(id: string): void {
     this.adminBanners = this.adminBanners ?? [] // nunca caer al camino local: seria un falso exito
@@ -650,7 +668,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.convocatoriasList = [cv, ...this.convocatoriasList]
     this.track('admin_convocatoria_created', { convocatoriaId: cv.id })
     bus.emit('convocatorias')
-    this.api.post('/admin/convocatorias', cv).then(() => this.hydrateConvocatorias()).catch(() => this.hydrateConvocatorias())
+    this.api.post('/admin/convocatorias', cv).then(() => this.hydrateConvocatorias()).catch(this.trasFallo(() => this.hydrateConvocatorias()))
     return cv
   }
   override updateConvocatoria(id: string, patch: Partial<Convocatoria>): void {
@@ -658,7 +676,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.convocatoriasList = this.convocatoriasList.map((c) => (c.id === id ? { ...c, ...patch } : c))
     this.track('admin_convocatoria_updated', { convocatoriaId: id })
     bus.emit('convocatorias')
-    this.api.patch(`/admin/convocatorias/${id}`, patch).then(() => this.hydrateConvocatorias()).catch(() => this.hydrateConvocatorias())
+    this.api.patch(`/admin/convocatorias/${id}`, patch).then(() => this.hydrateConvocatorias()).catch(this.trasFallo(() => this.hydrateConvocatorias()))
   }
   override deleteConvocatoria(id: string): void {
     this.convocatoriasList = this.convocatoriasList ?? [] // nunca caer al camino local: seria un falso exito
@@ -752,7 +770,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.adminBenefits = [...this.adminBenefits, benefit].sort((a, b) => a.order - b.order)
     this.track('admin_benefit_created', { benefitId: benefit.id, category: benefit.category })
     bus.emit('benefits')
-    this.api.post('/admin/benefits', benefit).then(() => this.refetchBenefits()).catch(() => this.refetchBenefits())
+    this.api.post('/admin/benefits', benefit).then(() => this.refetchBenefits()).catch(this.trasFallo(() => this.refetchBenefits()))
     return benefit
   }
   override updateBenefit(id: string, patch: Partial<Benefit>): void {
@@ -760,7 +778,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.adminBenefits = this.adminBenefits.map((b) => (b.id === id ? { ...b, ...patch } : b)).sort((a, b) => a.order - b.order)
     this.track('admin_benefit_updated', { benefitId: id })
     bus.emit('benefits')
-    this.api.patch(`/admin/benefits/${id}`, patch).then(() => this.refetchBenefits()).catch(() => this.refetchBenefits())
+    this.api.patch(`/admin/benefits/${id}`, patch).then(() => this.refetchBenefits()).catch(this.trasFallo(() => this.refetchBenefits()))
   }
   override deleteBenefit(id: string): void {
     this.adminBenefits = this.adminBenefits ?? [] // nunca caer al camino local: seria un falso exito
@@ -810,7 +828,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.sponsors = [...this.sponsors, sponsor]
     this.track('admin_sponsor_created', { sponsorId: sponsor.id, level: sponsor.level })
     bus.emit('sponsors')
-    this.api.post('/admin/sponsors', sponsor).then(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors')).catch(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors'))
+    this.api.post('/admin/sponsors', sponsor).then(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors')).catch(this.trasFallo(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors')))
     return sponsor
   }
   override updateSponsor(id: string, patch: Partial<Sponsor>): void {
@@ -818,7 +836,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.sponsors = this.sponsors.map((s) => (s.id === id ? { ...s, ...patch } : s))
     this.track('admin_sponsor_updated', { sponsorId: id })
     bus.emit('sponsors')
-    this.api.patch(`/admin/sponsors/${id}`, patch).then(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors')).catch(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors'))
+    this.api.patch(`/admin/sponsors/${id}`, patch).then(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors')).catch(this.trasFallo(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors')))
   }
   override deleteSponsor(id: string): void {
     this.sponsors = this.sponsors ?? [] // nunca caer al camino local: seria un falso exito
@@ -840,7 +858,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.galleries = [...this.galleries, gallery]
     this.track('admin_gallery_created', { galleryId: gallery.id })
     bus.emit('galleries')
-    this.api.post('/admin/galleries', gallery).then(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries')).catch(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries'))
+    this.api.post('/admin/galleries', gallery).then(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries')).catch(this.trasFallo(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries')))
     return gallery
   }
   override updateGallery(id: string, patch: Partial<Gallery>): void {
@@ -848,7 +866,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.galleries = this.galleries.map((g) => (g.id === id ? { ...g, ...patch } : g))
     this.track('admin_gallery_updated', { galleryId: id })
     bus.emit('galleries')
-    this.api.patch(`/admin/galleries/${id}`, patch).then(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries')).catch(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries'))
+    this.api.patch(`/admin/galleries/${id}`, patch).then(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries')).catch(this.trasFallo(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries')))
   }
   override deleteGallery(id: string): void {
     this.galleries = this.galleries ?? [] // nunca caer al camino local: seria un falso exito
@@ -870,7 +888,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.catalog = [...this.catalog, profile]
     this.track('admin_catalog_created', { profileId: profile.id })
     bus.emit('catalog')
-    this.api.post('/admin/catalog', profile).then(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog')).catch(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog'))
+    this.api.post('/admin/catalog', profile).then(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog')).catch(this.trasFallo(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog')))
     return profile
   }
   override updateCatalogProfile(id: string, patch: Partial<CatalogProfile>): void {
@@ -878,7 +896,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.catalog = this.catalog.map((c) => (c.id === id ? { ...c, ...patch } : c))
     this.track('admin_catalog_updated', { profileId: id })
     bus.emit('catalog')
-    this.api.patch(`/admin/catalog/${id}`, patch).then(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog')).catch(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog'))
+    this.api.patch(`/admin/catalog/${id}`, patch).then(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog')).catch(this.trasFallo(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog')))
   }
   override deleteCatalogProfile(id: string): void {
     this.catalog = this.catalog ?? [] // nunca caer al camino local: seria un falso exito
@@ -893,7 +911,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.plans = this.plans ?? [] // nunca caer al camino local: seria un falso exito
     this.plans = this.plans.map((p) => (p.id === id ? { ...p, ...patch } : p))
     bus.emit('plans')
-    this.api.patch(`/admin/plans/${id}`, patch).then(() => this.refetch('/plans', (v: TicketPlan[]) => (this.plans = v), 'plans')).catch(() => this.refetch('/plans', (v: TicketPlan[]) => (this.plans = v), 'plans'))
+    this.api.patch(`/admin/plans/${id}`, patch).then(() => this.refetch('/plans', (v: TicketPlan[]) => (this.plans = v), 'plans')).catch(this.trasFallo(() => this.refetch('/plans', (v: TicketPlan[]) => (this.plans = v), 'plans')))
   }
 
   override getCatalog(): CatalogProfile[] {
@@ -970,7 +988,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.events = [...this.events, event]
     this.track('admin_event_created', { eventId: event.id, type: event.type })
     bus.emit('events')
-    this.api.post('/admin/events', event).then(() => this.hydrateEvents()).catch(() => this.hydrateEvents())
+    this.api.post('/admin/events', event).then(() => this.hydrateEvents()).catch(this.trasFallo(() => this.hydrateEvents()))
     return event
   }
   override updateEvent(id: string, patch: Partial<EventItem>): void {
@@ -978,7 +996,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.events = this.events.map((e) => (e.id === id ? { ...e, ...patch } : e))
     this.track('admin_event_updated', { eventId: id })
     bus.emit('events')
-    this.api.patch(`/admin/events/${id}`, patch).then(() => this.hydrateEvents()).catch(() => this.hydrateEvents())
+    this.api.patch(`/admin/events/${id}`, patch).then(() => this.hydrateEvents()).catch(this.trasFallo(() => this.hydrateEvents()))
   }
   override deleteEvent(id: string): void {
     this.events = this.events ?? [] // nunca caer al camino local: seria un falso exito
@@ -1000,7 +1018,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.blocksById.set(block.id, block)
     this.track('admin_block_created', { blockId: block.id, eventId: block.eventId })
     bus.emit('blocks')
-    this.api.post('/admin/blocks', block).then(() => this.hydrateEvents()).catch(() => this.hydrateEvents())
+    this.api.post('/admin/blocks', block).then(() => this.hydrateEvents()).catch(this.trasFallo(() => this.hydrateEvents()))
     return block
   }
   override updateBlock(id: string, patch: Partial<EventBlock>): void {
@@ -1013,7 +1031,7 @@ export class RemoteDataStore extends LocalDataStore {
     }
     this.track('admin_block_updated', { blockId: id })
     bus.emit('blocks')
-    this.api.patch(`/admin/blocks/${id}`, patch).then(() => this.hydrateEvents()).catch(() => this.hydrateEvents())
+    this.api.patch(`/admin/blocks/${id}`, patch).then(() => this.hydrateEvents()).catch(this.trasFallo(() => this.hydrateEvents()))
   }
   override deleteBlock(id: string): void {
     this.events = this.events ?? [] // nunca caer al camino local: seria un falso exito
@@ -1022,7 +1040,7 @@ export class RemoteDataStore extends LocalDataStore {
     if (cur) this.blocksByEvent.set(cur.eventId, (this.blocksByEvent.get(cur.eventId) ?? []).filter((b) => b.id !== id))
     this.track('admin_block_deleted', { blockId: id })
     bus.emit('blocks')
-    this.api.del(`/admin/blocks/${id}`).catch(() => this.hydrateEvents())
+    this.api.del(`/admin/blocks/${id}`).catch(this.trasFallo(() => this.hydrateEvents()))
   }
 
   override createContent(input: NewContent): ContentItem {
@@ -1031,7 +1049,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.contents = [content, ...this.contents]
     this.track('admin_content_created', { contentId: content.id })
     bus.emit('contents')
-    this.api.post('/admin/contents', content).then(() => this.refetchContents()).catch(() => this.refetchContents())
+    this.api.post('/admin/contents', content).then(() => this.refetchContents()).catch(this.trasFallo(() => this.refetchContents()))
     return content
   }
   override updateContent(id: string, patch: Partial<ContentItem>): void {
@@ -1039,14 +1057,14 @@ export class RemoteDataStore extends LocalDataStore {
     this.contents = this.contents.map((c) => (c.id === id ? { ...c, ...patch } : c))
     this.track('admin_content_updated', { contentId: id })
     bus.emit('contents')
-    this.api.patch(`/admin/contents/${id}`, patch).then(() => this.refetchContents()).catch(() => this.refetchContents())
+    this.api.patch(`/admin/contents/${id}`, patch).then(() => this.refetchContents()).catch(this.trasFallo(() => this.refetchContents()))
   }
   override deleteContent(id: string): void {
     this.contents = this.contents ?? [] // nunca caer al camino local: seria un falso exito
     this.contents = this.contents.filter((c) => c.id !== id)
     this.track('admin_content_deleted', { contentId: id })
     bus.emit('contents')
-    this.api.del(`/admin/contents/${id}`).catch(() => this.refetchContents())
+    this.api.del(`/admin/contents/${id}`).catch(this.trasFallo(() => this.refetchContents()))
   }
 
   private scheduleFlush(): void {

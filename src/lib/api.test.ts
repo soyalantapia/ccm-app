@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createApi } from './api'
+import { createApi, ApiError } from './api'
 
 /**
  * En un PATCH, `undefined` significa "vaciá este campo". Pero JSON.stringify BORRA las claves
@@ -65,5 +65,50 @@ describe('ApiClient — un PATCH puede VACIAR un campo opcional', () => {
     await createApi('https://api.test').post('/admin/notas', { title: 'N', author: undefined })
     const enviado = JSON.parse(body!)
     expect('author' in enviado).toBe(false)
+  })
+})
+
+/**
+ * El backend responde {error:{code,message}} de forma consistente, pero el cliente lo tiraba
+ * a la basura y dejaba un Error de string con solo el status. Sin `code`, el llamador no puede
+ * distinguir un rechazo real (BLOCK_FULL) de uno que en realidad es éxito (ALREADY_REGISTERED),
+ * ni mostrarle al organizador por qué no se guardó lo que acaba de cargar.
+ */
+describe('ApiError — el error del backend llega entero al llamador', () => {
+  function fetchQueFalla(status: number, cuerpo: unknown) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve({ ok: false, status, json: () => Promise.resolve(cuerpo) })),
+    )
+  }
+
+  it('conserva status, code y el mensaje del backend', async () => {
+    fetchQueFalla(400, { error: { code: 'INVALID_URL', message: 'Esquema de URL no permitido en CTA' } })
+    const err = (await createApi('https://api.test')
+      .post('/admin/convocatorias', {})
+      .catch((e) => e)) as ApiError
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err.status).toBe(400)
+    expect(err.code).toBe('INVALID_URL')
+    expect(err.userMessage).toBe('Esquema de URL no permitido en CTA')
+  })
+
+  it('con un cuerpo que no es JSON no rompe: cae al mensaje genérico', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve({ ok: false, status: 502, json: () => Promise.reject(new Error('not json')) })),
+    )
+    const err = (await createApi('https://api.test').patch('/admin/notas/n1', {}).catch((e) => e)) as ApiError
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err.status).toBe(502)
+    expect(err.code).toBeUndefined()
+    expect(err.userMessage).toContain('No se pudo guardar')
+  })
+
+  it('distingue rechazos entre sí por code', async () => {
+    fetchQueFalla(409, { error: { code: 'ALREADY_REGISTERED', message: 'Ya estás inscripto.' } })
+    const err = (await createApi('https://api.test').post('/registrations', {}).catch((e) => e)) as ApiError
+    expect(err.code).toBe('ALREADY_REGISTERED')
+    expect(err.code).not.toBe('BLOCK_FULL')
   })
 })

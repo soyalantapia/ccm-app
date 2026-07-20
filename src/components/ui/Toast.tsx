@@ -51,13 +51,19 @@ export function ToastHost() {
     }
     // El backend rechazó una inscripción optimista (cupo lleno o evento solo-socios):
     // avisamos en vez de dejar el "Inscripción confirmada ✓" como una mentira silenciosa.
-    const off = bus.on((key) => {
+    const off = bus.on((key, detail) => {
       if (key === 'registration:rejected') {
         toast('No pudimos confirmar tu lugar — puede que se haya llenado o sea solo para Socios.', 'info')
       } else if (key === 'application:rejected') {
         toast('No pudimos enviar tu postulación — probá de nuevo en un momento.', 'info')
       } else if (key === 'membership:rejected') {
         toast('No pudimos confirmar tu membresía — probá de nuevo en un momento.', 'info')
+      } else if (key === 'admin:write-failed') {
+        // El backend rechazó una escritura del panel. El form ya toasteó "✓ guardado" de forma
+        // optimista y la re-hidratación va a borrar el ítem: sin este aviso, el organizador ve
+        // desaparecer lo que cargó sin ninguna explicación. El mensaje viene del backend.
+        const msg = (detail as { message?: string } | undefined)?.message
+        toast(msg || 'No se pudo guardar el cambio. Probá de nuevo.', { tone: 'info', duration: 6000 })
       }
     })
     return () => {
