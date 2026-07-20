@@ -17,6 +17,7 @@ export const PERMISSIONS = [
   'convocatorias:write', // convocatorias y sus formularios
   'applications:read', // ⚠️ PII: ver postulaciones (nombre, email, teléfono, DNI)
   'applications:decide', // aceptar / rechazar postulaciones
+  'people:read', // ⚠️ PII: ver el CRM de usuarios (nombre, email, teléfono, DNI, actividad)
   'catalog:write', // perfiles del catálogo de participantes
   'content:write', // notas, galerías, banners, beneficios, contenidos
   'sponsors:write', // sponsors y planes de entrada
@@ -41,6 +42,7 @@ const GRANTS: Record<Exclude<AdminRole, 'OWNER'>, readonly Permission[]> = {
     'convocatorias:write',
     'applications:read',
     'applications:decide',
+    'people:read',
     'catalog:write',
     'sponsors:write',
     'content:write',
