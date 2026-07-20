@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Button, Field, Input, Select, Sheet } from '../../components/ui'
+import { Button, Field, Input, Select, Sheet, ImageUpload } from '../../components/ui'
 import { store } from '../../data/store'
 import type { Banner, BannerDestination } from '../../data/types'
 
@@ -98,8 +98,11 @@ export function OpsBannerForm({ open, banner, onClose }: Props) {
           </Field>
         </div>
 
-        <Field label="Imagen (URL)" required hint="Pegá la URL de la imagen ya en el formato del slot">
-          <Input value={f.image} onChange={set('image')} placeholder="https://…/banner.jpg" required />
+        <Field label="Imagen (URL)" required hint="Subila desde tu compu o pegá la URL, ya en el formato del slot">
+          <div className="flex items-center gap-2">
+            <Input value={f.image} onChange={set('image')} placeholder="https://…/banner.jpg" className="flex-1" required />
+            <ImageUpload label="Subir" onUrl={(url) => setF((p) => ({ ...p, image: url }))} />
+          </div>
         </Field>
         {f.image.trim() && (
           <img src={f.image.trim()} alt="Vista previa" className="aspect-[16/5] w-full rounded-sm border border-line object-cover" />

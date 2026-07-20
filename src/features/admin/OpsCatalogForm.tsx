@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Check } from 'lucide-react'
-import { Button, Field, Img, Input, Select, Sheet, Textarea, toast } from '../../components/ui'
+import { Button, Field, Img, Input, Select, Sheet, Textarea, toast, ImageUpload } from '../../components/ui'
 import { store } from '../../data/store'
 import { newId } from '../../lib/storage'
 import type { CatalogProfile, PortfolioPiece } from '../../data/types'
@@ -225,8 +225,11 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
         )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Retrato" required>
-            <Select options={PHOTO_OPTIONS} value={f.photo} onChange={set('photo')} />
+          <Field label="Retrato" required hint="Elegí uno del set o subí la foto real del participante">
+            <div className="flex items-center gap-2">
+              <Select options={PHOTO_OPTIONS} value={f.photo} onChange={set('photo')} className="flex-1" />
+              <ImageUpload label="Subir" onUrl={(url) => setF((p) => ({ ...p, photo: url }))} />
+            </div>
           </Field>
           {f.photo && (
             <Img
