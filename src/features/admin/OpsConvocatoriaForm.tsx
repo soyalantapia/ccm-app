@@ -134,6 +134,17 @@ export function OpsConvocatoriaForm({ open, convocatoria, onClose }: Props) {
       setError('Agregá al menos un campo con etiqueta.')
       return
     }
+    // Un select sin opciones es un control cuyo dominio de valores válidos es el conjunto
+    // vacío, mientras el form público exige un valor no vacío: el postulante queda trabado
+    // sin poder enviar y sin entender por qué. Se corta acá, en el único lugar donde se
+    // crean los campos, en vez de dejar que llegue al formulario público.
+    const selectSinOpciones = cleanFields.find(
+      (ff) => ff.type === 'select' && ff.options.split(',').filter((o) => o.trim()).length === 0,
+    )
+    if (selectSinOpciones) {
+      setError(`El campo "${selectSinOpciones.label.trim()}" es una lista desplegable: cargale al menos una opción.`)
+      return
+    }
     const fields: ConvocatoriaField[] = cleanFields.map((ff) => ({
       key: ff.key.trim() || slugify(ff.label),
       label: ff.label.trim(),
