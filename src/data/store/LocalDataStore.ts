@@ -745,4 +745,13 @@ export class LocalDataStore implements DataStore {
   }
 
   async disconnectMp(): Promise<void> {}
+
+  /** Demo: nunca hay checkout real (no hay backend que arme la preferencia). El llamador cae
+   *  siempre al link manual del plan. */
+  async startCheckout(
+    _kind: 'ticket_order' | 'membership' | 'ad_campaign',
+    _resourceId: string,
+  ): Promise<string | null> {
+    return null
+  }
 }

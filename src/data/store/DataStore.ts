@@ -234,4 +234,12 @@ export interface DataStore {
   getMpStatus(): MpStatus | undefined
   connectMp(): Promise<string>
   disconnectMp(): Promise<void>
+
+  /**
+   * Cobros con Mercado Pago (comprador). Pide el link de pago REAL para este recurso — el monto
+   * lo calcula el server con el precio vigente, nunca viaja en el pedido. Devuelve null si
+   * Mercado Pago no está conectado (503) o si el checkout no se pudo generar; el llamador cae
+   * al link manual (mpLink) del plan, que es la red de seguridad: la venta nunca se corta.
+   */
+  startCheckout(kind: 'ticket_order' | 'membership' | 'ad_campaign', resourceId: string): Promise<string | null>
 }

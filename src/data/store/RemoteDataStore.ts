@@ -14,7 +14,7 @@ import type {
 } from './DataStore'
 import { slugify } from './overlay'
 import { newId, writeJSON } from '../../lib/storage'
-import { createApi, type ApiClient } from '../../lib/api'
+import { createApi, ApiError, type ApiClient } from '../../lib/api'
 import { bus } from '../../lib/bus'
 import { hydrateFromRemote, getDeviceToken, setDeviceCredentials } from '../../lib/identity'
 import { hasAdminToken } from '../adminSession'
@@ -1341,6 +1341,41 @@ export class RemoteDataStore extends LocalDataStore {
     await this.api.post('/admin/mp/disconnect', {})
     this.mpStatus = { conectado: false }
     bus.emit('mp')
+  }
+
+  /* ─── Checkout real del comprador (Tarea 7) ─── */
+
+  /** Cuántas veces reintentar cuando el server responde 409 CHECKOUT_EN_CURSO — protección
+   *  anti doble-cobro de mpCheckoutService.createCheckout: hay un Payment `pending` reciente
+   *  para el mismo (kind, resourceId) y todavía no se sabe si tiene preferencia. No es un
+   *  rechazo real, es una carrera contra un pedido anterior que está terminando de guardar su
+   *  preferencia y se resuelve sola en el orden de un segundo — por eso se reintenta en vez de
+   *  caer directo al link manual. */
+  private static readonly CHECKOUT_REINTENTOS = 3
+  private static readonly CHECKOUT_ESPERA_MS = 600
+
+  override async startCheckout(
+    kind: 'ticket_order' | 'membership' | 'ad_campaign',
+    resourceId: string,
+  ): Promise<string | null> {
+    let intento = 0
+    while (true) {
+      intento++
+      try {
+        const r = await this.api.post<{ initPoint: string }>('/payments/preference', { kind, resourceId })
+        return r.initPoint
+      } catch (err) {
+        const reintentable = err instanceof ApiError && err.status === 409 && intento < RemoteDataStore.CHECKOUT_REINTENTOS
+        if (reintentable) {
+          await new Promise((resolve) => setTimeout(resolve, RemoteDataStore.CHECKOUT_ESPERA_MS))
+          continue
+        }
+        // Sin conexión con MP (503), 409 que no se resolvió tras reintentar, o error de red:
+        // devolvemos null y el llamador cae al mpLink de siempre. No se avisa acá: quien llama
+        // decide si hay alternativa o si hay que mostrar el error.
+        return null
+      }
+    }
   }
 
   private scheduleFlush(): void {

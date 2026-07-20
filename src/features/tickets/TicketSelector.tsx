@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ArrowUpRight, Check, Minus, Plus } from 'lucide-react'
-import { Badge, Button, Sheet } from '../../components/ui'
+import { Badge, Button, Sheet, toast } from '../../components/ui'
 import { store, useStore } from '../../data/store'
 import { IDS } from '../../data/ids'
 import type { TicketOrder, TicketPlan } from '../../data/types'
@@ -67,7 +67,10 @@ export function TicketSelector({ className }: { className?: string }) {
       const orders = selected.map((p) => store.createOrder(p.id, qty[p.id]!))
       // Total real de las órdenes creadas (no del render, que pudo cambiar durante el await).
       const orderedTotal = orders.reduce((acc, o) => acc + o.total, 0)
-      const mpLink = selected.find((p) => p.mpLink)?.mpLink ?? 'https://www.mercadopago.com.ar'
+      // Checkout real por la PRIMERA orden; si no hay conexión con MP (o el checkout no se pudo
+      // generar), cae al link manual del plan — la venta nunca se corta.
+      const real = await store.startCheckout('ticket_order', orders[0].id)
+      const mpLink = real ?? selected.find((p) => p.mpLink)?.mpLink ?? ''
       setPending({ orders, total: orderedTotal, mpLink })
     } finally {
       busyRef.current = false
@@ -77,8 +80,15 @@ export function TicketSelector({ className }: { className?: string }) {
 
   const goToMp = () => {
     if (!pending) return
+    if (!pending.mpLink) {
+      toast('La venta de entradas no está disponible en este momento. Probá más tarde.', 'info')
+      setPending(null)
+      return
+    }
     pending.orders.forEach((o) => store.markOrderRedirected(o.id))
-    window.open(pending.mpLink, '_blank', 'noopener')
+    // Misma pestaña (no window.open): en el celular la pestaña nueva se pierde y el comprador
+    // nunca vuelve. Con redirección acá, las back_urls de la preferencia lo traen de nuevo a CCM.
+    window.location.href = pending.mpLink
     setPending(null)
     setQty({})
     setConfirming(true)
@@ -225,7 +235,7 @@ export function TicketSelector({ className }: { className?: string }) {
               Ir a Mercado Pago <ArrowUpRight size={16} strokeWidth={2.25} aria-hidden />
             </Button>
             <p className="eyebrow mt-4 text-center text-[10px] text-ink-soft/70">
-              Pago seguro · se abre en una pestaña nueva
+              Pago seguro con Mercado Pago
             </p>
           </div>
         )}
