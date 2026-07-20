@@ -226,11 +226,18 @@ describe('enganche automático', () => {
 describe('backfill', () => {
   // Igual que 'enganche automático': este describe es hermano de 'linkPerson', así que su
   // beforeEach no lo alcanza. Acá hace falta además limpiar Device (con su cascada de
-  // ProfileField): backfillPersonas() escanea TODOS los dispositivos con personId null, así
-  // que sin esta limpieza una corrida anterior de este mismo test (que ya dejó a "bf@x.com"
-  // con Persona asignada) haría fallar `primera.creadas` en la siguiente corrida completa de
-  // la suite.
+  // ProfileField) y Application: backfillPersonas() escanea TODOS los dispositivos Y TODAS las
+  // postulaciones con personId null, así que sin esta limpieza una corrida anterior de este
+  // mismo test (que ya dejó a "bf@x.com" con Persona asignada) haría fallar `primera.creadas`
+  // en la siguiente corrida completa de la suite.
+  //
+  // Las postulaciones hay que borrarlas explícitamente y ANTES que las Personas: Application.personId
+  // es `onDelete: SetNull`, así que `person.deleteMany()` no se las lleva — las deja huérfanas con
+  // personId en null, que es justo lo que el backfill sale a buscar. Cualquier test de este archivo
+  // que cree una Application (los de la ficha, sin ir más lejos) le sumaría personas creadas a este
+  // conteo y lo haría fallar.
   beforeEach(async () => {
+    await prisma.application.deleteMany()
     await prisma.device.deleteMany()
     await prisma.person.deleteMany()
   })
@@ -307,5 +314,95 @@ describe('getPerson', () => {
 
   it('devuelve null si no existe', async () => {
     expect(await getPerson('no-existe')).toBeNull()
+  })
+
+  /** Fixture mínima: una Convocatoria (con su Event dueño) para poder crear una Application
+   *  de verdad — la FK convocatoriaId es obligatoria y Postgres la exige. */
+  async function crearConvocatoria() {
+    const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const event = await prisma.event.create({
+      data: {
+        id: `ev-${sufijo}`, slug: `ev-${sufijo}`, type: 'principal', title: 'Evento test',
+        dateLabel: 'test', startDate: new Date(), venue: 'v', address: 'a', mapsUrl: 'https://maps',
+        description: 'd', cover: 'c',
+      },
+    })
+    return prisma.convocatoria.create({
+      data: {
+        id: `conv-${sufijo}`, slug: `conv-${sufijo}`, title: 'Convocatoria test', intro: 'intro',
+        deadline: new Date('2099-01-01'), eventId: event.id,
+      },
+    })
+  }
+
+  it('cuando no hay ProfileField, completa los campos desde el JSON de la postulación más reciente', async () => {
+    const sufijo = Date.now()
+    const email = `rocio-${sufijo}@x.com`
+    const dni = `30${sufijo}`.slice(0, 8)
+    const persona = await prisma.person.create({ data: { email, dni: null } })
+    const conv = await crearConvocatoria()
+    await prisma.application.create({
+      data: {
+        id: `app-${sufijo}`, convocatoriaId: conv.id, personId: persona.id, status: 'preinscripta',
+        fromSeed: false,
+        data: {
+          nombre: 'Rocío Sánchez', email, dni, telefono: '+54 351 555-1234',
+          instagram: 'https://instagram.com/rociosanchez',
+          // "ruido" propio de la convocatoria: NO tiene que aparecer arriba, ya se muestra en Postulaciones.
+          historia: 'Soy diseñadora...', extra: 'dato extra', desfile: 'Sí', portfolio: 'https://drive/x',
+          acompanante: 'Solo',
+        },
+      },
+    })
+
+    const ficha = await getPerson(persona.id)
+    expect(ficha).toBeTruthy()
+
+    const esperados: Record<string, string> = {
+      nombre: 'Rocío Sánchez', email, dni, phone: '+54 351 555-1234',
+      instagram: 'https://instagram.com/rociosanchez',
+    }
+    for (const [key, value] of Object.entries(esperados)) {
+      const c = ficha!.campos.find((x) => x.key === key)
+      expect(c, `falta el campo ${key}`).toBeTruthy()
+      expect(c!.value).toBe(value)
+      expect(c!.source).toBe('postulacion')
+      expect(c!.capturedAt).toBeTruthy()
+    }
+
+    // Los campos propios de la convocatoria (no forman parte del mapeo) no se duplican acá arriba.
+    for (const ruido of ['historia', 'extra', 'desfile', 'portfolio', 'acompanante']) {
+      expect(ficha!.campos.find((x) => x.key === ruido)).toBeUndefined()
+    }
+  })
+
+  it('un ProfileField existente le gana a la postulación para la misma clave', async () => {
+    const sufijo = Date.now()
+    const email = `gana-${sufijo}@x.com`
+    const device = await prisma.device.create({ data: { publicId: `pf-gana-${sufijo}` } })
+    const persona = await prisma.person.create({ data: { email, dni: null } })
+    await prisma.device.update({ where: { id: device.id }, data: { personId: persona.id } })
+    await prisma.profileField.create({
+      data: { deviceId: device.id, key: 'dni', value: '11111111', source: 'inscripcion_evento' },
+    })
+
+    const conv = await crearConvocatoria()
+    await prisma.application.create({
+      data: {
+        id: `app-gana-${sufijo}`, convocatoriaId: conv.id, personId: persona.id, status: 'preinscripta',
+        fromSeed: false,
+        data: { nombre: 'Alguien', email, dni: '99999999' }, // dni distinto al del ProfileField
+      },
+    })
+
+    const ficha = await getPerson(persona.id)
+    const dni = ficha!.campos.find((c) => c.key === 'dni')
+    expect(dni!.value).toBe('11111111')          // el del ProfileField, no el de la postulación
+    expect(dni!.source).toBe('inscripcion_evento') // procedencia real, no 'postulacion'
+
+    // 'nombre' sí falta en ProfileField, así que ese SÍ se completa desde la postulación.
+    const nombre = ficha!.campos.find((c) => c.key === 'nombre')
+    expect(nombre!.value).toBe('Alguien')
+    expect(nombre!.source).toBe('postulacion')
   })
 })

@@ -156,6 +156,47 @@ function masReciente(fechas: Date[]): Date | null {
   return fechas.reduce<Date | null>((max, f) => (!max || f > max ? f : max), null)
 }
 
+/** Mapeo de la clave en el JSON libre de una postulación a la clave de `campos` de la ficha.
+ *  Deliberadamente acotado a las claves de identidad/contacto (PRD §10.3): el resto del JSON
+ *  (historia, extra, desfile, portfolio, acompanante, ...) son respuestas propias de esa
+ *  convocatoria puntual y ya se muestran en el bloque de Postulaciones — traerlas acá arriba
+ *  sería ruido duplicado. */
+const MAPEO_CAMPOS_POSTULACION: Record<string, string> = {
+  nombre: 'nombre',
+  email: 'email',
+  dni: 'dni',
+  telefono: 'phone',
+  instagram: 'instagram',
+}
+
+/**
+ * Completa, desde el JSON de la postulación más reciente, las claves de `campos` que NO hayan
+ * llegado ya por ProfileField. ProfileField manda siempre: tiene procedencia real (`source` y
+ * `capturedAt` verdaderos, del dispositivo que los capturó), mientras que acá solo podemos
+ * decir "vinieron de esta postulación" — que es honesto, pero pisar un ProfileField real con
+ * esto sería peor información, no mejor. Hoy las 24 personas de la base vienen de postulaciones
+ * (no del sitio), así que sin esto la ficha —que promete "quién es esta persona"— queda vacía
+ * para casi todo el mundo.
+ */
+function camposDesdePostulacion(
+  app: { data: unknown; ts: Date } | undefined,
+  yaPresentes: Set<string>,
+): PersonaCampo[] {
+  if (!app) return []
+  const { data } = app
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return []
+  const d = data as Record<string, unknown>
+
+  const campos: PersonaCampo[] = []
+  for (const [claveJson, claveCampo] of Object.entries(MAPEO_CAMPOS_POSTULACION)) {
+    if (yaPresentes.has(claveCampo)) continue // el ProfileField ya trajo esta clave: no se pisa
+    const valor = d[claveJson]
+    if (typeof valor !== 'string' || !valor.trim()) continue
+    campos.push({ key: claveCampo, value: valor, source: 'postulacion', capturedAt: app.ts.toISOString() })
+  }
+  return campos
+}
+
 export async function listPeople(opts: { q?: string; cursor?: string; limit?: number }): Promise<{
   items: PersonaListItem[]
   nextCursor: string | null
@@ -277,6 +318,12 @@ export async function getPerson(id: string): Promise<PersonaFicha | null> {
     .flatMap((d) => d.analytics)
     .sort((a, b) => b.ts.getTime() - a.ts.getTime())
 
+  // applications ya viene ts-desc (ver el include de arriba), así que [0] es la más reciente.
+  const campos: PersonaCampo[] = [
+    ...fields.map((f) => ({ key: f.key, value: f.value, source: f.source, capturedAt: f.capturedAt.toISOString() })),
+    ...camposDesdePostulacion(p.applications[0], new Set(fields.map((f) => f.key))),
+  ]
+
   return {
     id: p.id,
     nombre: nombreDe(fields, p.applications[0]?.data ?? null),
@@ -288,12 +335,7 @@ export async function getPerson(id: string): Promise<PersonaFicha | null> {
     postulaciones: p.applications.length,
     creadaEl: p.createdAt.toISOString(),
     ultimaActividad: analytics[0]?.ts.toISOString() ?? null,
-    campos: fields.map((f) => ({
-      key: f.key,
-      value: f.value,
-      source: f.source,
-      capturedAt: f.capturedAt.toISOString(),
-    })),
+    campos,
     consentimientos: {
       terms: primerDevice?.consentTerms?.toISOString() ?? null,
       news: primerDevice?.consentNews?.toISOString() ?? null,
