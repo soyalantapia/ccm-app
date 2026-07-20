@@ -13,10 +13,10 @@
 import { prisma } from '../src/lib/prisma.js'
 import { env } from '../src/lib/env.js'
 import { hashOtp, otpExpiry } from '../src/lib/adminOtp.js'
+import { updateLeavingOwner } from '../src/db/adminAuth.js'
 import type { AdminRole } from '@prisma/client'
 
 const API = (process.env.API_URL ?? 'http://localhost:4020') + '/api/v1'
-const LEGACY = env.ADMIN_TOKEN ?? ''
 
 /* ─── Andamiaje mínimo de aserciones ─── */
 
@@ -309,41 +309,50 @@ async function main() {
   })
   igual('queda un solo dueño en el elenco', owners, 1)
 
-  // El caso del ÚLTIMO dueño es el más importante de todos: si falla, la plataforma queda sin
-  // nadie que pueda administrarla. Para probarlo de verdad hay que ser el único owner del
-  // sistema, así que degradamos temporalmente a los owners reales del entorno y los restauramos
-  // pase lo que pase. Sin este aislamiento el caso quedaba sin probar, que es peor.
-  if (LEGACY) {
-    const otrosOwners = await prisma.adminUser.findMany({
-      where: { role: 'OWNER', status: { not: 'disabled' }, email: { not: EMAILS.owner } },
-      select: { id: true, role: true },
+  // El caso del ÚLTIMO dueño es el más importante: si falla, la plataforma queda sin nadie que
+  // pueda administrarla. Por la API es inalcanzable —sólo OWNER tiene team:manage, así que el
+  // único que podría sacar al último dueño es él mismo, y SELF_LOCKOUT lo frena antes—, de modo
+  // que se prueba donde vive la garantía: el UPDATE condicional atómico. Ese statement es lo que
+  // impide que dos bajas concurrentes pasen ambas el chequeo y dejen el sistema sin dueños.
+  //
+  // Para que sea el "último" de verdad hay que aislar el escenario: degradamos temporalmente a
+  // los owners reales del entorno y los restauramos pase lo que pase.
+  const otrosOwners = await prisma.adminUser.findMany({
+    where: { role: 'OWNER', status: { not: 'disabled' }, email: { not: EMAILS.owner } },
+    select: { id: true, role: true },
+  })
+  try {
+    if (otrosOwners.length) {
+      await prisma.adminUser.updateMany({
+        where: { id: { in: otrosOwners.map((o) => o.id) } },
+        data: { role: 'EDITOR' },
+      })
+    }
+    const quedan = await prisma.adminUser.count({ where: { role: 'OWNER', status: { not: 'disabled' } } })
+    igual('escenario aislado: queda un único dueño en todo el sistema', quedan, 1)
+
+    const pudoBajar = await updateLeavingOwner(idOwner, { status: 'disabled' })
+    afirmar('la base RECHAZA dar de baja al último dueño', pudoBajar === false)
+
+    const pudoDegradar = await updateLeavingOwner(idOwner, { role: 'CONTENT' })
+    afirmar('y RECHAZA cambiarle el rol', pudoDegradar === false)
+
+    const siguenSiendo = await prisma.adminUser.count({ where: { role: 'OWNER', status: { not: 'disabled' } } })
+    igual('el sistema NUNCA queda sin dueños', siguenSiendo, 1)
+
+    // Con DOS dueños, en cambio, sacar a uno tiene que funcionar: la guarda protege la
+    // invariante, no impide administrar el equipo.
+    const otro = await prisma.adminUser.create({
+      data: { email: 'acept.owner3@ccm.test', name: 'Tercero', role: 'OWNER', status: 'active' },
     })
-    try {
-      if (otrosOwners.length) {
-        await prisma.adminUser.updateMany({
-          where: { id: { in: otrosOwners.map((o) => o.id) } },
-          data: { role: 'EDITOR' },
-        })
-      }
-      const quedan = await prisma.adminUser.count({ where: { role: 'OWNER', status: { not: 'disabled' } } })
-      igual('escenario aislado: queda un único dueño en todo el sistema', quedan, 1)
-
-      // El token legacy vale como OWNER pero no es "uno mismo", así que esquiva la guarda de
-      // auto-bloqueo y prueba específicamente la del último dueño.
-      const baja = await req('PATCH', `/admin/team/${idOwner}`, { token: LEGACY, body: { status: 'disabled' } })
-      igual('NO se puede dar de baja al último dueño', baja.status, 422)
-      igual('y el motivo lo dice claro', baja.body?.error?.code, 'LAST_OWNER')
-
-      const degradar = await req('PATCH', `/admin/team/${idOwner}`, { token: LEGACY, body: { role: 'CONTENT' } })
-      igual('NI cambiarle el rol al último dueño', degradar.status, 422)
-
-      const siguenSiendo = await prisma.adminUser.count({ where: { role: 'OWNER', status: { not: 'disabled' } } })
-      igual('el sistema NUNCA queda sin dueños', siguenSiendo, 1)
-    } finally {
-      // Restaurar el entorno pase lo que pase: si esto no corre, el usuario se queda sin owners.
-      for (const o of otrosOwners) {
-        await prisma.adminUser.update({ where: { id: o.id }, data: { role: o.role } })
-      }
+    const pudoConDos = await updateLeavingOwner(idOwner, { role: 'CONTENT' })
+    afirmar('con otro dueño disponible, SÍ deja degradar', pudoConDos === true)
+    await prisma.adminUser.update({ where: { id: idOwner }, data: { role: 'OWNER' } })
+    await prisma.adminUser.delete({ where: { id: otro.id } })
+  } finally {
+    // Restaurar el entorno pase lo que pase: si esto no corre, el usuario se queda sin owners.
+    for (const o of otrosOwners) {
+      await prisma.adminUser.update({ where: { id: o.id }, data: { role: o.role } })
     }
   }
 

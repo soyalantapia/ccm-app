@@ -1,19 +1,8 @@
-import { timingSafeEqual } from 'node:crypto'
 import type { RequestHandler } from 'express'
-import { env } from '../lib/env.js'
-import { ApiError, forbidden, unauthorized } from '../lib/errors.js'
+import { forbidden, unauthorized } from '../lib/errors.js'
 import { verifySessionToken, validateSession } from '../lib/adminSession.js'
 import { loadAdminSession } from '../db/adminAuth.js'
 import { can, type Permission } from '../domain/adminRoles.js'
-
-/** Compara dos strings en tiempo constante (no filtra el largo del prefijo correcto por timing). */
-function safeEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a)
-  const bb = Buffer.from(b)
-  // timingSafeEqual exige mismo largo; el chequeo de largo NO es constant-time pero solo revela
-  // el LARGO del token, no su contenido — igual que verifyDeviceToken (lib/deviceToken.ts).
-  return ab.length === bb.length && timingSafeEqual(ab, bb)
-}
 
 function bearerOf(req: { header(name: string): string | undefined }): string {
   const header = req.header('authorization') ?? ''
@@ -21,18 +10,17 @@ function bearerOf(req: { header(name: string): string | undefined }): string {
 }
 
 /**
- * Autenticación del organizador. Durante la migración conviven DOS vías, en este orden:
+ * Autenticación del organizador: sesión personal, emitida por el login por código al email.
  *
- *  1. Sesión personal (login por código al email). Es la buena: cada quien tiene su usuario,
- *     su rol y una sesión revocable. El rol se lee de la BASE en cada request, no del token,
- *     así que bajarle permisos a alguien o darlo de baja pega en el request siguiente y no
- *     dentro de una semana.
+ * Cada persona tiene su usuario, su rol y una sesión revocable. El rol se lee de la BASE en cada
+ * request, no del token, así que bajarle permisos a alguien o darlo de baja pega en el request
+ * siguiente y no dentro de una semana.
  *
- *  2. ADMIN_TOKEN, el secreto compartido de la etapa anterior. Vale como OWNER.
- *
- * La vía 2 sigue viva a propósito: mientras no esté confirmado que los emails llegan de verdad,
- * cortarla dejaría a todos afuera del panel sin forma de entrar. Se saca en un commit propio y
- * reversible una vez verificada la entrega — es el último paso de la migración.
+ * Hasta acá convivía una segunda vía: ADMIN_TOKEN, un único secreto compartido por todo el equipo
+ * que valía como OWNER. Se mantuvo mientras no estuviera confirmado que los emails llegaban —
+ * cortarla antes habría dejado a todos afuera sin forma de entrar. Confirmada la entrega en
+ * producción, se retiró: un secreto compartido no se puede revocar por persona, no deja rastro de
+ * quién hizo qué, y no caduca.
  */
 export const requireAdmin: RequestHandler = (req, _res, next) => {
   const token = bearerOf(req)
@@ -41,41 +29,30 @@ export const requireAdmin: RequestHandler = (req, _res, next) => {
     return
   }
 
-  // Vía 1: ¿es un token de sesión firmado por nosotros?
   const parsed = verifySessionToken(token)
-  if (parsed) {
-    void loadAdminSession(parsed.sessionId)
-      .then((rec) => {
-        const verdict = validateSession(parsed.sessionId, rec, new Date())
-        if (verdict !== 'ok' || !rec) {
-          next(
-            unauthorized(
-              verdict === 'user_disabled' ? 'ADMIN_DISABLED' : 'ADMIN_SESSION_INVALID',
-              verdict === 'user_disabled'
-                ? 'Tu acceso fue dado de baja.'
-                : 'Tu sesión venció o fue cerrada. Volvé a entrar.',
-            ),
-          )
-          return
-        }
-        req.admin = { userId: rec.userId, role: rec.role, via: 'session', sessionId: parsed.sessionId }
-        next()
-      })
-      .catch(next)
+  if (!parsed) {
+    next(unauthorized('ADMIN_SESSION_INVALID', 'Tu sesión venció o fue cerrada. Volvé a entrar.'))
     return
   }
 
-  // Vía 2: el secreto compartido de la etapa anterior.
-  if (!env.ADMIN_TOKEN) {
-    next(new ApiError(503, 'ADMIN_AUTH_DISABLED', 'Auth de admin no configurada (falta ADMIN_TOKEN)'))
-    return
-  }
-  if (!safeEqual(token, env.ADMIN_TOKEN)) {
-    next(forbidden('ADMIN_FORBIDDEN', 'Token de organizador inválido'))
-    return
-  }
-  req.admin = { role: 'OWNER', via: 'legacy-token' }
-  next()
+  void loadAdminSession(parsed.sessionId)
+    .then((rec) => {
+      const verdict = validateSession(parsed.sessionId, rec, new Date())
+      if (verdict !== 'ok' || !rec) {
+        next(
+          unauthorized(
+            verdict === 'user_disabled' ? 'ADMIN_DISABLED' : 'ADMIN_SESSION_INVALID',
+            verdict === 'user_disabled'
+              ? 'Tu acceso fue dado de baja.'
+              : 'Tu sesión venció o fue cerrada. Volvé a entrar.',
+          ),
+        )
+        return
+      }
+      req.admin = { userId: rec.userId, role: rec.role, via: 'session', sessionId: parsed.sessionId }
+      next()
+    })
+    .catch(next)
 }
 
 /**

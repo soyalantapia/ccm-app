@@ -167,16 +167,6 @@ adminAuthRouter.post('/auth/admin/logout', requireAdmin, async (req, res, next) 
  */
 adminAuthRouter.get('/auth/admin/me', requireAdmin, async (req, res, next) => {
   try {
-    const role = req.admin!.role
-    // Con el token compartido viejo no hay persona detrás: se responde el rol que otorga.
-    if (req.admin!.via === 'legacy-token') {
-      res.json({
-        user: { id: null, email: null, name: 'Organizador', role, permissions: permissionsOf(role) },
-        via: 'legacy-token',
-        home: homePathFor(role),
-      })
-      return
-    }
     const u = await findAdminById(req.admin!.userId!)
     if (!u || u.status === 'disabled') throw unauthorized('ADMIN_SESSION_INVALID', 'Sesión inválida.')
     res.json({

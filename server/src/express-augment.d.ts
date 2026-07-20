@@ -12,12 +12,11 @@ declare global {
       /** Organizador autenticado — lo setea requireAdmin. El rol sale SIEMPRE de la base
        *  (no del token), así que un cambio de permisos pega en el request siguiente. */
       admin?: {
-        /** AdminUser.id. Ausente cuando se entró con el token compartido viejo. */
-        userId?: string
+        /** AdminUser.id de la persona detrás de la sesión. */
+        userId: string
         role: AdminRole
-        /** Por dónde entró: la sesión nueva, o el ADMIN_TOKEN compartido de la etapa anterior. */
-        via: 'session' | 'legacy-token'
-        sessionId?: string
+        via: 'session'
+        sessionId: string
       }
     }
   }
