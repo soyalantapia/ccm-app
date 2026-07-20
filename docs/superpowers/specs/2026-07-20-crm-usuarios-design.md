@@ -269,11 +269,13 @@ Ninguno pasa de ~200 líneas. Si crecen, se parten: son los archivos que más se
 El diseño completo se construye en tres entregas, cada una útil por sí sola. Se parte porque un PR único sería enorme y esto toca `schema.prisma` y `routes/admin.ts`, los dos archivos con más colisiones entre sesiones paralelas.
 
 **Fase 1 — La base y la lista** *(primera a implementar)*
-Tabla `Person`, migración `10_person`, backfill, reglas de unificación, enganche en los caminos de escritura, `GET /people`, `GET /people/:id`, la lista con buscador y filtros, y la ficha en modo lectura. Permiso `people:read`.
+Tabla `Person`, migración `10_person`, backfill, reglas de unificación, enganche en los caminos de escritura, `GET /people`, `GET /people/:id`, la lista con **buscador por texto** y la ficha en modo lectura. Permiso `people:read`.
 Al terminar, la página rota queda reemplazada por un CRM funcional. **Es la única fase que cambia el esquema.**
 
 **Fase 2 — Las acciones**
-`PATCH /people/:id`, notas (`PersonNote`), export CSV con consentimiento y registro, contacto por WhatsApp/email. Permisos `people:write` y `people:export`. No toca el esquema salvo `PersonNote`.
+`PATCH /people/:id`, notas (`PersonNote`), export CSV con consentimiento y registro, contacto por WhatsApp/email, y **los filtros por estado** (socios, inscriptos, postulantes, con entrada). Permisos `people:write` y `people:export`. No toca el esquema salvo `PersonNote`.
+
+Los filtros se difieren desde la Fase 1 a propósito: con ~25 personas el buscador por texto alcanza, y los filtros recién ganan sentido con volumen.
 
 **Fase 3 — La puerta**
 `Attendance`, acreditación manual e idempotente, ruta angosta `/people/puerta`, permiso `people:checkin` y habilitación del rol STAFF. Se construye cerca de septiembre para probarla en condiciones reales.
