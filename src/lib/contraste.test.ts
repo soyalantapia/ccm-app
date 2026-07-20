@@ -69,12 +69,23 @@ describe('revisarPaleta — avisa solo cuando hay algo que decir', () => {
     expect(revisarPaleta(paletaCCM)).toEqual([])
   })
 
-  it('el par del BOTÓN mide el acento oscurecido, no el puro (si no, avisa de algo que no pasa)', () => {
-    // Con el dorado real de CCM el botón queda en 4,99 → no debe avisar por los botones,
-    // aunque el acento PURO (3,25) sí dispare el aviso de las insignias.
+  it('la paleta REAL de CCM (dorado #b8860b) no genera ningún aviso', () => {
+    // Este es el caso que importa: es lo que ve el cliente al abrir el editor sin tocar nada.
+    // El botón usa el acento oscurecido (4,99 ✓) y la sigla del sponsor es texto grande, que
+    // rige contra 3 (3,25 ✓). Un aviso permanente acá enseñaría a ignorar todos los avisos.
+    expect(revisarPaleta({ ...paletaCCM, accent: '#b8860b' })).toEqual([])
+  })
+
+  it('la sigla del sponsor se mide contra el mínimo de texto grande, no contra 4,5', () => {
+    // 3,25 pasa el mínimo de texto grande (3) pero no el de texto normal (4,5): si el par
+    // estuviera mal configurado, este caso avisaría.
     const avisos = revisarPaleta({ ...paletaCCM, accent: '#b8860b' })
-    expect(avisos.some((a) => /botones/i.test(a.donde)), 'el botón está bien: no debe avisar').toBe(false)
-    expect(avisos.some((a) => /insignias/i.test(a.donde)), 'las insignias sí usan el acento puro').toBe(true)
+    expect(avisos.some((a) => /sigla/i.test(a.donde))).toBe(false)
+  })
+
+  it('pero si el acento es tan claro que ni el texto grande se lee, avisa', () => {
+    const avisos = revisarPaleta({ ...paletaCCM, accent: '#f7e9b0' })
+    expect(avisos.some((a) => /sigla/i.test(a.donde))).toBe(true)
   })
 
   it('avisa por los botones cuando el acento es tan claro que ni oscurecido alcanza', () => {
