@@ -22,6 +22,11 @@ beforeEach(() => {
   vi.mocked(prisma.payment.create).mockResolvedValue({ id: 'pay_1' } as never)
   // Sin Payment reusable por default: cada test que quiera probar la reutilización lo pisa.
   vi.mocked(prisma.payment.findFirst).mockResolvedValue(null as never)
+  // Default que guarda bien: `vi.clearAllMocks()` borra el historial de llamadas pero NO
+  // implementaciones (`mockResolvedValue`/`mockRejectedValue`) — sin este default explícito acá,
+  // un test que pise `payment.update` con `mockRejectedValue` (no `Once`) dejaría ese fallo
+  // filtrando hacia tests posteriores que no lo esperan.
+  vi.mocked(prisma.payment.update).mockResolvedValue({} as never)
   vi.mocked(mpApi.createPreference).mockResolvedValue({ id: 'pref_1', init_point: 'https://mp/checkout/pref_1' })
 })
 
@@ -132,6 +137,156 @@ describe('mpCheckoutService — verifica de quién es el recurso (defecto críti
       code: 'RESOURCE_NOT_FOUND',
       message: 'La orden no existe',
     })
+  })
+})
+
+/**
+ * A diferencia de `mockResolvedValueOnce` (que solo puede simular el caso SECUENCIAL: primero
+ * termina la request 1 entera, RECIÉN AHÍ se pisa el mock para la request 2), este store tiene
+ * estado real y hace cumplir el índice único parcial que agrega la migración
+ * 9_mp_payment_pending_unique (un solo Payment `pending` por (kind, resourceId)): `create` tira
+ * un error `{ code: 'P2002' }` si ya hay un pending para ese par. Es lo único que permite
+ * reproducir la carrera de DOS requests concurrentes de verdad con `Promise.all`.
+ */
+function crearPaymentStoreEnMemoria() {
+  let autoincremento = 0
+  const filas: {
+    id: string
+    kind: string
+    resourceId: string
+    deviceId: string | null
+    amount: number
+    status: string
+    mpPreferenceId: string | null
+    initPoint: string | null
+    createdAt: Date
+  }[] = []
+
+  function coincide(fila: (typeof filas)[number], where: Record<string, unknown>): boolean {
+    if ('kind' in where && fila.kind !== where.kind) return false
+    if ('resourceId' in where && fila.resourceId !== where.resourceId) return false
+    if ('status' in where && fila.status !== where.status) return false
+    if ('mpPreferenceId' in where) {
+      const cond = where.mpPreferenceId as { not?: null } | null
+      if (cond === null) {
+        if (fila.mpPreferenceId !== null) return false
+      } else if (cond && 'not' in cond && cond.not === null) {
+        if (fila.mpPreferenceId === null) return false
+      }
+    }
+    if ('createdAt' in where) {
+      const cond = where.createdAt as { gte?: Date }
+      if (cond?.gte && fila.createdAt.getTime() < cond.gte.getTime()) return false
+    }
+    return true
+  }
+
+  return {
+    create: async ({ data }: { data: Record<string, unknown> }) => {
+      const yaHayPending = filas.some((f) => f.kind === data.kind && f.resourceId === data.resourceId && f.status === 'pending')
+      if (yaHayPending) {
+        throw Object.assign(new Error('Unique constraint failed on the fields: (`kind`,`resourceId`)'), { code: 'P2002' })
+      }
+      autoincremento += 1
+      const fila = {
+        id: `pay_${autoincremento}`,
+        kind: data.kind as string,
+        resourceId: data.resourceId as string,
+        deviceId: (data.deviceId as string | null) ?? null,
+        amount: data.amount as number,
+        status: (data.status as string) ?? 'pending',
+        mpPreferenceId: null,
+        initPoint: null,
+        createdAt: new Date(),
+      }
+      filas.push(fila)
+      return { ...fila }
+    },
+    findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+      const candidatas = filas.filter((f) => coincide(f, where))
+      candidatas.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      return candidatas[0] ? { ...candidatas[0] } : null
+    },
+    update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+      const fila = filas.find((f) => f.id === where.id)
+      if (!fila) throw Object.assign(new Error('Record to update not found.'), { code: 'P2025' })
+      Object.assign(fila, data)
+      return { ...fila }
+    },
+  }
+}
+
+describe('mpCheckoutService — atomicidad real ante concurrencia (defecto crítico A)', () => {
+  it('dos createCheckout concurrentes para la misma orden: MP se llama UNA sola vez (con store con estado real, no mockResolvedValueOnce)', async () => {
+    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
+
+    const store = crearPaymentStoreEnMemoria()
+    vi.mocked(prisma.payment.create).mockImplementation(store.create as never)
+    vi.mocked(prisma.payment.findFirst).mockImplementation(store.findFirst as never)
+    vi.mocked(prisma.payment.update).mockImplementation(store.update as never)
+
+    // Latencia real en createPreference (50ms): es la ventana en la que un doble clic real cae
+    // de lleno. Sin ella, todo el `Promise.all` corre en microtasks y nunca se demuestra nada.
+    let llamadas = 0
+    vi.mocked(mpApi.createPreference).mockImplementation(async () => {
+      llamadas += 1
+      const n = llamadas
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      return { id: `pref_${n}`, init_point: `https://mp/checkout/pref_${n}` }
+    })
+
+    const [r1, r2] = await Promise.all([
+      createCheckout('ticket_order', 'ord_1', 'dev_1'),
+      createCheckout('ticket_order', 'ord_1', 'dev_1'),
+    ])
+
+    expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
+    // Las dos requests tienen que terminar con el MISMO link — nunca dos preferencias vivas
+    // pagables para la misma orden.
+    expect(r1.initPoint).toBe(r2.initPoint)
+  }, 10_000)
+
+  it('en secuencial (una request termina antes de que arranque la otra) da 1 sola preferencia, para contrastar con el caso concurrente', async () => {
+    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
+
+    const store = crearPaymentStoreEnMemoria()
+    vi.mocked(prisma.payment.create).mockImplementation(store.create as never)
+    vi.mocked(prisma.payment.findFirst).mockImplementation(store.findFirst as never)
+    vi.mocked(prisma.payment.update).mockImplementation(store.update as never)
+    vi.mocked(mpApi.createPreference).mockResolvedValue({ id: 'pref_1', init_point: 'https://mp/checkout/pref_1' })
+
+    const r1 = await createCheckout('ticket_order', 'ord_1', 'dev_1')
+    const r2 = await createCheckout('ticket_order', 'ord_1', 'dev_1')
+
+    expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
+    expect(r1.initPoint).toBe(r2.initPoint)
+  })
+})
+
+describe('mpCheckoutService — el reintento del comprador tras un fallo de persistencia no genera un segundo cobro (defecto crítico B)', () => {
+  it('createPreference OK pero el update que guarda mpPreferenceId/initPoint falla siempre: el reintento del comprador NO crea una segunda preferencia', async () => {
+    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
+
+    const store = crearPaymentStoreEnMemoria()
+    vi.mocked(prisma.payment.create).mockImplementation(store.create as never)
+    vi.mocked(prisma.payment.findFirst).mockImplementation(store.findFirst as never)
+    // El update SIEMPRE falla (no es un fallo transitorio que un reintento con backoff
+    // resuelva): mpPreferenceId/initPoint nunca quedan guardados en la base.
+    vi.mocked(prisma.payment.update).mockRejectedValue(new Error('la base no vuelve más'))
+    vi.mocked(mpApi.createPreference).mockResolvedValue({ id: 'pref_1', init_point: 'https://mp/checkout/pref_1' })
+
+    // Primer pedido: MP ya le dio un link real al comprador (la preferencia está viva), aunque
+    // no se haya podido guardar en la base.
+    const r1 = await createCheckout('ticket_order', 'ord_1', 'dev_1')
+    expect(r1.initPoint).toBe('https://mp/checkout/pref_1')
+
+    // El comprador reintenta (el link no le sirvió / volvió a tocar "pagar"). El Payment de la
+    // primera vez quedó `pending` con `mpPreferenceId: null` para siempre — invisible para el
+    // guard de reuso. Sin la red de contención del defecto B, esto genera una SEGUNDA
+    // preferencia pagable en MP (doble cobro si el comprador paga las dos).
+    await expect(createCheckout('ticket_order', 'ord_1', 'dev_1')).rejects.toMatchObject({ code: 'CHECKOUT_EN_CURSO' })
+
+    expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
   })
 })
 

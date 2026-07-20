@@ -616,6 +616,16 @@ model Membership {
 //  PAGOS (MERCADO PAGO) — tabla polimórfica (canon 7)
 // ─────────────────────────────────────────────────────────
 
+// "Un solo Payment pending por (kind, resourceId)" se garantiza con un índice único PARCIAL en
+// SQL crudo (no expresable en el datamodel: @@unique no soporta predicado WHERE). Creado en la
+// migración prisma/migrations/9_mp_payment_pending_unique, mismo patrón que
+// "one_active_per_slot" en AdCampaign. Es lo que hace atómica la elección de un único ganador en
+// mpCheckoutService.createCheckout: sin esto, dos requests concurrentes pasan las dos por el
+// `findFirst` de reuso en null y las dos terminan creando una preferencia viva en MP (doble
+// cobro real). ⚠️ Efecto colateral: un Payment pending abandonado (p.ej. si falló guardar
+// mpPreferenceId/initPoint y nunca se reintentó con éxito) TRABA la generación de un cobro nuevo
+// para el mismo recurso hasta que ese Payment deje de estar `pending` — hoy no hay ningún job que
+// expire/cierre esos registros abandonados, es un gap conocido, no un olvido.
 model Payment {
   id         String        @id @default(cuid())
   kind       PaymentKind
