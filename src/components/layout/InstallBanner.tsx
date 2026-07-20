@@ -86,7 +86,7 @@ export function InstallBanner() {
     <div
       role="dialog"
       aria-label="Instalar la app"
-      className="fixed inset-x-3 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-30 animate-rise rounded-lg border border-night-soft bg-night text-night-ink shadow-2xl md:hidden"
+      className="fixed inset-x-3 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-30 animate-rise rounded-lg border border-night-soft bg-night text-night-ink shadow-2xl lg:hidden"
     >
       <div className="flex items-center gap-3 p-3.5">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent text-accent-ink">
