@@ -29,14 +29,28 @@ const schema = z.object({
   // ningún módulo los lee: ADMIN_TOKEN_SECRET + OTP_PEPPER = login OTP del organizador (Fase G,
   // reemplaza al shared secret ADMIN_TOKEN); ACCREDITATION_TOKEN_SECRET = JWT del QR de puerta (Fase H).
   DEVICE_TOKEN_SECRET: z.string().optional(),
-  ADMIN_TOKEN_SECRET: z.string().optional(), // ⏳ sin usar aún (Fase G: OTP)
+  // Login del organizador (OTP por email). Opcionales para no romper el arranque en dev, pero
+  // exigidos por assertProd en producción y con largo mínimo: un secreto corto no protege nada.
+  // Los módulos que los consumen tiran error si faltan, sin caer a ningún valor por defecto.
+  ADMIN_TOKEN_SECRET: z.string().min(32, 'ADMIN_TOKEN_SECRET debe tener al menos 32 caracteres').optional(),
+  OTP_PEPPER: z.string().min(32, 'OTP_PEPPER debe tener al menos 32 caracteres').optional(),
   ACCREDITATION_TOKEN_SECRET: z.string().optional(), // ⏳ sin usar aún (Fase H: acreditación QR)
-  OTP_PEPPER: z.string().optional(), // ⏳ sin usar aún (Fase G: OTP)
   // Fase G (auth temporal del organizador): shared secret Bearer hasta que entre el
   // login OTP por email (RESEND). El front lo manda en Authorization: Bearer <token>.
   ADMIN_TOKEN: z.string().optional(),
 
+  // Email. Resolución: SMTP si hay host → Resend si hay clave → consola. Sin nada configurado
+  // el circuito de login sigue andando y el código sale por el log (ver mail/mailer.ts).
   RESEND_API_KEY: z.string().optional(),
+  MAIL_FROM: z.string().optional(), // ej: 'CCM <no-reply@dominio-verificado.com>'
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  // Base pública del sitio, para armar el link del email de invitación. Sin esto el mail
+  // llegaría con un link a ninguna parte.
+  PUBLIC_BASE_URL: z.string().optional(),
+  // Email del primer OWNER: se crea al arrancar si todavía no hay ninguno (bootstrap).
   ADMIN_BOOTSTRAP_EMAIL: z.string().email().optional(),
 
   // Mercado Pago (fases C/D/F)
@@ -82,6 +96,10 @@ export function assertProd(): void {
   if (env.CORS_ORIGINS === '*') missing.push('CORS_ORIGINS — no puede ser "*" en producción (CORS abierto a cualquier origen)')
   if (!env.ADMIN_TOKEN) missing.push('ADMIN_TOKEN — sin él, todo /admin/* responde 503 (panel del organizador caído)')
   if (!env.DEVICE_TOKEN_SECRET) missing.push('DEVICE_TOKEN_SECRET — sin él, no se pueden emitir ni verificar tokens de device (identidad rota)')
+  // Login del organizador: sin estos dos, o no se pueden firmar sesiones o los códigos OTP
+  // quedarían hasheados con un pepper débil. Nada de fallback silencioso a un valor de juguete.
+  if (!env.ADMIN_TOKEN_SECRET) missing.push('ADMIN_TOKEN_SECRET — sin él no se pueden firmar las sesiones del panel (nadie entra)')
+  if (!env.OTP_PEPPER) missing.push('OTP_PEPPER — sin él los códigos OTP no se pueden hashear de forma segura')
   if (missing.length > 0) {
     console.error('❌ [assertProd] Faltan variables obligatorias en producción:\n  - ' + missing.join('\n  - '))
     process.exit(1)

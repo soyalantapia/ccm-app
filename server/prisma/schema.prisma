@@ -79,12 +79,29 @@ enum CampaignStatus {
   rechazada
 }
 
-// Rol del panel admin (canon 9). STAFF = personal de puerta (solo escanea QR).
+// Rol del panel admin (canon 9).
+//   OWNER   — todo, incluida la gestión del equipo.
+//   EDITOR  — operación del evento: eventos, convocatorias, postulaciones (ve PII), catálogo.
+//   CONTENT — contenido editorial: notas, galerías, banners, beneficios. NO ve PII.
+//   STAFF   — personal de puerta (solo escanea QR).
+//   VIEWER  — solo lectura / reporte a sponsors.
+// ⚠️ STAFF y VIEWER están definidos pero NO habilitados para entrar: todavía no existe la
+// pantalla que justifica cada uno (acreditación por QR; reporte a sponsors scopeado en el
+// server). Se habilitan cuando exista esa superficie — ver adminRoles.ts, LOGIN_ENABLED_ROLES.
 enum AdminRole {
   OWNER
   EDITOR
+  CONTENT
   STAFF
   VIEWER
+}
+
+// Estado de una persona del equipo. `invited` ya puede entrar (el email de invitación la manda
+// al login normal); pasa a `active` en su primer ingreso. `disabled` la saca al instante.
+enum AdminUserStatus {
+  invited
+  active
+  disabled
 }
 
 // Tipo de recurso que paga una fila Payment (canon 7).
@@ -720,10 +737,46 @@ model AnalyticsEvent {
 // ─────────────────────────────────────────────────────────
 
 model AdminUser {
-  id        String    @id @default(cuid())
-  email     String    @unique
+  id        String          @id @default(cuid())
+  email     String          @unique
   name      String?
-  role      AdminRole @default(EDITOR) // canon 9
-  createdAt DateTime  @default(now())
+  role      AdminRole       @default(EDITOR) // canon 9
+  status    AdminUserStatus @default(invited)
+  invitedBy String? // nombre de quien lo invitó (no FK: sobrevive a que esa persona se vaya)
+  invitedAt DateTime        @default(now())
+  createdAt DateTime        @default(now())
   lastLogin DateTime?
+
+  sessions   AdminSession[]
+  loginCodes AdminLoginCode[]
+}
+
+// Sesión del panel. Es la AUTORIDAD: el token firmado no alcanza por sí solo, tiene que existir
+// esta fila. Por eso cerrar sesión (que la borra) revoca de verdad, y no hay que esperar a que
+// venza ningún token.
+model AdminSession {
+  id        String    @id @default(cuid())
+  userId    String
+  user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+
+  @@index([userId])
+}
+
+// Código OTP de un solo uso para entrar al panel. Se guarda HASHEADO (HMAC con pepper + userId),
+// nunca en claro. El más reciente sin consumir es el que vale.
+model AdminLoginCode {
+  id         String    @id @default(cuid())
+  userId     String
+  user       AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  // Sirve a las dos consultas del login: traer el último código vivo del usuario y contar
+  // los emitidos en la ventana de rate limit.
+  @@index([userId, createdAt])
 }
