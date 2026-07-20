@@ -2,21 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "ccm-api",
+      "name": "ccm-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "cwd": "server",
-      "port": 4010
-    },
-    {
-      "name": "ccm-visual",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "5182", "--strictPort"],
-      "port": 5182,
-      "env": {
-        "VITE_BASE": "/",
-        "VITE_API_URL": "http://localhost:4010"
-      }
+      "runtimeArgs": ["run", "dev", "--", "--port", "5179", "--strictPort"],
+      "port": 5179
     }
   ]
 }
