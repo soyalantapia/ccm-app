@@ -608,6 +608,7 @@ export class RemoteDataStore extends LocalDataStore {
     return this.adminNotas ?? super.getAdminNotas()
   }
   override createNota(input: NewNota): Nota {
+    const prevCache = this.adminNotas // para deshacer si el backend rechaza
     const taken = new Set((this.adminNotas ?? []).map((n) => n.slug))
     const base = input.slug || slugify(input.title)
     let slug = base
@@ -616,14 +617,19 @@ export class RemoteDataStore extends LocalDataStore {
     if (this.adminNotas) this.adminNotas = [nota, ...this.adminNotas]
     this.track('admin_nota_created', { notaId: nota.id })
     bus.emit('notas')
-    this.adminWrite(this.api.post('/admin/notas', nota), () => this.refetchNotas())
+    this.adminWrite(this.api.post('/admin/notas', nota), () => this.refetchNotas(),
+      () => { this.adminNotas = prevCache; bus.emit('notas') },
+    )
     return nota
   }
   override updateNota(id: string, patch: Partial<Nota>): void {
+    const prevCache = this.adminNotas // para deshacer si el backend rechaza
     if (this.adminNotas) this.adminNotas = this.adminNotas.map((n) => (n.id === id ? { ...n, ...patch } : n))
     this.track('admin_nota_updated', { notaId: id })
     bus.emit('notas')
-    this.adminWrite(this.api.patch(`/admin/notas/${id}`, patch), () => this.refetchNotas())
+    this.adminWrite(this.api.patch(`/admin/notas/${id}`, patch), () => this.refetchNotas(),
+      () => { this.adminNotas = prevCache; bus.emit('notas') },
+    )
   }
   override deleteNota(id: string): void {
     const prev = this.adminNotas
@@ -653,18 +659,24 @@ export class RemoteDataStore extends LocalDataStore {
     return this.adminBanners ?? super.getAdminBanners()
   }
   override createBanner(input: NewBanner): Banner {
+    const prevCache = this.adminBanners // para deshacer si el backend rechaza
     const banner: Banner = { ...input, id: newId('bnr') }
     if (this.adminBanners) this.adminBanners = [...this.adminBanners, banner].sort((a, b) => a.order - b.order)
     this.track('admin_banner_created', { bannerId: banner.id, slot: banner.slot })
     bus.emit('banners')
-    this.adminWrite(this.api.post('/admin/banners', banner), () => this.refetchBanners())
+    this.adminWrite(this.api.post('/admin/banners', banner), () => this.refetchBanners(),
+      () => { this.adminBanners = prevCache; bus.emit('banners') },
+    )
     return banner
   }
   override updateBanner(id: string, patch: Partial<Banner>): void {
+    const prevCache = this.adminBanners // para deshacer si el backend rechaza
     if (this.adminBanners) this.adminBanners = this.adminBanners.map((b) => (b.id === id ? { ...b, ...patch } : b)).sort((a, b) => a.order - b.order)
     this.track('admin_banner_updated', { bannerId: id })
     bus.emit('banners')
-    this.adminWrite(this.api.patch(`/admin/banners/${id}`, patch), () => this.refetchBanners())
+    this.adminWrite(this.api.patch(`/admin/banners/${id}`, patch), () => this.refetchBanners(),
+      () => { this.adminBanners = prevCache; bus.emit('banners') },
+    )
   }
   override deleteBanner(id: string): void {
     const prev = this.adminBanners
@@ -739,6 +751,7 @@ export class RemoteDataStore extends LocalDataStore {
     return super.getConvocatoria(slug)
   }
   override createConvocatoria(input: NewConvocatoria): Convocatoria {
+    const prevCache = this.convocatoriasList // para deshacer si el backend rechaza
     const taken = new Set((this.convocatoriasList ?? []).map((c) => c.slug))
     const base = input.slug || slugify(input.title)
     let slug = base
@@ -747,17 +760,22 @@ export class RemoteDataStore extends LocalDataStore {
     if (this.convocatoriasList) this.convocatoriasList = [cv, ...this.convocatoriasList]
     this.track('admin_convocatoria_created', { convocatoriaId: cv.id })
     bus.emit('convocatorias')
-    this.adminWrite(this.api.post('/admin/convocatorias', cv), () => this.hydrateConvocatorias())
+    this.adminWrite(this.api.post('/admin/convocatorias', cv), () => this.hydrateConvocatorias(),
+      () => { this.convocatoriasList = prevCache; bus.emit('convocatorias') },
+    )
     return cv
   }
   override updateConvocatoria(id: string, patch: Partial<Convocatoria>): void {
+    const prevCache = this.convocatoriasList // para deshacer si el backend rechaza
     if (this.convocatoriasList) this.convocatoriasList = this.convocatoriasList.map((c) => (c.id === id ? { ...c, ...patch } : c))
     this.track('admin_convocatoria_updated', { convocatoriaId: id })
     bus.emit('convocatorias')
     // Se limpia también el caché por slug: si no, la vista pública /c/:slug seguía sirviendo
     // la versión vieja hasta recargar.
     this.convocatorias.clear()
-    this.adminWrite(this.api.patch(`/admin/convocatorias/${id}`, patch), () => this.hydrateConvocatorias())
+    this.adminWrite(this.api.patch(`/admin/convocatorias/${id}`, patch), () => this.hydrateConvocatorias(),
+      () => { this.convocatoriasList = prevCache; bus.emit('convocatorias') },
+    )
   }
   override deleteConvocatoria(id: string): void {
     const prev = this.convocatoriasList
@@ -852,18 +870,24 @@ export class RemoteDataStore extends LocalDataStore {
     return this.adminBenefits ?? super.getAdminBenefits()
   }
   override createBenefit(input: NewBenefit): Benefit {
+    const prevCache = this.adminBenefits // para deshacer si el backend rechaza
     const benefit: Benefit = { ...input, id: newId('ben') }
     if (this.adminBenefits) this.adminBenefits = [...this.adminBenefits, benefit].sort((a, b) => a.order - b.order)
     this.track('admin_benefit_created', { benefitId: benefit.id, category: benefit.category })
     bus.emit('benefits')
-    this.adminWrite(this.api.post('/admin/benefits', benefit), () => this.refetchBenefits())
+    this.adminWrite(this.api.post('/admin/benefits', benefit), () => this.refetchBenefits(),
+      () => { this.adminBenefits = prevCache; bus.emit('benefits') },
+    )
     return benefit
   }
   override updateBenefit(id: string, patch: Partial<Benefit>): void {
+    const prevCache = this.adminBenefits // para deshacer si el backend rechaza
     if (this.adminBenefits) this.adminBenefits = this.adminBenefits.map((b) => (b.id === id ? { ...b, ...patch } : b)).sort((a, b) => a.order - b.order)
     this.track('admin_benefit_updated', { benefitId: id })
     bus.emit('benefits')
-    this.adminWrite(this.api.patch(`/admin/benefits/${id}`, patch), () => this.refetchBenefits())
+    this.adminWrite(this.api.patch(`/admin/benefits/${id}`, patch), () => this.refetchBenefits(),
+      () => { this.adminBenefits = prevCache; bus.emit('benefits') },
+    )
   }
   override deleteBenefit(id: string): void {
     const prev = this.adminBenefits
@@ -931,18 +955,24 @@ export class RemoteDataStore extends LocalDataStore {
   private refetchPlans(): void { this.refetch('/plans', (v: TicketPlan[]) => (this.plans = v), 'plans') }
 
   override createSponsor(input: NewSponsor): Sponsor {
+    const prevCache = this.sponsors // para deshacer si el backend rechaza
     const sponsor: Sponsor = { ...input, id: newId('sp') }
     if (this.sponsors) this.sponsors = [...this.sponsors, sponsor]
     this.track('admin_sponsor_created', { sponsorId: sponsor.id, level: sponsor.level })
     bus.emit('sponsors')
-    this.adminWrite(this.api.post('/admin/sponsors', sponsor), () => this.refetchSponsors())
+    this.adminWrite(this.api.post('/admin/sponsors', sponsor), () => this.refetchSponsors(),
+      () => { this.sponsors = prevCache; bus.emit('sponsors') },
+    )
     return sponsor
   }
   override updateSponsor(id: string, patch: Partial<Sponsor>): void {
+    const prevCache = this.sponsors // para deshacer si el backend rechaza
     if (this.sponsors) this.sponsors = this.sponsors.map((s) => (s.id === id ? { ...s, ...patch } : s))
     this.track('admin_sponsor_updated', { sponsorId: id })
     bus.emit('sponsors')
-    this.adminWrite(this.api.patch(`/admin/sponsors/${id}`, patch), () => this.refetchSponsors())
+    this.adminWrite(this.api.patch(`/admin/sponsors/${id}`, patch), () => this.refetchSponsors(),
+      () => { this.sponsors = prevCache; bus.emit('sponsors') },
+    )
   }
   override deleteSponsor(id: string): void {
     const prev = this.sponsors
@@ -957,6 +987,7 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override createGallery(input: NewGallery): Gallery {
+    const prevCache = this.galleries // para deshacer si el backend rechaza
     // Dedup de slug (como notas/convocatorias): sin esto, dos galerías con el mismo título
     // chocan con el @unique del server → 409 → el ítem optimista desaparece en silencio.
     const gtaken = new Set((this.galleries ?? []).map((g) => g.slug))
@@ -966,14 +997,19 @@ export class RemoteDataStore extends LocalDataStore {
     if (this.galleries) this.galleries = [...this.galleries, gallery]
     this.track('admin_gallery_created', { galleryId: gallery.id })
     bus.emit('galleries')
-    this.adminWrite(this.api.post('/admin/galleries', gallery), () => this.refetchGalleries())
+    this.adminWrite(this.api.post('/admin/galleries', gallery), () => this.refetchGalleries(),
+      () => { this.galleries = prevCache; bus.emit('galleries') },
+    )
     return gallery
   }
   override updateGallery(id: string, patch: Partial<Gallery>): void {
+    const prevCache = this.galleries // para deshacer si el backend rechaza
     if (this.galleries) this.galleries = this.galleries.map((g) => (g.id === id ? { ...g, ...patch } : g))
     this.track('admin_gallery_updated', { galleryId: id })
     bus.emit('galleries')
-    this.adminWrite(this.api.patch(`/admin/galleries/${id}`, patch), () => this.refetchGalleries())
+    this.adminWrite(this.api.patch(`/admin/galleries/${id}`, patch), () => this.refetchGalleries(),
+      () => { this.galleries = prevCache; bus.emit('galleries') },
+    )
   }
   override deleteGallery(id: string): void {
     const prev = this.galleries
@@ -988,6 +1024,7 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override createCatalogProfile(input: NewCatalogProfile): CatalogProfile {
+    const prevCache = this.catalog // para deshacer si el backend rechaza
     // Dedup de slug: dos expositores con el mismo nombre chocan con el @unique → 409 → el ítem
     // desaparece del panel sin aviso. Espeja el dedup de notas/convocatorias.
     const ctaken = new Set((this.catalog ?? []).map((c) => c.slug))
@@ -997,14 +1034,19 @@ export class RemoteDataStore extends LocalDataStore {
     if (this.catalog) this.catalog = [...this.catalog, profile]
     this.track('admin_catalog_created', { profileId: profile.id })
     bus.emit('catalog')
-    this.adminWrite(this.api.post('/admin/catalog', profile), () => this.refetchCatalog())
+    this.adminWrite(this.api.post('/admin/catalog', profile), () => this.refetchCatalog(),
+      () => { this.catalog = prevCache; bus.emit('catalog') },
+    )
     return profile
   }
   override updateCatalogProfile(id: string, patch: Partial<CatalogProfile>): void {
+    const prevCache = this.catalog // para deshacer si el backend rechaza
     if (this.catalog) this.catalog = this.catalog.map((c) => (c.id === id ? { ...c, ...patch } : c))
     this.track('admin_catalog_updated', { profileId: id })
     bus.emit('catalog')
-    this.adminWrite(this.api.patch(`/admin/catalog/${id}`, patch), () => this.refetchCatalog())
+    this.adminWrite(this.api.patch(`/admin/catalog/${id}`, patch), () => this.refetchCatalog(),
+      () => { this.catalog = prevCache; bus.emit('catalog') },
+    )
   }
   override deleteCatalogProfile(id: string): void {
     const prev = this.catalog
@@ -1227,18 +1269,24 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override createEvent(input: NewEvent): EventItem {
+    const prevCache = this.events // para deshacer si el backend rechaza
     const event: EventItem = { ...input, id: newId('ev'), slug: input.slug || this.uniqueSlug(slugify(input.title)) }
     if (this.events) this.events = [...this.events, event]
     this.track('admin_event_created', { eventId: event.id, type: event.type })
     bus.emit('events')
-    this.adminWrite(this.api.post('/admin/events', event), () => this.hydrateEvents())
+    this.adminWrite(this.api.post('/admin/events', event), () => this.hydrateEvents(),
+      () => { this.events = prevCache; bus.emit('events') },
+    )
     return event
   }
   override updateEvent(id: string, patch: Partial<EventItem>): void {
+    const prevCache = this.events // para deshacer si el backend rechaza
     if (this.events) this.events = this.events.map((e) => (e.id === id ? { ...e, ...patch } : e))
     this.track('admin_event_updated', { eventId: id })
     bus.emit('events')
-    this.adminWrite(this.api.patch(`/admin/events/${id}`, patch), () => this.hydrateEvents())
+    this.adminWrite(this.api.patch(`/admin/events/${id}`, patch), () => this.hydrateEvents(),
+      () => { this.events = prevCache; bus.emit('events') },
+    )
   }
   override deleteEvent(id: string): void {
     const prev = this.events
@@ -1256,6 +1304,7 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override createBlock(input: NewBlock): EventBlock {
+    const prevCache = this.events // para deshacer si el backend rechaza
     const block: EventBlock = { ...input, id: newId('blk') }
     // Solo se toca el caché si YA estaba hidratado para ese evento (mismo criterio que el resto
     // de las entidades). Sembrar la clave con un único bloque tapaba el fallback al seed de
@@ -1267,10 +1316,13 @@ export class RemoteDataStore extends LocalDataStore {
     }
     this.track('admin_block_created', { blockId: block.id, eventId: block.eventId })
     bus.emit('blocks')
-    this.adminWrite(this.api.post('/admin/blocks', block), () => this.hydrateEvents())
+    this.adminWrite(this.api.post('/admin/blocks', block), () => this.hydrateEvents(),
+      () => { this.events = prevCache; bus.emit('events') },
+    )
     return block
   }
   override updateBlock(id: string, patch: Partial<EventBlock>): void {
+    const prevCache = this.events // para deshacer si el backend rechaza
     const cur = this.blocksById.get(id)
     if (cur) {
       const next = { ...cur, ...patch }
@@ -1279,9 +1331,12 @@ export class RemoteDataStore extends LocalDataStore {
     }
     this.track('admin_block_updated', { blockId: id })
     bus.emit('blocks')
-    this.adminWrite(this.api.patch(`/admin/blocks/${id}`, patch), () => this.hydrateEvents())
+    this.adminWrite(this.api.patch(`/admin/blocks/${id}`, patch), () => this.hydrateEvents(),
+      () => { this.events = prevCache; bus.emit('events') },
+    )
   }
   override deleteBlock(id: string): void {
+    const prevCache = this.events // para deshacer si el backend rechaza
     // Si el mapa no está hidratado, `cur` viene undefined y el bloque del seed seguiría visible
     // tras "borrarlo". No pasa nada grave (el onOk re-hidrata y lo corrige), pero pedimos la
     // re-hidratación explícitamente para que la lista no quede mintiendo en el ínterin.
@@ -1291,22 +1346,30 @@ export class RemoteDataStore extends LocalDataStore {
     if (cur) this.blocksByEvent.set(cur.eventId, (this.blocksByEvent.get(cur.eventId) ?? []).filter((b) => b.id !== id))
     this.track('admin_block_deleted', { blockId: id })
     bus.emit('blocks')
-    this.adminWrite(this.api.del(`/admin/blocks/${id}`), () => this.hydrateEvents())
+    this.adminWrite(this.api.del(`/admin/blocks/${id}`), () => this.hydrateEvents(),
+      () => { this.events = prevCache; bus.emit('events') },
+    )
   }
 
   override createContent(input: NewContent): ContentItem {
+    const prevCache = this.adminContents // para deshacer si el backend rechaza
     const content: ContentItem = { ...input, id: newId('vid') }
     if (this.contents) this.contents = [content, ...this.contents]
     this.track('admin_content_created', { contentId: content.id })
     bus.emit('contents')
-    this.adminWrite(this.api.post('/admin/contents', content), () => this.refetchAllContents())
+    this.adminWrite(this.api.post('/admin/contents', content), () => this.refetchAllContents(),
+      () => { this.adminContents = prevCache; bus.emit('contents') },
+    )
     return content
   }
   override updateContent(id: string, patch: Partial<ContentItem>): void {
+    const prevCache = this.adminContents // para deshacer si el backend rechaza
     if (this.contents) this.contents = this.contents.map((c) => (c.id === id ? { ...c, ...patch } : c))
     this.track('admin_content_updated', { contentId: id })
     bus.emit('contents')
-    this.adminWrite(this.api.patch(`/admin/contents/${id}`, patch), () => this.refetchAllContents())
+    this.adminWrite(this.api.patch(`/admin/contents/${id}`, patch), () => this.refetchAllContents(),
+      () => { this.adminContents = prevCache; bus.emit('contents') },
+    )
   }
   override deleteContent(id: string): void {
     const prev = this.contents

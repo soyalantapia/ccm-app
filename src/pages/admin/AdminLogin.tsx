@@ -243,11 +243,26 @@ function PasoCodigo({
     }
   }
 
+  /**
+   * Reparte lo que entre en una casilla a partir de ella, en vez de quedarse con un dígito.
+   *
+   * Antes hacía `.slice(-1)`: si en un mismo evento de input llegaban los seis dígitos,
+   * conservaba el último y tiraba los otros cinco — quedaba "7·····" y el login era imposible.
+   * No es un caso raro: pasa al tipear rápido (el foco se mueve en el re-render, más lento que
+   * el teclado) y, sobre todo, con el autocompletado de `one-time-code`, que en iOS inyecta el
+   * código entero en UN campo. El atributo puesto para facilitar el ingreso lo rompía.
+   */
   function escribir(i: number, v: string) {
-    const c = v.replace(/\D/g, '').slice(-1)
+    const limpio = v.replace(/\D/g, '')
     const siguiente = [...digitos]
-    siguiente[i] = c
-    if (c && i < 5) refs.current[i + 1]?.focus()
+    if (!limpio) {
+      siguiente[i] = '' // borrar la casilla
+      confirmar(siguiente)
+      return
+    }
+    for (let k = 0; k < limpio.length && i + k < 6; k++) siguiente[i + k] = limpio[k]
+    // El foco va a la casilla siguiente a la última que se llenó (o se queda en la 6ª).
+    refs.current[Math.min(i + limpio.length, 5)]?.focus()
     confirmar(siguiente)
   }
 
