@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { prisma } from '../lib/prisma.js'
 import { linkPerson } from './personService.js'
 import { saveFields } from './deviceService.js'
+import { backfillPersonas } from '../../scripts/backfill-personas.js'
 
 /** `prisma.person` es un Proxy (no un objeto plano): el descriptor que `vi.spyOn` logra leer
  *  para "guardar y restaurar más tarde" con `spy.mockRestore()` viene incompleto (sin getter ni
@@ -219,5 +220,31 @@ describe('enganche automático', () => {
     await saveFields(device.id, { city: 'Córdoba' }, 'test')
     const actualizado = await prisma.device.findUniqueOrThrow({ where: { id: device.id } })
     expect(actualizado.personId).toBeNull()
+  })
+})
+
+describe('backfill', () => {
+  // Igual que 'enganche automático': este describe es hermano de 'linkPerson', así que su
+  // beforeEach no lo alcanza. Acá hace falta además limpiar Device (con su cascada de
+  // ProfileField): backfillPersonas() escanea TODOS los dispositivos con personId null, así
+  // que sin esta limpieza una corrida anterior de este mismo test (que ya dejó a "bf@x.com"
+  // con Persona asignada) haría fallar `primera.creadas` en la siguiente corrida completa de
+  // la suite.
+  beforeEach(async () => {
+    await prisma.device.deleteMany()
+    await prisma.person.deleteMany()
+  })
+
+  it('es idempotente: correrlo dos veces no duplica personas', async () => {
+    const d = await prisma.device.create({ data: { publicId: `bf-${Date.now()}` } })
+    await prisma.profileField.create({ data: { deviceId: d.id, key: 'email', value: 'bf@x.com', source: 'seed' } })
+
+    const primera = await backfillPersonas()
+    expect(primera.creadas).toBe(1)
+    const total = await prisma.person.count()
+
+    const segunda = await backfillPersonas()
+    expect(segunda.creadas).toBe(0)
+    expect(await prisma.person.count()).toBe(total)
   })
 })
