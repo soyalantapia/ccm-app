@@ -241,23 +241,6 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
           </Field>
         )}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Retrato" required hint="Elegí uno del set o subí la foto real del participante">
-            <div className="flex items-center gap-2">
-              <Select options={PHOTO_OPTIONS} value={f.photo} onChange={set('photo')} className="flex-1" />
-              <ImageUpload label="Subir" onUrl={(url) => setF((p) => ({ ...p, photo: url }))} />
-            </div>
-          </Field>
-          {f.photo && (
-            <Img
-              src={f.photo}
-              alt="Vista previa del retrato"
-              ratio="1/1"
-              className="max-w-[8rem] rounded-sm border border-line"
-            />
-          )}
-        </div>
-
         <Field label="Participa en" hint="Separá con comas. Ej: CCM 2026, Camino a CCM · Junio">
           <Input
             value={f.participatesIn}
@@ -275,6 +258,29 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
           />
           <span className="text-[15px] text-ink">Perfil verificado</span>
         </label>
+
+        {/* De acá para abajo, todo lo visual junto: retrato + obras. Antes "Participa en" y
+            "Perfil verificado" caían entre medio y partían la zona de imágenes en dos. */}
+        <div className="border-t border-line pt-4">
+          <p className="eyebrow text-[10px] text-ink-soft">Imágenes</p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Retrato" required hint="Elegí uno del set o subí la foto real del participante">
+            <div className="flex items-center gap-2">
+              <Select options={PHOTO_OPTIONS} value={f.photo} onChange={set('photo')} className="flex-1" />
+              <ImageUpload label="Subir" onUrl={(url) => setF((p) => ({ ...p, photo: url }))} />
+            </div>
+          </Field>
+          {f.photo && (
+            <Img
+              src={f.photo}
+              alt="Vista previa del retrato"
+              ratio="1/1"
+              className="max-w-[8rem] rounded-sm border border-line"
+            />
+          )}
+        </div>
 
         <Field
           label={`Portfolio · ${f.portfolio.length}/${IMG_CAP[f.kind]} imágenes`}
