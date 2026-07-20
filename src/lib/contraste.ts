@@ -43,26 +43,42 @@ export function oscurecer(hex: string, proporcion = 0.78): string | null {
   return '#' + canales.map((v) => v.toString(16).padStart(2, '0')).join('')
 }
 
+/** Texto normal (WCAG 1.4.3, AA). */
+export const MINIMO_AA = 4.5
+/** Texto grande — ≥24px, o ≥18,66px en negrita. El estándar lo exige menos porque se lee mejor. */
+export const MINIMO_AA_GRANDE = 3
+
 /**
- * Pares de tokens que en la app aparecen uno sobre el otro. El mínimo es 4,5 (texto
- * normal): los tokens de texto se usan en cuerpo y etiquetas chicas, no solo en titulares.
+ * Pares de tokens que en la app aparecen uno sobre el otro, cada uno con el mínimo que le
+ * corresponde según el tamaño del texto que lleva encima.
  *
  * El par del BOTÓN mide `accent-ink` sobre el acento OSCURECIDO, que es lo que el botón
  * primario pinta de verdad. Medir el acento puro reportaría un problema que no existe.
  *
- * El acento puro sí se revisa aparte: se sigue usando de fondo en badges e insignias con
- * texto (por ejemplo "✓ Registrado"), donde el mínimo de texto igual aplica.
+ * El acento PURO quedó usándose en un solo lugar con texto: la sigla del sponsor, a 24px y
+ * peso 900. Ahí rige el mínimo de texto grande — por eso ese par no se mide contra 4,5. Con
+ * el mínimo equivocado, la paleta de CCM disparaba un aviso permanente por algo que cumple,
+ * y un aviso que siempre está encendido enseña a ignorarlos.
  */
-export const PARES_CRITICOS: { texto: string; fondo: string; donde: string; oscurecerFondo?: boolean }[] = [
+export const PARES_CRITICOS: {
+  texto: string
+  fondo: string
+  donde: string
+  oscurecerFondo?: boolean
+  minimo?: number
+}[] = [
   { texto: 'ink', fondo: 'bg', donde: 'Texto principal sobre el fondo' },
   { texto: 'ink-soft', fondo: 'bg', donde: 'Texto secundario sobre el fondo' },
   { texto: 'ink', fondo: 'surface', donde: 'Texto sobre las tarjetas' },
   { texto: 'accent-ink', fondo: 'accent', donde: 'Texto de los botones principales', oscurecerFondo: true },
-  { texto: 'accent-ink', fondo: 'accent', donde: 'Texto de las insignias sobre el acento' },
+  {
+    texto: 'accent-ink',
+    fondo: 'accent',
+    donde: 'Siglas de sponsor sobre el acento',
+    minimo: MINIMO_AA_GRANDE,
+  },
   { texto: 'night-ink', fondo: 'night', donde: 'Texto sobre las secciones oscuras' },
 ]
-
-export const MINIMO_AA = 4.5
 
 export interface AvisoContraste {
   texto: string
@@ -86,7 +102,7 @@ export function revisarPaleta(colores: Record<string, string | undefined>): Avis
     if (!fondo) continue
     const ratio = contraste(texto, fondo)
     if (ratio === null) continue
-    if (ratio < MINIMO_AA) {
+    if (ratio < (par.minimo ?? MINIMO_AA)) {
       avisos.push({ texto: par.texto, fondo: par.fondo, donde: par.donde, ratio })
     }
   }
