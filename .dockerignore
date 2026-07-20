@@ -7,3 +7,13 @@ server/dist
 .DS_Store
 work-agent
 .claude
+
+# NUNCA subir envs locales a la imagen: `railway up` empaqueta el directorio, así que
+# un .env de desarrollo entraría al contenedor y su DATABASE_URL (localhost) podría
+# ganarle a las variables que inyecta Railway. Además saca secretos locales de la máquina.
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
