@@ -140,7 +140,7 @@ adminRouter.patch('/admin/plans/:id', requirePermission('sponsors:write'), async
 })
 
 /* ─── Órdenes de entradas (vista y decisión del organizador) ─── */
-adminRouter.get('/admin/orders', async (_req, res, next) => {
+adminRouter.get('/admin/orders', requirePermission('orders:read'), async (_req, res, next) => {
   try {
     res.json(await orderService.getAllOrders())
   } catch (err) {
@@ -150,7 +150,7 @@ adminRouter.get('/admin/orders', async (_req, res, next) => {
 
 const orderStatusSchema = z.object({ status: z.enum(['iniciada', 'redirigida_mp', 'confirmada', 'cancelada']) })
 /** El organizador confirma o cancela una orden (la conciliación por webhook de MP llega después). */
-adminRouter.patch('/admin/orders/:id', async (req, res, next) => {
+adminRouter.patch('/admin/orders/:id', requirePermission('sponsors:write'), async (req, res, next) => {
   try {
     const { status } = orderStatusSchema.parse(req.body)
     res.json(await orderService.setOrderStatus(req.params.id, status))
