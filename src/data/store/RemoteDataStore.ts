@@ -77,6 +77,10 @@ export class RemoteDataStore extends LocalDataStore {
   /** Negative cache: ms timestamp del último fallo por blockId. Re-intenta después de 30s. */
   private availFailed = new Map<string, number>()
   /** Cache de batch availability por eventId (GET /events/:id/blocks-availability). */
+  /** Cuándo se trajo cada cupo (ms). Sirve para vencerlo: ver blockAvailability. */
+  private availFetchedAt = new Map<string, number>()
+  /** El cupo se considera fresco 20s; pasado eso se revalida en segundo plano. */
+  private static readonly AVAIL_TTL_MS = 20_000
   private availBatchInflight = new Set<string>()
   private availBatchFailed = new Map<string, number>()
   private tmpSeq = 0
@@ -239,6 +243,8 @@ export class RemoteDataStore extends LocalDataStore {
   /** Cupo de TODOS los bloques de un evento en 1 request (vs N).
    *  Llamado desde blockAvailability cuando conocemos el eventId.
    *  Negative cache: si el endpoint 404ea o falla, espera 30s antes de reintentar. */
+  /** Trae el cupo de todos los bloques del evento. Deduplica sola (availBatchInflight) y respeta
+   *  el backoff de errores, así que es segura de llamar tanto en el primer render como al revalidar. */
   private fetchEventAvailability(eventId: string): void {
     if (this.availBatchInflight.has(eventId)) return
     const failed = this.availBatchFailed.get(eventId)
@@ -247,7 +253,8 @@ export class RemoteDataStore extends LocalDataStore {
     this.api
       .get<{ blocks: (BlockAvailability & { id: string })[]; generals: number }>(`/events/${eventId}/blocks-availability`)
       .then((r) => {
-        for (const b of r.blocks) this.availCache.set(b.id, b)
+        const ahora = Date.now()
+        for (const b of r.blocks) { this.availCache.set(b.id, b); this.availFetchedAt.set(b.id, ahora) }
         this.generalCounts.set(eventId, r.generals)
         this.availBatchInflight.delete(eventId)
         this.availBatchFailed.delete(eventId)
@@ -273,6 +280,7 @@ export class RemoteDataStore extends LocalDataStore {
       .get<BlockAvailability>(`/blocks/${blockId}/availability`)
       .then((av) => {
         this.availCache.set(blockId, av)
+        this.availFetchedAt.set(blockId, Date.now())
         this.availInflight.delete(blockId)
         this.availFailed.delete(blockId)
         bus.emit('availability')
@@ -306,10 +314,23 @@ export class RemoteDataStore extends LocalDataStore {
   }
   override blockAvailability(blockId: string): BlockAvailability {
     const cached = this.availCache.get(blockId)
-    if (cached) return cached
     // Batch preferido: si conocemos el eventId usamos /events/:id/blocks-availability (1 req/evento).
     // Fallback: fetch individual (deploy incremental / bloque desconocido aún).
     const block = this.blocksById.get(blockId)
+
+    if (cached) {
+      // El cupo lo mueven OTRAS personas, así que un caché sin vencimiento congelaba el número:
+      // la pantalla decía "quedan 3 lugares" indefinidamente aunque el bloque ya estuviera lleno,
+      // y solo se actualizaba si ESTE usuario se inscribía o cancelaba. Servimos lo que tenemos
+      // (respuesta instantánea) y disparamos la actualización en segundo plano si está vencido.
+      const edad = Date.now() - (this.availFetchedAt.get(blockId) ?? 0)
+      if (edad > RemoteDataStore.AVAIL_TTL_MS) {
+        if (block) this.fetchEventAvailability(block.eventId)
+        else this.refreshAvailability(blockId)
+      }
+      return cached
+    }
+
     if (block) {
       this.fetchEventAvailability(block.eventId)
     } else {
@@ -1256,7 +1277,11 @@ export class RemoteDataStore extends LocalDataStore {
     this.adminWrite(this.api.patch(`/admin/blocks/${id}`, patch), () => this.hydrateEvents())
   }
   override deleteBlock(id: string): void {
+    // Si el mapa no está hidratado, `cur` viene undefined y el bloque del seed seguiría visible
+    // tras "borrarlo". No pasa nada grave (el onOk re-hidrata y lo corrige), pero pedimos la
+    // re-hidratación explícitamente para que la lista no quede mintiendo en el ínterin.
     const cur = this.blocksById.get(id)
+    if (!cur) this.hydrateEvents()
     this.blocksById.delete(id)
     if (cur) this.blocksByEvent.set(cur.eventId, (this.blocksByEvent.get(cur.eventId) ?? []).filter((b) => b.id !== id))
     this.track('admin_block_deleted', { blockId: id })

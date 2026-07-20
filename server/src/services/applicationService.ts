@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '../lib/prisma.js'
 import { toApplication } from '../lib/serialize.js'
-import { notFound, conflict } from '../lib/errors.js'
+import { notFound, conflict, badRequest } from '../lib/errors.js'
 import type { Application } from '@domain/types'
 
 /** Postulación pública (preinscripta). El equipo CCM decide después (admin). */
@@ -10,7 +10,10 @@ export async function submitApplication(
   data: Record<string, string>,
   deviceId?: string,
 ): Promise<Application> {
-  const cv = await prisma.convocatoria.findUnique({ where: { id: convocatoriaId }, select: { id: true, deadline: true } })
+  const cv = await prisma.convocatoria.findUnique({
+    where: { id: convocatoriaId },
+    select: { id: true, deadline: true, fields: { select: { key: true, label: true, required: true } } },
+  })
   if (!cv) throw notFound('CONVOCATORIA_NOT_FOUND', 'Convocatoria no encontrada')
   // Rechazar después del cierre (fin del día del deadline). El front también lo gatea, pero la
   // fuente de verdad es el server: sin esto se aceptaban postulaciones tarde (bug cazabug).
@@ -19,6 +22,21 @@ export async function submitApplication(
   const dateStr = cv.deadline.toISOString().slice(0, 10) // 'YYYY-MM-DD' (deadline date-only)
   const closeOfDay = new Date(`${dateStr}T23:59:59.999-03:00`)
   if (new Date() > closeOfDay) throw conflict('CONVOCATORIA_CLOSED', 'La convocatoria ya cerró.')
+
+  // Los campos requeridos se validan ACÁ, no solo en el formulario: sin esto un POST directo
+  // (o un form con JS a medio cargar) creaba postulaciones vacías, y al organizador le llegaban
+  // filas "Sin nombre / —" imposibles de contactar. La convocatoria define qué pide.
+  const faltantes = cv.fields
+    .filter((f) => f.required && !String(data?.[f.key] ?? '').trim())
+    .map((f) => f.label || f.key)
+  if (faltantes.length > 0) {
+    throw badRequest(
+      'MISSING_FIELDS',
+      `Faltan campos obligatorios: ${faltantes.join(', ')}`,
+      { fields: faltantes },
+    )
+  }
+
   const row = await prisma.application.create({
     data: { id: `app_${randomUUID()}`, convocatoriaId, deviceId: deviceId ?? null, status: 'preinscripta', data, fromSeed: false },
   })

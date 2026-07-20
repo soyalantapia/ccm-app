@@ -167,3 +167,60 @@ describe('RemoteDataStore — write-through de lo device-scoped', () => {
     expect(JSON.parse(store['ccm:favorites'])).toEqual(['ph-1', 'ph-2'])
   })
 })
+
+/**
+ * El cupo "EN VIVO" tiene que vencer (D3, backlog cazabug).
+ *
+ * `blockAvailability` cacheaba la respuesta del server para siempre: el número solo se
+ * actualizaba si ESTE usuario se inscribía o cancelaba. Pero el cupo lo mueven los DEMÁS, así
+ * que la pantalla podía decir "quedan 3 lugares" indefinidamente con el bloque ya lleno — y
+ * alguien se anotaba creyendo que entraba. Ahora, pasado el TTL, se revalida en segundo plano
+ * (se sigue devolviendo el valor cacheado al instante: no se bloquea el render).
+ */
+describe('RemoteDataStore — el cupo cacheado se revalida al vencer', () => {
+  const BLOQUES = { blocks: [{ id: 'blk_1', capacity: 80, taken: 52, left: 28 }], generals: 0 }
+
+  function fetchOk(porRuta: Record<string, unknown>) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: { method?: string }) => {
+        calls.push({ method: init?.method ?? 'GET', url: String(url) })
+        const hit = Object.entries(porRuta).find(([ruta]) => String(url).includes(ruta))
+        if (!hit) return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) })
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(hit[1]) })
+      }),
+    )
+  }
+
+  async function storeConCupoCargado() {
+    fetchOk({
+      '/events/with-blocks': [{ id: 'ev_1', slug: 'ev', title: 'E', blocks: [{ id: 'blk_1', eventId: 'ev_1', title: 'B' }] }],
+      '/blocks-availability': BLOQUES,
+    })
+    const s = new RemoteDataStore('https://api.test')
+    await vi.waitFor(() => expect(s.blockAvailability('blk_1').left).toBe(28))
+    return s
+  }
+
+  it('no vuelve a pedirlo mientras está fresco', async () => {
+    const s = await storeConCupoCargado()
+    calls = []
+    s.blockAvailability('blk_1')
+    s.blockAvailability('blk_1')
+    expect(calls.filter((c) => c.url.includes('availability'))).toEqual([])
+  })
+
+  it('lo revalida en segundo plano cuando venció, sin dejar de responder', async () => {
+    const s = await storeConCupoCargado()
+    calls = []
+    // Envejecer el dato más allá del TTL (20s).
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_000)
+    const av = s.blockAvailability('blk_1')
+    expect(av.left, 'debe seguir respondiendo al instante con lo cacheado').toBe(28)
+    expect(
+      calls.filter((c) => c.url.includes('availability')).length,
+      'debió dispararse la revalidación en segundo plano',
+    ).toBeGreaterThan(0)
+    vi.restoreAllMocks()
+  })
+})
