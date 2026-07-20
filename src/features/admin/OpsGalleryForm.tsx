@@ -17,13 +17,21 @@ const COVER_OPTIONS: { value: string; label: string }[] = PHOTO_POOL.slice(0, 8)
   label: `Foto ${i + 1}`,
 }))
 
+/**
+ * Foto en edición. Lleva el `id` REAL de la foto y su `alt` tal como está guardado.
+ * Antes el form guardaba solo la URL: al guardar regeneraba id y alt de todas, lo que
+ * borraba los favoritos/descargas del asistente (cascade sobre Photo) y pisaba los
+ * epígrafes escritos a mano. La identidad de una foto es su id, nunca su URL.
+ */
+type PhotoForm = { id?: string; src: string; alt: string }
+
 type Form = {
   title: string
   eventLabel: string
   date: string
   cover: string
   sponsorId: string
-  photos: string[]
+  photos: PhotoForm[]
 }
 
 function fromGallery(g: Gallery): Form {
@@ -33,7 +41,7 @@ function fromGallery(g: Gallery): Form {
     date: g.date,
     cover: g.cover,
     sponsorId: g.sponsorId,
-    photos: g.photos.map((p) => p.src),
+    photos: g.photos.map((p) => ({ id: p.id, src: p.src, alt: p.alt })),
   }
 }
 
@@ -77,9 +85,9 @@ export function OpsGalleryForm({ open, gallery, onClose }: Props) {
   const togglePhoto = (src: string) =>
     setF((prev) => ({
       ...prev,
-      photos: prev.photos.includes(src)
-        ? prev.photos.filter((p) => p !== src)
-        : [...prev.photos, src],
+      photos: prev.photos.some((p) => p.src === src)
+        ? prev.photos.filter((p) => p.src !== src)
+        : [...prev.photos, { src, alt: '' }],
     }))
 
   const submit = (e: FormEvent) => {
@@ -93,10 +101,11 @@ export function OpsGalleryForm({ open, gallery, onClose }: Props) {
       return
     }
     const title = f.title.trim()
-    const photos: Photo[] = f.photos.map((src, i) => ({
-      id: newId('ph'),
-      src,
-      alt: `${title} · foto ${i + 1}`,
+    // Conservamos id y alt de las que ya existían; solo las nuevas estrenan id y epígrafe genérico.
+    const photos: Photo[] = f.photos.map((p, i) => ({
+      id: p.id ?? newId('ph'),
+      src: p.src,
+      alt: p.alt || `${title} · foto ${i + 1}`,
     }))
     const data = {
       title,
@@ -169,7 +178,7 @@ export function OpsGalleryForm({ open, gallery, onClose }: Props) {
         <Field label={`Fotos de la galería · ${f.photos.length} elegidas`} required>
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
             {PHOTO_POOL.map((src, i) => {
-              const on = f.photos.includes(src)
+              const on = f.photos.some((p) => p.src === src)
               return (
                 <button
                   key={src}

@@ -28,8 +28,13 @@ const PORTFOLIO_POOL: string[] = Array.from(
   (_, i) => `img/gallery/g${String(i + 1).padStart(2, '0')}.jpg`,
 )
 
-/** Pieza del portfolio en edición: imagen + título + precio (string para el input). */
-type PieceForm = { image: string; title: string; price: string }
+/**
+ * Pieza del portfolio en edición: imagen + título + precio (string para el input).
+ * Lleva también `id` y `caption` aunque el form no los edite: si no viajan de ida y vuelta,
+ * el guardado los borra. En prod hay 50 obras con epígrafe escrito a mano que se veían en la
+ * ficha pública y desaparecían al tocar "Guardar cambios".
+ */
+type PieceForm = { id?: string; image: string; title: string; caption?: string; price: string }
 
 type Kind = 'participante' | 'expositor'
 /** Cupo de imágenes de portfolio por tipo (feedback Gastón: participante 4, expositor 2). */
@@ -81,7 +86,7 @@ function fromProfile(p: CatalogProfile): Form {
     whatsapp: p.whatsapp ?? '',
     verified: p.verified,
     participatesIn: p.participatesIn.join(', '),
-    portfolio: p.portfolio.map((pf) => ({ image: pf.image, title: pf.title, price: pf.price != null ? String(pf.price) : '' })),
+    portfolio: p.portfolio.map((pf) => ({ id: pf.id, image: pf.image, title: pf.title, caption: pf.caption, price: pf.price != null ? String(pf.price) : '' })),
   }
 }
 
@@ -132,10 +137,13 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
+    // Conservamos id y caption de las obras que ya existían: el form no edita el epígrafe,
+    // y si no lo devolvemos tal cual, el guardado lo borra.
     const portfolio: PortfolioPiece[] = f.portfolio.map((p, i) => ({
-      id: newId('pf'),
+      id: p.id ?? newId('pf'),
       image: p.image,
       title: p.title.trim() || `Obra ${i + 1}`,
+      ...(p.caption !== undefined ? { caption: p.caption } : {}),
       price: p.price.trim() ? Number(p.price) : undefined,
     }))
     const data = {
