@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { requireAdmin } from '../middlewares/admin.js'
 import * as analyticsService from '../services/analyticsService.js'
+import * as statsService from '../services/statsService.js'
 
 export const analyticsRouter = Router()
 
@@ -23,6 +24,21 @@ analyticsRouter.post('/analytics', async (req, res, next) => {
     const events = Array.isArray(parsed) ? parsed : [parsed]
     const count = await analyticsService.ingest(req.deviceId, events)
     res.status(202).json({ ok: true, ingested: count })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * GET /api/v1/admin/stats — métricas del Dashboard, calculadas sobre las TABLAS de negocio.
+ *
+ * Existe porque /admin/analytics devuelve telemetría truncada a 500 filas y el front contaba
+ * sobre esa lista: los KPIs quedaban amputados, y los eventos que nunca llegan al backend
+ * (user_created, registration_created) hacían que métricas con datos reales mostraran 0.
+ */
+analyticsRouter.get('/admin/stats', requireAdmin, async (_req, res, next) => {
+  try {
+    res.json(await statsService.getAdminStats())
   } catch (err) {
     next(err)
   }
