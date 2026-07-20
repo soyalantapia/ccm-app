@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { prisma } from '../lib/prisma.js'
-import { linkPerson } from './personService.js'
+import { linkPerson, listPeople } from './personService.js'
 import { saveFields } from './deviceService.js'
 import { backfillPersonas } from '../../scripts/backfill-personas.js'
 
@@ -246,5 +246,40 @@ describe('backfill', () => {
     const segunda = await backfillPersonas()
     expect(segunda.creadas).toBe(0)
     expect(await prisma.person.count()).toBe(total)
+  })
+})
+
+describe('listPeople', () => {
+  it('devuelve las personas con su nombre armado y el conteo de anónimos', async () => {
+    const d = await prisma.device.create({ data: { publicId: `ls-${Date.now()}` } })
+    await saveFields(d.id, { email: 'lista@x.com', firstName: 'Ana', lastName: 'Pérez' }, 'test')
+    await prisma.device.create({ data: { publicId: `anon-${Date.now()}` } }) // sin datos
+
+    const r = await listPeople({})
+    const ana = r.items.find((p) => p.email === 'lista@x.com')
+    expect(ana).toBeTruthy()
+    expect(ana!.nombre).toBe('Ana Pérez')
+    expect(r.anonimos).toBeGreaterThanOrEqual(1)
+  })
+
+  it('el buscador filtra por nombre, email o dni', async () => {
+    const d = await prisma.device.create({ data: { publicId: `bus-${Date.now()}` } })
+    await saveFields(d.id, { email: 'buscame@x.com', firstName: 'Zoraida' }, 'test')
+
+    expect((await listPeople({ q: 'zorai' })).items.length).toBeGreaterThan(0)
+    expect((await listPeople({ q: 'buscame@' })).items.length).toBeGreaterThan(0)
+    expect((await listPeople({ q: 'nadie-con-este-texto' })).items).toHaveLength(0)
+  })
+
+  it('encuentra a alguien que NO está entre los más recientes (el filtro va en SQL)', async () => {
+    const viejo = await prisma.device.create({ data: { publicId: `old-${Date.now()}` } })
+    await saveFields(viejo.id, { email: 'perdida@x.com', firstName: 'Perdida' }, 'test')
+    // 60 personas más nuevas la empujan fuera de la primera página (limit 50)
+    for (let i = 0; i < 60; i++) {
+      const d = await prisma.device.create({ data: { publicId: `pad-${Date.now()}-${i}` } })
+      await saveFields(d.id, { email: `pad${i}-${Date.now()}@x.com` }, 'test')
+    }
+    const r = await listPeople({ q: 'Perdida' })
+    expect(r.items.map((x) => x.email)).toContain('perdida@x.com')
   })
 })

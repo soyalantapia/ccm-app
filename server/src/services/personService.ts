@@ -121,3 +121,109 @@ export async function linkPerson(keys: IdentityKeys): Promise<string | null> {
   }
   return duena.id
 }
+
+/* ─── CRM: lista y ficha ─── */
+
+export interface PersonaListItem {
+  id: string
+  nombre: string | null
+  email: string | null
+  telefono: string | null
+  dni: string | null
+  esSocio: boolean
+  inscripciones: number
+  postulaciones: number
+  creadaEl: string
+  ultimaActividad: string | null
+}
+
+/** Arma el nombre visible a partir de los campos del dispositivo o del JSON de la postulación. */
+function nombreDe(fields: { key: string; value: string }[], appData: unknown): string | null {
+  const f = (k: string) => fields.find((x) => x.key === k)?.value ?? null
+  const nom = [f('firstName'), f('lastName')].filter(Boolean).join(' ').trim()
+  if (nom) return nom
+  if (appData && typeof appData === 'object' && !Array.isArray(appData)) {
+    const n = (appData as Record<string, unknown>).nombre
+    if (typeof n === 'string' && n.trim()) return n.trim()
+  }
+  return null
+}
+
+/** La más reciente de una lista de fechas de actividad (o null si no hay ninguna).
+ *  OJO: NO usar Array.sort() sobre Date[] sin comparador — el sort por defecto compara por
+ *  el string de cada elemento, no cronológicamente, y da un resultado incorrecto. */
+function masReciente(fechas: Date[]): Date | null {
+  return fechas.reduce<Date | null>((max, f) => (!max || f > max ? f : max), null)
+}
+
+export async function listPeople(opts: { q?: string; cursor?: string; limit?: number }): Promise<{
+  items: PersonaListItem[]
+  nextCursor: string | null
+  anonimos: number
+}> {
+  const limit = Math.min(opts.limit ?? 50, 100)
+  const q = opts.q?.trim().toLowerCase()
+
+  // El filtro va en SQL, no sobre la página ya armada: filtrar después de paginar solo
+  // encontraría coincidencias dentro de las 50 más recientes y perdería el resto en silencio.
+  // El nombre y el teléfono viven en ProfileField, y el nombre del postulante en el JSON de
+  // la postulación, así que la búsqueda entra por relación a las tres fuentes.
+  const where: Prisma.PersonWhereInput = q
+    ? {
+        OR: [
+          { email: { contains: q, mode: 'insensitive' } },
+          { dni: { contains: q } },
+          { devices: { some: { fields: { some: { value: { contains: q, mode: 'insensitive' } } } } } },
+          { applications: { some: { data: { path: ['nombre'], string_contains: q, mode: 'insensitive' } } } },
+        ],
+      }
+    : {}
+
+  const personas = await prisma.person.findMany({
+    where,
+    take: limit + 1,
+    ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
+    orderBy: { createdAt: 'desc' },
+    include: {
+      devices: {
+        include: {
+          fields: true,
+          membership: true,
+          _count: { select: { registrations: true } },
+          analytics: { orderBy: { ts: 'desc' }, take: 1 },
+        },
+      },
+      applications: { orderBy: { ts: 'desc' } },
+    },
+  })
+
+  const hayMas = personas.length > limit
+  const pagina = hayMas ? personas.slice(0, limit) : personas
+
+  const items: PersonaListItem[] = pagina.map((p) => {
+    const fields = p.devices.flatMap((d) => d.fields)
+    const appData = p.applications[0]?.data ?? null
+    const campo = (k: string) => fields.find((f) => f.key === k)?.value ?? null
+    const ultimaAct = masReciente(p.devices.flatMap((d) => d.analytics).map((a) => a.ts))
+    return {
+      id: p.id,
+      nombre: nombreDe(fields, appData),
+      email: p.email,
+      telefono: campo('phone'),
+      dni: p.dni,
+      esSocio: p.devices.some((d) => d.membership?.tier === 'socio'),
+      inscripciones: p.devices.reduce((s, d) => s + d._count.registrations, 0),
+      postulaciones: p.applications.length,
+      creadaEl: p.createdAt.toISOString(),
+      ultimaActividad: ultimaAct ? ultimaAct.toISOString() : null,
+    }
+  })
+
+  const anonimos = await prisma.device.count({ where: { personId: null } })
+
+  return {
+    items,
+    nextCursor: hayMas ? pagina[pagina.length - 1].id : null,
+    anonimos,
+  }
+}
