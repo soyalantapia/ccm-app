@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Check } from 'lucide-react'
-import { Button, Field, Img, Input, Select, Sheet, toast } from '../../components/ui'
+import { Button, Field, Img, Input, Select, Sheet, toast, ImageUpload } from '../../components/ui'
 import { store } from '../../data/store'
 import { newId } from '../../lib/storage'
 import type { Gallery, Photo } from '../../data/types'
@@ -141,8 +141,11 @@ export function OpsGalleryForm({ open, gallery, onClose }: Props) {
           </Field>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Portada" required>
-            <Select options={COVER_OPTIONS} value={f.cover} onChange={set('cover')} />
+          <Field label="Portada" required hint="Elegí una del set o subí la foto real">
+            <div className="flex items-center gap-2">
+              <Select options={COVER_OPTIONS} value={f.cover} onChange={set('cover')} className="flex-1" />
+              <ImageUpload label="Subir" onUrl={(url) => setF((p) => ({ ...p, cover: url }))} />
+            </div>
           </Field>
           <Field label="Sponsor (slot S3)" required>
             <Select

@@ -20,7 +20,7 @@ import {
   Users,
 } from 'lucide-react'
 import { Button, Field, Input, Sheet } from '../ui'
-import { store } from '../../data/store'
+import { IS_REMOTE, store } from '../../data/store'
 
 const SECTIONS = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -249,7 +249,9 @@ export default function AdminLayout() {
               <ArrowLeft size={11} /> Ver la app
             </Link>
             <p className="text-[10px] leading-relaxed text-night-ink/35">
-              Demo local · la sincronización en la nube llega en Fase 1
+              {IS_REMOTE
+                ? 'Conectado al sistema · lo que cargás se guarda en la nube'
+                : 'Demo local · sin backend, los datos viven en este dispositivo'}
             </p>
           </div>
         </div>

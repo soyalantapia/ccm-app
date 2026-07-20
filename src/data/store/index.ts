@@ -14,6 +14,13 @@ export type { DataStore, BlockAvailability, PhotoDownload } from './DataStore'
 const API_BASE = import.meta.env.VITE_API_URL as string | undefined
 export const store: DataStore = API_BASE ? new RemoteDataStore(API_BASE) : new LocalDataStore()
 
+/**
+ * Única fuente de verdad sobre "¿esto es la demo o el sistema real?".
+ * La UI la usa para no mentirle al organizador: había carteles fijos que decían
+ * "los datos viven en este dispositivo" cuando en producción ya viven en el backend.
+ */
+export const IS_REMOTE = Boolean(API_BASE)
+
 /* Reactividad: cualquier escritura (esta pestaña u otra) bumpea la versión. */
 let version = 0
 const subscribers = new Set<() => void>()
