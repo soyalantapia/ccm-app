@@ -14,6 +14,21 @@ export interface ApiClient {
   postBatch(path: string, body: unknown): Promise<void>
 }
 
+/**
+ * En un PATCH, `undefined` significa "vaciá este campo" — pero JSON.stringify BORRA las claves
+ * con valor undefined, así que la clave nunca llegaba y el backend (`if (k in patch) ...`) no
+ * tocaba la columna: el organizador borraba un campo opcional, veía "✓ guardado", y el valor
+ * viejo seguía ahí. Los forms del admin codifican "vacío" como `campo.trim() || undefined` en
+ * 18 lugares; normalizamos acá, en la costura, en vez de en cada form.
+ * Solo el primer nivel: es donde viven los campos escalares del patch.
+ */
+function undefinedANull(body: unknown): unknown {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return body
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(body as Record<string, unknown>)) out[k] = v === undefined ? null : v
+  return out
+}
+
 export function createApi(apiBase: string): ApiClient {
   const base = apiBase.replace(/\/+$/, '') + '/api/v1'
 
@@ -50,7 +65,7 @@ export function createApi(apiBase: string): ApiClient {
   return {
     get: (p) => call('GET', p),
     post: (p, b) => call('POST', p, b),
-    patch: (p, b) => call('PATCH', p, b),
+    patch: (p, b) => call('PATCH', p, undefinedANull(b)),
     put: (p) => call<void>('PUT', p).then(() => undefined),
     del: (p) => call<void>('DELETE', p).then(() => undefined),
     postBatch: (p, b) => call<void>('POST', p, b, true).then(() => undefined),
