@@ -3,7 +3,8 @@
  * la URL pública con la que el front los puede pegar en los campos de imagen.
  *
  * Restricciones:
- *   - Solo imágenes (jpeg/png/webp/gif/svg) hasta 5 MB.
+ *   - Solo imágenes reales (jpeg/png/webp/gif) hasta 5 MB — verificadas por magic bytes.
+ *   - SVG NO se acepta: es ejecutable y se serviría desde el origen de la app (XSS).
  *   - Nombre de archivo: <uuid>.<ext> — sin path traversal posible.
  *   - Requiere UPLOAD_DIR en el entorno; si no está, rechaza con 503.
  *
@@ -21,14 +22,47 @@ import formidable from 'formidable'
 import { ApiError } from '../lib/errors.js'
 import { env } from '../lib/env.js'
 
-/** Tipos MIME aceptados → extensión canónica. */
+/**
+ * Tipos MIME aceptados → extensión canónica.
+ *
+ * SVG NO está en la lista a propósito: es un documento ejecutable (puede llevar <script> y
+ * handlers on*), se sirve inline desde el MISMO origen que la SPA y el panel del organizador,
+ * y este servicio corre con helmet contentSecurityPolicy:false. Un SVG subido sería XSS
+ * almacenado con acceso a la sesión del admin. Si alguna vez hace falta SVG de verdad, hay
+ * que sanitizarlo server-side antes de guardarlo, no aceptarlo crudo.
+ */
 const ALLOWED: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/jpg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
   'image/gif': 'gif',
-  'image/svg+xml': 'svg',
+}
+
+/**
+ * Firmas (magic bytes) por extensión. El Content-Type lo declara el CLIENTE, así que no
+ * alcanza: verificamos que el contenido real sea el bitmap que dice ser. Sin esto, un HTML
+ * con Content-Type: image/png quedaba guardado y servido desde el origen de la app.
+ */
+const MAGIC: Record<string, (b: Buffer) => boolean> = {
+  jpg: (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  png: (b) => b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  gif: (b) => b.length > 6 && (b.subarray(0, 6).toString('latin1') === 'GIF87a' || b.subarray(0, 6).toString('latin1') === 'GIF89a'),
+  webp: (b) => b.length > 12 && b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP',
+}
+
+/** Lee la cabecera del archivo y confirma que coincide con la extensión resuelta. */
+export function contenidoCoincide(filepath: string, ext: string): boolean {
+  const check = MAGIC[ext]
+  if (!check) return false
+  const fd = fs.openSync(filepath, 'r')
+  try {
+    const head = Buffer.alloc(16)
+    const leidos = fs.readSync(fd, head, 0, 16, 0)
+    return check(head.subarray(0, leidos))
+  } finally {
+    fs.closeSync(fd)
+  }
 }
 
 const MAX_BYTES = 5 * 1024 * 1024 // 5 MB
@@ -108,15 +142,24 @@ export async function handleUpload(req: IncomingMessage): Promise<{ url: string 
     if (code === 1009 || code === 1015) {
       throw new ApiError(413, 'FILE_TOO_LARGE', 'La imagen supera los 5 MB. Comprimila o subí una versión más liviana.')
     }
-    throw new ApiError(400, 'UPLOAD_FAILED', 'No se pudo procesar el archivo. Verificá que sea una imagen válida (jpeg/png/webp/gif/svg) de hasta 5 MB.')
+    throw new ApiError(400, 'UPLOAD_FAILED', 'No se pudo procesar el archivo. Verificá que sea una imagen válida (jpeg/png/webp/gif) de hasta 5 MB.')
   }
 
   const raw = files.file?.[0]
-  if (!raw) throw new ApiError(400, 'NO_FILE', 'Se esperaba un campo "file" de imagen (jpeg/png/webp/gif/svg, máx 5 MB)')
+  if (!raw) throw new ApiError(400, 'NO_FILE', 'Se esperaba un campo "file" de imagen (jpeg/png/webp/gif, máx 5 MB)')
 
   const mime = raw.mimetype ?? ''
   const ext = ALLOWED[mime]
-  if (!ext) throw new ApiError(415, 'INVALID_TYPE', `Tipo no permitido: ${mime}. Permitidos: jpeg, png, webp, gif, svg`)
+  if (!ext) {
+    fs.rmSync(raw.filepath, { force: true }) // no dejar el temporal en el volumen
+    throw new ApiError(415, 'INVALID_TYPE', `Tipo no permitido: ${mime}. Permitidos: jpeg, png, webp, gif`)
+  }
+
+  // El Content-Type lo declara el cliente: confirmamos contra el contenido real.
+  if (!contenidoCoincide(raw.filepath, ext)) {
+    fs.rmSync(raw.filepath, { force: true })
+    throw new ApiError(415, 'INVALID_TYPE', 'El archivo no es una imagen válida (su contenido no coincide con el tipo declarado).')
+  }
 
   // Nombre único; ext normalizada → sin path traversal.
   const filename = `${randomUUID()}.${ext}`

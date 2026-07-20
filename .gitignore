@@ -26,3 +26,6 @@ dist-ssr
 dev-dist
 .github/workflows/
 .gstack/
+server/dist/
+server/.env
+.env.local

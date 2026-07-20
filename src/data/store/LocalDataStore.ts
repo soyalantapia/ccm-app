@@ -1,6 +1,7 @@
 import type {
   AdCampaign,
   AnalyticsEvent,
+  AdminStats,
   Application,
   ApplicationStatus,
   CatalogProfile,
@@ -59,7 +60,10 @@ import { seedBenefits } from '../seed/benefits'
 import { seedBanners } from '../seed/banners'
 import { seedNotas } from '../seed/notas'
 
-const K = {
+/** Claves de localStorage. Exportadas porque RemoteDataStore hace write-through sobre las
+ *  device-scoped: así el fallback `?? super.getX()` devuelve el último snapshot real del
+ *  server en vez del seed de demo o una lista vacía cuando la hidratación falla. */
+export const K = {
   registrations: 'registrations',
   orders: 'orders',
   favorites: 'favorites',
@@ -486,6 +490,11 @@ export class LocalDataStore implements DataStore {
       .sort((a, b) => a.order - b.order || b.publishedAt.localeCompare(a.publishedAt))
   }
 
+  /** En modo demo no hay gate de socio: la lista de contenidos ya viene completa. */
+  getAdminContents(): ContentItem[] {
+    return this.getContents()
+  }
+
   getAdminNotas(): Nota[] {
     return mergeOverlay(seedNotas, K.notasOverlay).sort(
       (a, b) => a.order - b.order || b.publishedAt.localeCompare(a.publishedAt),
@@ -701,5 +710,20 @@ export class LocalDataStore implements DataStore {
 
   getAnalytics(): AnalyticsEvent[] {
     return [...seedAnalytics, ...getLocalAnalytics()].sort((a, b) => a.ts.localeCompare(b.ts))
+  }
+
+  /** Sin backend no hay métricas reales que mostrar. null → el Dashboard pinta su estado
+   *  vacío en vez de inventar números con el seed. */
+  getAdminStats(): AdminStats | null {
+    return null
+  }
+
+  refetchAdminStats(): void {
+    /* no-op: sin backend no hay nada que re-pedir */
+  }
+
+  /** No falló: es que no hay backend. Son cosas distintas y el Dashboard las muestra distinto. */
+  statsFailed(): boolean {
+    return false
   }
 }

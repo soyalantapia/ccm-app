@@ -19,8 +19,17 @@ import { photosRouter } from './routes/photos.js'
 import { adminRouter } from './routes/admin.js'
 import { adminAuthRouter } from './routes/adminAuth.js'
 import { adminTeamRouter } from './routes/adminTeam.js'
+import { requireAdmin } from './middlewares/admin.js'
 import { deviceContext } from './middlewares/device.js'
 import { errorHandler, notFoundHandler } from './middlewares/error.js'
+
+/**
+ * Extensiones que identifican a un ARCHIVO (no a una ruta del router de la SPA).
+ * Es una lista cerrada a propósito: un slug con punto (`/p/j.lopez`) no puede confundirse
+ * con un archivo y terminar en 404.
+ */
+const PARECE_ARCHIVO =
+  /\.(jpe?g|png|webp|gif|svg|avif|ico|bmp|js|mjs|css|map|json|txt|xml|woff2?|ttf|otf|eot|mp4|webm|mp3|pdf|zip)$/i
 
 /** Arma la app Express. Todo cuelga de /api/v1 (canon 1). */
 export function createApp() {
@@ -67,6 +76,13 @@ export function createApp() {
   // Login del organizador: /auth/admin/*. Va acá, FUERA del prefijo /admin, porque ese prefijo
   // está cubierto por requireAdmin — colgar el login ahí sería exigir sesión para poder abrirla.
   v1.use(adminAuthRouter)
+  // Red de seguridad: TODO lo que cuelgue de /admin exige, como mínimo, estar autenticado.
+  // Cada ruta declara además QUÉ permiso necesita (requirePermission), que es lo que distingue
+  // un rol de otro. Esta capa existe porque el permiso por ruta se puede olvidar: sin ella, una
+  // ruta nueva nacería PÚBLICA. Con ella, lo peor que puede pasar es que quede accesible a
+  // cualquier organizador logueado — malo, pero no una filtración abierta. adminGuards.test.ts
+  // igual falla si a una ruta le falta su permiso.
+  v1.use('/admin', requireAdmin)
   // Identidad por device (verifica X-Device-Token firmado) para todo lo de abajo.
   v1.use(deviceContext)
   v1.use(meRouter) // Fase A: /me, /me/fields, /me/consents
@@ -98,7 +114,19 @@ export function createApp() {
   if (env.FRONT_DIST) {
     const dist = env.FRONT_DIST
     app.use(express.static(dist, { index: false }))
-    app.get(/^\/(?!api\/).*/, (_req, res) => res.sendFile(join(dist, 'index.html')))
+    app.get(/^\/(?!api\/).*/, (req, res) => {
+      // Un archivo que no existe tiene que decir 404. Antes caía acá y devolvía el index con
+      // HTTP 200, así que el navegador se bajaba el HTML entero por cada imagen rota y —peor—
+      // el service worker lo guardaba bajo la URL de la imagen (CacheFirst, 30 días) y después
+      // lo servía desde caché sin volver a preguntar: la imagen seguía rota aunque el equipo
+      // subiera la correcta. Las rutas del router de la SPA no tienen extensión, así que no
+      // entran en este guard.
+      if (PARECE_ARCHIVO.test(req.path)) {
+        res.status(404).type('text/plain').send('No encontrado')
+        return
+      }
+      res.sendFile(join(dist, 'index.html'))
+    })
   }
 
   app.use(notFoundHandler)

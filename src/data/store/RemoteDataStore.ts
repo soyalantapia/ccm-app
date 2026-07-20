@@ -1,4 +1,4 @@
-import { LocalDataStore } from './LocalDataStore'
+import { LocalDataStore, K } from './LocalDataStore'
 import type {
   BlockAvailability,
   PhotoDownload,
@@ -12,7 +12,7 @@ import type {
   HydratableResource,
 } from './DataStore'
 import { slugify } from './overlay'
-import { newId } from '../../lib/storage'
+import { newId, writeJSON } from '../../lib/storage'
 import { createApi, type ApiClient } from '../../lib/api'
 import { bus } from '../../lib/bus'
 import { hydrateFromRemote, getDeviceToken, setDeviceCredentials } from '../../lib/identity'
@@ -40,6 +40,7 @@ import type {
   PlanId,
   ApplicationStatus,
   AnalyticsEvent,
+  AdminStats,
 } from '../types'
 
 interface BufferedEvent {
@@ -100,7 +101,12 @@ export class RemoteDataStore extends LocalDataStore {
   private adminBenefits?: Benefit[]
   private adminBanners?: Banner[]
   private adminNotas?: Nota[]
+  private adminContents?: ContentItem[] // /admin/contents: sin gate de socio (el panel debe ver el youtubeId)
   private analytics?: AnalyticsEvent[] // analítica real cross-device (GET /admin/analytics), P1
+  // Métricas del Dashboard (GET /admin/stats). Sin fallback al seed a propósito.
+  private adminStats?: AdminStats
+  private statsInflight = false
+  private statsError = false
   private generalCounts = new Map<string, number>() // inscripciones generales server-wide por evento (#13)
   private generalInflight = new Set<string>()
   /** Negative cache: ms timestamp del último fallo de general-count por eventId. */
@@ -124,11 +130,18 @@ export class RemoteDataStore extends LocalDataStore {
       this.hydrateDeviceContent()
       this.hydrateMembership()
       this.hydrateApplications() // device ("Mis postulaciones")
-      // Si ya hay sesión de organizador (token en sessionStorage al recargar), hidratar también
-      // el caché admin — el panel /admin/postulaciones lo necesita sin re-loguear por el gate.
+      // Si ya hay sesión de organizador (token guardado al recargar), hidratar TODOS los cachés
+      // admin. `refetchAdminScoped()` es el mismo método que corre al loguearse, así que recargar
+      // la página deja el panel en el mismo estado que recién logueado.
+      //
+      // Antes acá se hidrataban solo applications y analytics: los otros cuatro cachés
+      // (notas, beneficios, banners, convocatorias) quedaban `undefined` tras un F5 y, como
+      // create/update/delete hacen `if (!this.adminX) return super.X()`, cada alta caía en
+      // localStorage con cartel de éxito. El organizador cargaba una nota, la veía en la lista
+      // y no llegaba nunca al backend. Llamar al método agrupado evita que vuelva a pasar
+      // cuando se sume un séptimo caché.
       if (hasAdminToken()) {
-        this.hydrateAdminApplications()
-        this.hydrateAnalytics() // reporte a sponsors con datos reales sin re-loguear
+        this.refetchAdminScoped()
       }
       this.hydrateBenefits()
       // Re-fetch de /contents YA CON el device token: el backend gatea el youtubeId de los videos
@@ -206,6 +219,11 @@ export class RemoteDataStore extends LocalDataStore {
         // la ventana de hidratación, no pisarlos con la lista del server (el .then los reconcilia).
         const inflight = (this.regs ?? []).filter((r) => r.id.startsWith('tmp_'))
         this.regs = [...regs, ...inflight]
+        // Write-through: el caché de este store es memoria pura y se hidrata una sola vez. Si el
+        // próximo arranque no tiene red, la lectura cae al fallback de LocalDataStore, que lee
+        // esta misma clave — sin espejarla, devuelve [] y el asistente ve "todavía no tenés tu QR"
+        // estando inscripto. Guardamos el último snapshot real del server.
+        writeJSON(K.registrations, regs)
         bus.emit('registrations')
       })
       .catch(() => {})
@@ -482,6 +500,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.hydrateAdminNotas()
     this.hydrateAdminApplications() // lista COMPLETA en un caché aparte (no pisa las del device)
     this.hydrateConvocatorias() // lista completa para gestionarlas (antes solo venían del seed)
+    this.hydrateAdminContents() // youtubeId sin enmascarar para el panel
     this.hydrateAnalytics() // analítica REAL — antes Dashboard/SponsorReport leían el seed fabricado (P1)
   }
 
@@ -492,6 +511,44 @@ export class RemoteDataStore extends LocalDataStore {
   }
   override getAnalytics(): AnalyticsEvent[] {
     return this.analytics ?? super.getAnalytics()
+  }
+
+  /**
+   * Métricas del Dashboard (GET /admin/stats), calculadas por el backend sobre las tablas.
+   *
+   * A diferencia del resto de las lecturas, esta NO cae a super cuando no hay dato: el
+   * seed daría números fabricados presentados como reales. Devolver null deja que el
+   * Dashboard distinga "cargando" de "falló" de "no hay nada".
+   */
+  override getAdminStats(): AdminStats | null {
+    return this.adminStats ?? null
+  }
+
+  /** Re-pide las métricas. La llama el Dashboard al montar, así cada entrada trae datos
+   *  frescos sin necesidad de polling ni de recargar la página entera. */
+  override refetchAdminStats(): void {
+    if (this.statsInflight) return
+    this.statsInflight = true
+    this.api
+      .get<AdminStats>('/admin/stats')
+      .then((s) => {
+        this.adminStats = s
+        this.statsError = false
+      })
+      .catch(() => {
+        // El error se EXPONE (no se traga en un catch vacío como hacía hydrateAnalytics):
+        // si el backend no responde, el Dashboard tiene que decirlo, no mostrar ceros.
+        this.statsError = true
+      })
+      .finally(() => {
+        this.statsInflight = false
+        bus.emit('adminStats')
+      })
+  }
+
+  /** true si el último intento falló → el Dashboard muestra el error en vez de un cero. */
+  override statsFailed(): boolean {
+    return this.statsError
   }
 
   private hydrateConvocatorias(): void {
@@ -517,32 +574,33 @@ export class RemoteDataStore extends LocalDataStore {
     return this.adminNotas ?? super.getAdminNotas()
   }
   override createNota(input: NewNota): Nota {
-    if (!this.adminNotas) return super.createNota(input)
-    const taken = new Set(this.adminNotas.map((n) => n.slug))
+    const taken = new Set((this.adminNotas ?? []).map((n) => n.slug))
     const base = input.slug || slugify(input.title)
     let slug = base
     for (let i = 2; taken.has(slug); i++) slug = `${base}-${i}`
     const nota: Nota = { ...input, id: newId('nota'), slug }
-    this.adminNotas = [nota, ...this.adminNotas]
+    if (this.adminNotas) this.adminNotas = [nota, ...this.adminNotas]
     this.track('admin_nota_created', { notaId: nota.id })
     bus.emit('notas')
-    this.api.post('/admin/notas', nota).then(() => this.refetchNotas()).catch(() => this.refetchNotas())
+    this.adminWrite(this.api.post('/admin/notas', nota), () => this.refetchNotas())
     return nota
   }
   override updateNota(id: string, patch: Partial<Nota>): void {
-    if (!this.adminNotas) return super.updateNota(id, patch)
-    this.adminNotas = this.adminNotas.map((n) => (n.id === id ? { ...n, ...patch } : n))
+    if (this.adminNotas) this.adminNotas = this.adminNotas.map((n) => (n.id === id ? { ...n, ...patch } : n))
     this.track('admin_nota_updated', { notaId: id })
     bus.emit('notas')
-    this.api.patch(`/admin/notas/${id}`, patch).then(() => this.refetchNotas()).catch(() => this.refetchNotas())
+    this.adminWrite(this.api.patch(`/admin/notas/${id}`, patch), () => this.refetchNotas())
   }
   override deleteNota(id: string): void {
-    if (!this.adminNotas) return super.deleteNota(id)
     const prev = this.adminNotas
-    this.adminNotas = this.adminNotas.filter((n) => n.id !== id)
+    if (this.adminNotas) this.adminNotas = this.adminNotas.filter((n) => n.id !== id)
     this.track('admin_nota_deleted', { notaId: id })
     bus.emit('notas')
-    this.api.del(`/admin/notas/${id}`).then(() => this.hydrateNotas()).catch(() => { this.adminNotas = prev; bus.emit('notas') })
+    this.adminWrite(
+      this.api.del(`/admin/notas/${id}`),
+      () => this.refetchNotas(),
+      () => { if (prev) this.adminNotas = prev; bus.emit('notas') },
+    )
   }
 
   /* ─── Banners gestionados. Público (this.banners ← /banners) vs admin (this.adminBanners ←
@@ -561,40 +619,61 @@ export class RemoteDataStore extends LocalDataStore {
     return this.adminBanners ?? super.getAdminBanners()
   }
   override createBanner(input: NewBanner): Banner {
-    if (!this.adminBanners) return super.createBanner(input)
     const banner: Banner = { ...input, id: newId('bnr') }
-    this.adminBanners = [...this.adminBanners, banner].sort((a, b) => a.order - b.order)
+    if (this.adminBanners) this.adminBanners = [...this.adminBanners, banner].sort((a, b) => a.order - b.order)
     this.track('admin_banner_created', { bannerId: banner.id, slot: banner.slot })
     bus.emit('banners')
-    this.api.post('/admin/banners', banner).then(() => this.refetchBanners()).catch(() => this.refetchBanners())
+    this.adminWrite(this.api.post('/admin/banners', banner), () => this.refetchBanners())
     return banner
   }
   override updateBanner(id: string, patch: Partial<Banner>): void {
-    if (!this.adminBanners) return super.updateBanner(id, patch)
-    this.adminBanners = this.adminBanners.map((b) => (b.id === id ? { ...b, ...patch } : b)).sort((a, b) => a.order - b.order)
+    if (this.adminBanners) this.adminBanners = this.adminBanners.map((b) => (b.id === id ? { ...b, ...patch } : b)).sort((a, b) => a.order - b.order)
     this.track('admin_banner_updated', { bannerId: id })
     bus.emit('banners')
-    this.api.patch(`/admin/banners/${id}`, patch).then(() => this.refetchBanners()).catch(() => this.refetchBanners())
+    this.adminWrite(this.api.patch(`/admin/banners/${id}`, patch), () => this.refetchBanners())
   }
   override deleteBanner(id: string): void {
-    if (!this.adminBanners) return super.deleteBanner(id)
     const prev = this.adminBanners
-    this.adminBanners = this.adminBanners.filter((b) => b.id !== id)
+    if (this.adminBanners) this.adminBanners = this.adminBanners.filter((b) => b.id !== id)
     this.track('admin_banner_deleted', { bannerId: id })
     bus.emit('banners')
-    this.api.del(`/admin/banners/${id}`).then(() => this.hydrateBanners()).catch(() => { this.adminBanners = prev; bus.emit('banners') })
+    this.adminWrite(
+      this.api.del(`/admin/banners/${id}`),
+      () => this.refetchBanners(),
+      () => { if (prev) this.adminBanners = prev; bus.emit('banners') },
+    )
   }
 
   /** Contenido del DEVICE (requireDevice): favoritos y descargas. Corre tras tener el token. */
   private hydrateDeviceContent(): void {
-    this.api.get<string[]>('/favorites').then((f) => { this.favorites = f; bus.emit('favorites') }).catch(() => {})
-    this.api.get<PhotoDownload[]>('/downloads').then((d) => { this.downloads = d; bus.emit('downloads') }).catch(() => {})
+    // writeJSON: mismo write-through que hydrateRegistrations — sin espejar, un arranque sin red
+    // muestra los favoritos y las descargas vacíos (ver el comentario allá).
+    this.api.get<string[]>('/favorites').then((f) => { this.favorites = f; writeJSON(K.favorites, f); bus.emit('favorites') }).catch(() => {})
+    this.api.get<PhotoDownload[]>('/downloads').then((d) => { this.downloads = d; writeJSON(K.downloads, d); bus.emit('downloads') }).catch(() => {})
   }
 
   /* ─── Resto Fase G: sponsors / planes / convocatorias / postulaciones ─── */
 
   private refetch<T>(path: string, set: (v: T) => void, key: string): void {
     this.api.get<T>(path).then((v) => { set(v); bus.emit(key) }).catch(() => {})
+  }
+
+  /**
+   * Cierra una escritura del organizador (alta/edición/baja contra /admin/*).
+   *
+   * Antes cada escritura hacía `.then(refetch).catch(refetch)`: si el backend rechazaba, el
+   * ítem optimista desaparecía de la lista SIN decir nada, o —peor— el organizador se quedaba
+   * con la sensación de haber guardado. Acá el error se avisa siempre (`admin:write-failed`,
+   * lo levanta ToastHost) además de deshacer el optimismo.
+   *
+   * @param onOk   qué re-hidratar cuando el backend confirma
+   * @param onFail cómo deshacer lo optimista; si se omite, se re-hidrata (el server manda)
+   */
+  private adminWrite(p: Promise<unknown>, onOk: () => void, onFail?: () => void): void {
+    p.then(() => onOk()).catch(() => {
+      ;(onFail ?? onOk)()
+      bus.emit('admin:write-failed')
+    })
   }
 
   override getSponsors(): Sponsor[] {
@@ -626,32 +705,37 @@ export class RemoteDataStore extends LocalDataStore {
     return super.getConvocatoria(slug)
   }
   override createConvocatoria(input: NewConvocatoria): Convocatoria {
-    if (!this.convocatoriasList) return super.createConvocatoria(input)
-    const taken = new Set(this.convocatoriasList.map((c) => c.slug))
+    const taken = new Set((this.convocatoriasList ?? []).map((c) => c.slug))
     const base = input.slug || slugify(input.title)
     let slug = base
     for (let i = 2; taken.has(slug); i++) slug = `${base}-${i}`
     const cv: Convocatoria = { ...input, id: newId('conv'), slug }
-    this.convocatoriasList = [cv, ...this.convocatoriasList]
+    if (this.convocatoriasList) this.convocatoriasList = [cv, ...this.convocatoriasList]
     this.track('admin_convocatoria_created', { convocatoriaId: cv.id })
     bus.emit('convocatorias')
-    this.api.post('/admin/convocatorias', cv).then(() => this.hydrateConvocatorias()).catch(() => this.hydrateConvocatorias())
+    this.adminWrite(this.api.post('/admin/convocatorias', cv), () => this.hydrateConvocatorias())
     return cv
   }
   override updateConvocatoria(id: string, patch: Partial<Convocatoria>): void {
-    if (!this.convocatoriasList) return super.updateConvocatoria(id, patch)
-    this.convocatoriasList = this.convocatoriasList.map((c) => (c.id === id ? { ...c, ...patch } : c))
+    if (this.convocatoriasList) this.convocatoriasList = this.convocatoriasList.map((c) => (c.id === id ? { ...c, ...patch } : c))
     this.track('admin_convocatoria_updated', { convocatoriaId: id })
     bus.emit('convocatorias')
-    this.api.patch(`/admin/convocatorias/${id}`, patch).then(() => this.hydrateConvocatorias()).catch(() => this.hydrateConvocatorias())
+    // Se limpia también el caché por slug: si no, la vista pública /c/:slug seguía sirviendo
+    // la versión vieja hasta recargar.
+    this.convocatorias.clear()
+    this.adminWrite(this.api.patch(`/admin/convocatorias/${id}`, patch), () => this.hydrateConvocatorias())
   }
   override deleteConvocatoria(id: string): void {
-    if (!this.convocatoriasList) return super.deleteConvocatoria(id)
     const prev = this.convocatoriasList
-    this.convocatoriasList = this.convocatoriasList.filter((c) => c.id !== id)
+    if (this.convocatoriasList) this.convocatoriasList = this.convocatoriasList.filter((c) => c.id !== id)
     this.track('admin_convocatoria_deleted', { convocatoriaId: id })
     bus.emit('convocatorias')
-    this.api.del(`/admin/convocatorias/${id}`).catch(() => { this.convocatoriasList = prev; bus.emit('convocatorias') })
+    this.convocatorias.clear()
+    this.adminWrite(
+      this.api.del(`/admin/convocatorias/${id}`),
+      () => this.hydrateConvocatorias(),
+      () => { if (prev) this.convocatoriasList = prev; bus.emit('convocatorias') },
+    )
   }
   /** Con token de admin en sesión trae TODAS (GET /admin/applications) para revisar/decidir;
    *  device (this.applications, GET /applications) para "Mis postulaciones" del usuario, y una
@@ -677,7 +761,9 @@ export class RemoteDataStore extends LocalDataStore {
   /* ─── Membresía (Fase D parcial): persiste server-side, antes solo en localStorage ─── */
 
   private hydrateMembership(): void {
-    this.api.get<Membership>('/memberships/me').then((m) => { this.membership = m; bus.emit('membership') }).catch(() => {})
+    // writeJSON: sin el espejo, un socio que arranca sin red vuelve a ser 'free' y pierde el
+    // acceso al contenido que pagó hasta que la hidratación funcione.
+    this.api.get<Membership>('/memberships/me').then((m) => { this.membership = m; writeJSON(K.membership, m); bus.emit('membership') }).catch(() => {})
   }
 
   override getMembership(): Membership {
@@ -696,6 +782,7 @@ export class RemoteDataStore extends LocalDataStore {
       .post<Membership>('/memberships', { paid })
       .then((server) => {
         this.membership = server
+        writeJSON(K.membership, server) // write-through: la membresía recién pagada sobrevive a un arranque sin red
         bus.emit('membership')
         this.refetchContents() // ahora socio → re-fetch para desenmascarar el youtubeId de contenido socioOnly
       })
@@ -703,6 +790,9 @@ export class RemoteDataStore extends LocalDataStore {
         // Si el server no registró la membresía, revertir el estado optimista y AVISAR — si no,
         // isSocio() queda true y desbloquea contenido socioOnly cross-app hasta el próximo reload.
         this.membership = prev
+        // El espejo también se revierte: si no, el snapshot local queda diciendo 'socio' y el
+        // próximo arranque sin red desbloquea contenido que el server nunca confirmó.
+        writeJSON(K.membership, prev ?? { tier: 'free', since: '', paid: 0 })
         bus.emit('membership')
         bus.emit('membership:rejected')
       })
@@ -728,28 +818,29 @@ export class RemoteDataStore extends LocalDataStore {
     return this.adminBenefits ?? super.getAdminBenefits()
   }
   override createBenefit(input: NewBenefit): Benefit {
-    if (!this.adminBenefits) return super.createBenefit(input)
     const benefit: Benefit = { ...input, id: newId('ben') }
-    this.adminBenefits = [...this.adminBenefits, benefit].sort((a, b) => a.order - b.order)
+    if (this.adminBenefits) this.adminBenefits = [...this.adminBenefits, benefit].sort((a, b) => a.order - b.order)
     this.track('admin_benefit_created', { benefitId: benefit.id, category: benefit.category })
     bus.emit('benefits')
-    this.api.post('/admin/benefits', benefit).then(() => this.refetchBenefits()).catch(() => this.refetchBenefits())
+    this.adminWrite(this.api.post('/admin/benefits', benefit), () => this.refetchBenefits())
     return benefit
   }
   override updateBenefit(id: string, patch: Partial<Benefit>): void {
-    if (!this.adminBenefits) return super.updateBenefit(id, patch)
-    this.adminBenefits = this.adminBenefits.map((b) => (b.id === id ? { ...b, ...patch } : b)).sort((a, b) => a.order - b.order)
+    if (this.adminBenefits) this.adminBenefits = this.adminBenefits.map((b) => (b.id === id ? { ...b, ...patch } : b)).sort((a, b) => a.order - b.order)
     this.track('admin_benefit_updated', { benefitId: id })
     bus.emit('benefits')
-    this.api.patch(`/admin/benefits/${id}`, patch).then(() => this.refetchBenefits()).catch(() => this.refetchBenefits())
+    this.adminWrite(this.api.patch(`/admin/benefits/${id}`, patch), () => this.refetchBenefits())
   }
   override deleteBenefit(id: string): void {
-    if (!this.adminBenefits) return super.deleteBenefit(id)
     const prev = this.adminBenefits
-    this.adminBenefits = this.adminBenefits.filter((b) => b.id !== id)
+    if (this.adminBenefits) this.adminBenefits = this.adminBenefits.filter((b) => b.id !== id)
     this.track('admin_benefit_deleted', { benefitId: id })
     bus.emit('benefits')
-    this.api.del(`/admin/benefits/${id}`).then(() => this.hydrateBenefits()).catch(() => { this.adminBenefits = prev; bus.emit('benefits') })
+    this.adminWrite(
+      this.api.del(`/admin/benefits/${id}`),
+      () => this.refetchBenefits(),
+      () => { if (prev) this.adminBenefits = prev; bus.emit('benefits') },
+    )
   }
 
   override submitApplication(convocatoriaId: string, data: Record<string, string>): Application {
@@ -780,101 +871,128 @@ export class RemoteDataStore extends LocalDataStore {
       // hidratar bajo demanda (el admin abrió postulaciones)
       this.refetch<Application[]>('/admin/applications', (v) => (this.adminApplications = v), 'applications')
     }
+    const prev = this.adminApplications
     if (this.adminApplications) this.adminApplications = this.adminApplications.map((a) => (a.id === applicationId ? { ...a, status, decidedAt: new Date().toISOString() } : a))
     bus.emit('applications')
-    this.api.patch(`/admin/applications/${applicationId}`, { status }).then(() => this.refetch<Application[]>('/admin/applications', (v) => (this.adminApplications = v), 'applications')).catch(() => {})
+    // Antes el error se tragaba con `.catch(() => {})`: la postulación quedaba marcada como
+    // aceptada en pantalla sin que el backend lo supiera, y al recargar volvía a "preinscripta".
+    this.adminWrite(
+      this.api.patch(`/admin/applications/${applicationId}`, { status }),
+      () => this.refetch<Application[]>('/admin/applications', (v) => (this.adminApplications = v), 'applications'),
+      // `prev` puede ser undefined: arriba se dispara una hidratación bajo demanda, y si ESA
+      // llega mientras el PATCH está en vuelo, restaurar el snapshot vacío borraría la lista
+      // real recién traída y dejaría al organizador viendo las postulaciones del seed.
+      () => {
+        if (prev) this.adminApplications = prev
+        else this.refetch<Application[]>('/admin/applications', (v) => (this.adminApplications = v), 'applications')
+        bus.emit('applications')
+      },
+    )
   }
 
+  /* Re-hidratadores de las listas que sirven a la vez al público y al panel. */
+  private refetchSponsors(): void { this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors') }
+  private refetchGalleries(): void { this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries') }
+  private refetchCatalog(): void { this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog') }
+  private refetchPlans(): void { this.refetch('/plans', (v: TicketPlan[]) => (this.plans = v), 'plans') }
+
   override createSponsor(input: NewSponsor): Sponsor {
-    if (!this.sponsors) return super.createSponsor(input)
     const sponsor: Sponsor = { ...input, id: newId('sp') }
-    this.sponsors = [...this.sponsors, sponsor]
+    if (this.sponsors) this.sponsors = [...this.sponsors, sponsor]
     this.track('admin_sponsor_created', { sponsorId: sponsor.id, level: sponsor.level })
     bus.emit('sponsors')
-    this.api.post('/admin/sponsors', sponsor).then(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors')).catch(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors'))
+    this.adminWrite(this.api.post('/admin/sponsors', sponsor), () => this.refetchSponsors())
     return sponsor
   }
   override updateSponsor(id: string, patch: Partial<Sponsor>): void {
-    if (!this.sponsors) return super.updateSponsor(id, patch)
-    this.sponsors = this.sponsors.map((s) => (s.id === id ? { ...s, ...patch } : s))
+    if (this.sponsors) this.sponsors = this.sponsors.map((s) => (s.id === id ? { ...s, ...patch } : s))
     this.track('admin_sponsor_updated', { sponsorId: id })
     bus.emit('sponsors')
-    this.api.patch(`/admin/sponsors/${id}`, patch).then(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors')).catch(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors'))
+    this.adminWrite(this.api.patch(`/admin/sponsors/${id}`, patch), () => this.refetchSponsors())
   }
   override deleteSponsor(id: string): void {
-    if (!this.sponsors) return super.deleteSponsor(id)
     const prev = this.sponsors
-    this.sponsors = this.sponsors.filter((s) => s.id !== id)
+    if (this.sponsors) this.sponsors = this.sponsors.filter((s) => s.id !== id)
     this.track('admin_sponsor_deleted', { sponsorId: id })
     bus.emit('sponsors')
-    this.api.del(`/admin/sponsors/${id}`).catch(() => { this.sponsors = prev; bus.emit('sponsors') })
+    this.adminWrite(
+      this.api.del(`/admin/sponsors/${id}`),
+      () => this.refetchSponsors(),
+      () => { if (prev) this.sponsors = prev; bus.emit('sponsors') },
+    )
   }
 
   override createGallery(input: NewGallery): Gallery {
-    if (!this.galleries) return super.createGallery(input)
     // Dedup de slug (como notas/convocatorias): sin esto, dos galerías con el mismo título
     // chocan con el @unique del server → 409 → el ítem optimista desaparece en silencio.
-    const gtaken = new Set(this.galleries.map((g) => g.slug))
+    const gtaken = new Set((this.galleries ?? []).map((g) => g.slug))
     let gslug = input.slug || slugify(input.title)
     for (let i = 2, base = gslug; gtaken.has(gslug); i++) gslug = `${base}-${i}`
     const gallery: Gallery = { ...input, id: newId('gal'), slug: gslug }
-    this.galleries = [...this.galleries, gallery]
+    if (this.galleries) this.galleries = [...this.galleries, gallery]
     this.track('admin_gallery_created', { galleryId: gallery.id })
     bus.emit('galleries')
-    this.api.post('/admin/galleries', gallery).then(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries')).catch(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries'))
+    this.adminWrite(this.api.post('/admin/galleries', gallery), () => this.refetchGalleries())
     return gallery
   }
   override updateGallery(id: string, patch: Partial<Gallery>): void {
-    if (!this.galleries) return super.updateGallery(id, patch)
-    this.galleries = this.galleries.map((g) => (g.id === id ? { ...g, ...patch } : g))
+    if (this.galleries) this.galleries = this.galleries.map((g) => (g.id === id ? { ...g, ...patch } : g))
     this.track('admin_gallery_updated', { galleryId: id })
     bus.emit('galleries')
-    this.api.patch(`/admin/galleries/${id}`, patch).then(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries')).catch(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries'))
+    this.adminWrite(this.api.patch(`/admin/galleries/${id}`, patch), () => this.refetchGalleries())
   }
   override deleteGallery(id: string): void {
-    if (!this.galleries) return super.deleteGallery(id)
     const prev = this.galleries
-    this.galleries = this.galleries.filter((g) => g.id !== id)
+    if (this.galleries) this.galleries = this.galleries.filter((g) => g.id !== id)
     this.track('admin_gallery_deleted', { galleryId: id })
     bus.emit('galleries')
-    this.api.del(`/admin/galleries/${id}`).catch(() => { this.galleries = prev; bus.emit('galleries') })
+    this.adminWrite(
+      this.api.del(`/admin/galleries/${id}`),
+      () => this.refetchGalleries(),
+      () => { if (prev) this.galleries = prev; bus.emit('galleries') },
+    )
   }
 
   override createCatalogProfile(input: NewCatalogProfile): CatalogProfile {
-    if (!this.catalog) return super.createCatalogProfile(input)
     // Dedup de slug: dos expositores con el mismo nombre chocan con el @unique → 409 → el ítem
     // desaparece del panel sin aviso. Espeja el dedup de notas/convocatorias.
-    const ctaken = new Set(this.catalog.map((c) => c.slug))
+    const ctaken = new Set((this.catalog ?? []).map((c) => c.slug))
     let cslug = input.slug || slugify(input.name)
     for (let i = 2, base = cslug; ctaken.has(cslug); i++) cslug = `${base}-${i}`
     const profile: CatalogProfile = { ...input, id: newId('cat'), slug: cslug }
-    this.catalog = [...this.catalog, profile]
+    if (this.catalog) this.catalog = [...this.catalog, profile]
     this.track('admin_catalog_created', { profileId: profile.id })
     bus.emit('catalog')
-    this.api.post('/admin/catalog', profile).then(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog')).catch(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog'))
+    this.adminWrite(this.api.post('/admin/catalog', profile), () => this.refetchCatalog())
     return profile
   }
   override updateCatalogProfile(id: string, patch: Partial<CatalogProfile>): void {
-    if (!this.catalog) return super.updateCatalogProfile(id, patch)
-    this.catalog = this.catalog.map((c) => (c.id === id ? { ...c, ...patch } : c))
+    if (this.catalog) this.catalog = this.catalog.map((c) => (c.id === id ? { ...c, ...patch } : c))
     this.track('admin_catalog_updated', { profileId: id })
     bus.emit('catalog')
-    this.api.patch(`/admin/catalog/${id}`, patch).then(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog')).catch(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog'))
+    this.adminWrite(this.api.patch(`/admin/catalog/${id}`, patch), () => this.refetchCatalog())
   }
   override deleteCatalogProfile(id: string): void {
-    if (!this.catalog) return super.deleteCatalogProfile(id)
     const prev = this.catalog
-    this.catalog = this.catalog.filter((c) => c.id !== id)
+    if (this.catalog) this.catalog = this.catalog.filter((c) => c.id !== id)
     this.track('admin_catalog_deleted', { profileId: id })
     bus.emit('catalog')
-    this.api.del(`/admin/catalog/${id}`).catch(() => { this.catalog = prev; bus.emit('catalog') })
+    this.adminWrite(
+      this.api.del(`/admin/catalog/${id}`),
+      () => this.refetchCatalog(),
+      () => { if (prev) this.catalog = prev; bus.emit('catalog') },
+    )
   }
 
   override updatePlan(id: PlanId, patch: { price?: number | null; mpLink?: string }): void {
-    if (!this.plans) return super.updatePlan(id, patch)
-    this.plans = this.plans.map((p) => (p.id === id ? { ...p, ...patch } : p))
+    const prev = this.plans
+    if (this.plans) this.plans = this.plans.map((p) => (p.id === id ? { ...p, ...patch } : p))
     bus.emit('plans')
-    this.api.patch(`/admin/plans/${id}`, patch).then(() => this.refetch('/plans', (v: TicketPlan[]) => (this.plans = v), 'plans')).catch(() => this.refetch('/plans', (v: TicketPlan[]) => (this.plans = v), 'plans'))
+    this.adminWrite(
+      this.api.patch(`/admin/plans/${id}`, patch),
+      () => this.refetchPlans(),
+      () => { if (prev) this.plans = prev; bus.emit('plans'); this.refetchPlans() },
+    )
   }
 
   override getCatalog(): CatalogProfile[] {
@@ -944,48 +1062,62 @@ export class RemoteDataStore extends LocalDataStore {
   private refetchContents(): void {
     this.api.get<ContentItem[]>('/contents').then((c) => { this.contents = c; bus.emit('contents') }).catch(() => {})
   }
+  /** Lista del panel: el backend NO enmascara el youtubeId de los videos solo-socios. Sin esto,
+   *  el organizador abría su propio video y el campo del link venía vacío (el gate de socio
+   *  aplica al device, y el device del organizador no es socio) → no podía guardar la edición. */
+  private hydrateAdminContents(): void {
+    this.api.get<ContentItem[]>('/admin/contents').then((c) => { this.adminContents = c; bus.emit('contents') }).catch(() => {})
+  }
+  private refetchAllContents(): void { this.refetchContents(); this.hydrateAdminContents() }
+  override getAdminContents(): ContentItem[] {
+    return this.adminContents ?? super.getAdminContents()
+  }
 
   override createEvent(input: NewEvent): EventItem {
-    if (!this.events) return super.createEvent(input)
     const event: EventItem = { ...input, id: newId('ev'), slug: input.slug || this.uniqueSlug(slugify(input.title)) }
-    this.events = [...this.events, event]
+    if (this.events) this.events = [...this.events, event]
     this.track('admin_event_created', { eventId: event.id, type: event.type })
     bus.emit('events')
-    this.api.post('/admin/events', event).then(() => this.hydrateEvents()).catch(() => this.hydrateEvents())
+    this.adminWrite(this.api.post('/admin/events', event), () => this.hydrateEvents())
     return event
   }
   override updateEvent(id: string, patch: Partial<EventItem>): void {
-    if (!this.events) return super.updateEvent(id, patch)
-    this.events = this.events.map((e) => (e.id === id ? { ...e, ...patch } : e))
+    if (this.events) this.events = this.events.map((e) => (e.id === id ? { ...e, ...patch } : e))
     this.track('admin_event_updated', { eventId: id })
     bus.emit('events')
-    this.api.patch(`/admin/events/${id}`, patch).then(() => this.hydrateEvents()).catch(() => this.hydrateEvents())
+    this.adminWrite(this.api.patch(`/admin/events/${id}`, patch), () => this.hydrateEvents())
   }
   override deleteEvent(id: string): void {
-    if (!this.events) return super.deleteEvent(id)
     const prev = this.events
-    this.events = this.events.filter((e) => e.id !== id)
+    if (this.events) this.events = this.events.filter((e) => e.id !== id)
     this.blocksByEvent.delete(id)
     this.track('admin_event_deleted', { eventId: id })
     bus.emit('events')
-    this.api.del(`/admin/events/${id}`).catch(() => {
-      this.events = prev // revertir si el server rechaza (ej. 409 con inscripciones)
-      bus.emit('events')
-    })
+    this.adminWrite(
+      this.api.del(`/admin/events/${id}`),
+      () => this.hydrateEvents(),
+      // El server puede rechazar (ej. 409 si el evento ya tiene inscripciones): devolvemos la
+      // lista como estaba y el aviso explica por qué "no se borró".
+      () => { if (prev) this.events = prev; this.hydrateEvents(); bus.emit('events') },
+    )
   }
 
   override createBlock(input: NewBlock): EventBlock {
-    if (!this.events) return super.createBlock(input)
     const block: EventBlock = { ...input, id: newId('blk') }
-    this.blocksByEvent.set(block.eventId, [...(this.blocksByEvent.get(block.eventId) ?? []), block])
-    this.blocksById.set(block.id, block)
+    // Solo se toca el caché si YA estaba hidratado para ese evento (mismo criterio que el resto
+    // de las entidades). Sembrar la clave con un único bloque tapaba el fallback al seed de
+    // getBlocks() y el evento aparecía con un solo bloque hasta recargar.
+    const cached = this.blocksByEvent.get(block.eventId)
+    if (cached) {
+      this.blocksByEvent.set(block.eventId, [...cached, block])
+      this.blocksById.set(block.id, block)
+    }
     this.track('admin_block_created', { blockId: block.id, eventId: block.eventId })
     bus.emit('blocks')
-    this.api.post('/admin/blocks', block).then(() => this.hydrateEvents()).catch(() => this.hydrateEvents())
+    this.adminWrite(this.api.post('/admin/blocks', block), () => this.hydrateEvents())
     return block
   }
   override updateBlock(id: string, patch: Partial<EventBlock>): void {
-    if (!this.events) return super.updateBlock(id, patch)
     const cur = this.blocksById.get(id)
     if (cur) {
       const next = { ...cur, ...patch }
@@ -994,40 +1126,41 @@ export class RemoteDataStore extends LocalDataStore {
     }
     this.track('admin_block_updated', { blockId: id })
     bus.emit('blocks')
-    this.api.patch(`/admin/blocks/${id}`, patch).then(() => this.hydrateEvents()).catch(() => this.hydrateEvents())
+    this.adminWrite(this.api.patch(`/admin/blocks/${id}`, patch), () => this.hydrateEvents())
   }
   override deleteBlock(id: string): void {
-    if (!this.events) return super.deleteBlock(id)
     const cur = this.blocksById.get(id)
     this.blocksById.delete(id)
     if (cur) this.blocksByEvent.set(cur.eventId, (this.blocksByEvent.get(cur.eventId) ?? []).filter((b) => b.id !== id))
     this.track('admin_block_deleted', { blockId: id })
     bus.emit('blocks')
-    this.api.del(`/admin/blocks/${id}`).catch(() => this.hydrateEvents())
+    this.adminWrite(this.api.del(`/admin/blocks/${id}`), () => this.hydrateEvents())
   }
 
   override createContent(input: NewContent): ContentItem {
-    if (!this.contents) return super.createContent(input)
     const content: ContentItem = { ...input, id: newId('vid') }
-    this.contents = [content, ...this.contents]
+    if (this.contents) this.contents = [content, ...this.contents]
     this.track('admin_content_created', { contentId: content.id })
     bus.emit('contents')
-    this.api.post('/admin/contents', content).then(() => this.refetchContents()).catch(() => this.refetchContents())
+    this.adminWrite(this.api.post('/admin/contents', content), () => this.refetchAllContents())
     return content
   }
   override updateContent(id: string, patch: Partial<ContentItem>): void {
-    if (!this.contents) return super.updateContent(id, patch)
-    this.contents = this.contents.map((c) => (c.id === id ? { ...c, ...patch } : c))
+    if (this.contents) this.contents = this.contents.map((c) => (c.id === id ? { ...c, ...patch } : c))
     this.track('admin_content_updated', { contentId: id })
     bus.emit('contents')
-    this.api.patch(`/admin/contents/${id}`, patch).then(() => this.refetchContents()).catch(() => this.refetchContents())
+    this.adminWrite(this.api.patch(`/admin/contents/${id}`, patch), () => this.refetchAllContents())
   }
   override deleteContent(id: string): void {
-    if (!this.contents) return super.deleteContent(id)
-    this.contents = this.contents.filter((c) => c.id !== id)
+    const prev = this.contents
+    if (this.contents) this.contents = this.contents.filter((c) => c.id !== id)
     this.track('admin_content_deleted', { contentId: id })
     bus.emit('contents')
-    this.api.del(`/admin/contents/${id}`).catch(() => this.refetchContents())
+    this.adminWrite(
+      this.api.del(`/admin/contents/${id}`),
+      () => this.refetchAllContents(),
+      () => { if (prev) this.contents = prev; bus.emit('contents') },
+    )
   }
 
   private scheduleFlush(): void {

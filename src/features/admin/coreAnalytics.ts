@@ -132,36 +132,3 @@ export function describeAnalyticsEvent(
     }
   }
 }
-
-/* ─── Export CSV (PRD §10.1) ───────────────────────────────────────── */
-
-function csvCell(value: string): string {
-  return /[",\n;]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
-}
-
-/** Genera el CSV de analytics en memoria y dispara la descarga (blob). */
-export function downloadAnalyticsCsv(events: AnalyticsEvent[]): void {
-  const header = ['id', 'event', 'ts', 'device_id', 'origin', 'payload']
-  const rows = events.map((e) =>
-    [
-      e.id,
-      e.event,
-      e.ts,
-      e.deviceId ?? '',
-      e.seed ? 'seed' : 'demo',
-      e.payload ? JSON.stringify(e.payload) : '',
-    ]
-      .map(csvCell)
-      .join(','),
-  )
-  const csv = '\uFEFF' + [header.join(','), ...rows].join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `ccm-analytics-${new Date().toISOString().slice(0, 10)}.csv`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
-}

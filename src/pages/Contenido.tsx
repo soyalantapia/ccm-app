@@ -53,7 +53,7 @@ export default function Contenido() {
               key={t}
               onClick={() => setTab(t)}
               className={`relative flex-1 py-2.5 text-center text-[11px] font-bold uppercase tracking-[0.08em] transition-colors lg:flex-none lg:px-7 lg:py-4 lg:text-[14px] ${
-                tab === t ? 'text-accent' : 'text-[#6b6b6b] lg:text-night-ink/55'
+                tab === t ? 'text-accent' : 'text-night-ink/55'
               }`}
             >
               {t === 'entrevistas' ? 'Entrevistas' : 'Capacitaciones'}

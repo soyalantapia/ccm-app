@@ -2,6 +2,7 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useFocusTrap } from '../../lib/useFocusTrap'
+import { bloquearScroll } from '../../lib/useFocusTrap'
 
 interface ModalProps {
   open: boolean
@@ -17,10 +18,7 @@ export function Modal({ open, onClose, children, variant = 'content', className 
 
   useEffect(() => {
     if (!open) return
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = ''
-    }
+    return bloquearScroll() // conteo compartido: un diálogo encima no desbloquea a este
   }, [open])
 
   // El trap envuelve el botón Cerrar + el panel, restituye el foco y unifica Escape.

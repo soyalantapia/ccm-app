@@ -167,7 +167,7 @@ export default function Beneficios() {
             key={t}
             onClick={() => setTab(t)}
             className={`flex-1 border-b-2 py-3 text-center text-[11px] font-bold uppercase tracking-[0.08em] transition-colors lg:py-4 lg:text-[13px] lg:tracking-[0.12em] ${
-              tab === t ? 'border-accent text-accent' : 'border-transparent text-[#6b6b6b] lg:text-night-ink/55'
+              tab === t ? 'border-accent text-accent' : 'border-transparent text-night-ink/55'
             }`}
           >
             {t === 'vip' ? 'Beneficios VIP' : 'Descuentos'}

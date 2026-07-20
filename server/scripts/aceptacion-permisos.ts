@@ -108,6 +108,7 @@ async function sembrar() {
 const SUPERFICIE: { nombre: string; metodo: string; ruta: string; permiso: string }[] = [
   { nombre: 'ver postulaciones (PII/DNI)', metodo: 'GET', ruta: '/admin/applications', permiso: 'applications:read' },
   { nombre: 'ver métricas', metodo: 'GET', ruta: '/admin/analytics', permiso: 'analytics:read' },
+  { nombre: 'ver los KPIs del dashboard', metodo: 'GET', ruta: '/admin/stats', permiso: 'analytics:read' },
   { nombre: 'ver novedades del panel', metodo: 'GET', ruta: '/admin/notas', permiso: 'content:write' },
   { nombre: 'ver beneficios del panel', metodo: 'GET', ruta: '/admin/benefits', permiso: 'content:write' },
   { nombre: 'ver banners del panel', metodo: 'GET', ruta: '/admin/banners', permiso: 'content:write' },

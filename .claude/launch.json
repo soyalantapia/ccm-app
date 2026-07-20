@@ -2,20 +2,20 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "ccm-permisos-api",
+      "name": "ccm-api",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "cwd": "server",
-      "port": 4020
+      "port": 4010
     },
     {
-      "name": "ccm-permisos",
+      "name": "ccm-visual",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "5183", "--strictPort"],
-      "port": 5183,
+      "runtimeArgs": ["run", "dev", "--", "--port", "5182", "--strictPort"],
+      "port": 5182,
       "env": {
         "VITE_BASE": "/",
-        "VITE_API_URL": "http://localhost:4020"
+        "VITE_API_URL": "http://localhost:4010"
       }
     }
   ]
