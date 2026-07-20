@@ -188,7 +188,7 @@ function BottomNav() {
   // Barra oscura #181410 (mockups): 72px, borde superior tenue, ítem activo con
   // subrayado dorado 2px arriba; QR central elevado (-18px) siempre dorado con glow.
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-ink pb-[env(safe-area-inset-bottom)] md:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-ink pb-[env(safe-area-inset-bottom)] lg:hidden">
       <div className="grid h-[64px] grid-cols-5">
         {BOTTOM_NAV.map((item) => {
           const Icon = item.icon
@@ -202,7 +202,7 @@ function BottomNav() {
                     </span>
                     <span
                       className={`mt-1 text-[9px] font-semibold uppercase tracking-[0.06em] ${
-                        isActive ? 'text-night-ink' : 'text-[#6b6b6b]'
+                        isActive ? 'text-night-ink' : 'text-night-ink/55'
                       }`}
                     >
                       {item.label}
@@ -222,11 +222,11 @@ function BottomNav() {
                   <Icon
                     size={19}
                     strokeWidth={1.75}
-                    className={isActive ? 'text-night-ink' : 'text-[#6b6b6b]'}
+                    className={isActive ? 'text-night-ink' : 'text-night-ink/55'}
                   />
                   <span
                     className={`text-[9px] font-semibold uppercase tracking-[0.06em] ${
-                      isActive ? 'text-night-ink' : 'text-[#6b6b6b]'
+                      isActive ? 'text-night-ink' : 'text-night-ink/55'
                     }`}
                   >
                     {item.label}
@@ -322,14 +322,16 @@ export default function SiteLayout() {
   return (
     <div className="flex min-h-dvh flex-col">
       <Header />
-      <main className="flex-1 pb-24 md:pb-0">
+      <main className="flex-1 pb-24 lg:pb-0">
         {/* Transición de página (app-feel): remonta con un fade+rise corto */}
         <div key={pathname} className="animate-page">
           <Outlet />
         </div>
       </main>
-      {/* En mobile el footer web solo vive en la landing; adentro manda el bottom nav */}
-      <div className={pathname === '/' ? '' : 'hidden md:block'}>
+      {/* En mobile el footer web solo vive en la landing; adentro manda el bottom nav.
+          El corte es lg (NO md) porque el bottom-nav y el top-nav del header conmutan en lg:
+          con md acá quedaba una franja 768–1023px con footer y bottom-nav a la vez. */}
+      <div className={pathname === '/' ? '' : 'hidden lg:block'}>
         <Footer />
       </div>
       <BottomNav />
