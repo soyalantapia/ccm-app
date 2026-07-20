@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client'
+import { Prisma, type Person } from '@prisma/client'
 import { prisma } from '../lib/prisma.js'
 import type { IdentityKeys } from '../domain/personIdentity.js'
 
@@ -15,6 +15,27 @@ function buscarPorClaves(email: string | null, dni: string | null) {
     where: { OR: [...(email ? [{ email }] : []), ...(dni ? [{ dni }] : [])] },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
   })
+}
+
+/**
+ * De un conjunto de candidatas dueñas de las mismas claves, elige la más antigua (ya vienen
+ * ordenadas así por `buscarPorClaves`). Si hay más de una, es porque el email y el dni
+ * pertenecen a personas DISTINTAS: se deja rastro con `console.warn` para poder auditarlo,
+ * tanto si el conflicto se vio en la lectura normal como si recién apareció al reintentar tras
+ * una carrera (un caso no puede resolverse más callado que el otro: los dos son la misma
+ * situación de fondo). `origen` identifica en qué punto del flujo se detectó, para que el log
+ * sea útil al leerlo.
+ */
+function elegirDuenaYRegistrarConflicto(candidatas: Person[], origen: string): Person | undefined {
+  const [duena] = candidatas
+  if (candidatas.length > 1) {
+    console.warn(
+      `[personas] claves en conflicto (${origen}): pertenecen a personas distintas ` +
+        `(${candidatas.map((p) => p.id).join(', ')}). Se usa la más antigua ${duena.id}; ` +
+        `no se fusiona automáticamente.`,
+    )
+  }
+  return duena
 }
 
 /**
@@ -44,20 +65,18 @@ export async function linkPerson(keys: IdentityKeys): Promise<string | null> {
       // buscamos de nuevo y devolvemos SU id en lugar de romper. Un solo reintento alcanza —
       // si ni así aparece, ahí sí es un error real y se propaga.
       if (!esConflictoDeUnicidad(err)) throw err
-      const [ganadora] = await buscarPorClaves(email, dni)
+      const ganadora = elegirDuenaYRegistrarConflicto(
+        await buscarPorClaves(email, dni),
+        'reintento tras carrera en la creación',
+      )
       if (!ganadora) throw err
       return ganadora.id
     }
   }
 
-  const duena = encontradas[0]
+  const duena = elegirDuenaYRegistrarConflicto(encontradas, 'lectura inicial')!
 
   if (encontradas.length > 1) {
-    console.warn(
-      `[personas] claves en conflicto: email=${email} y dni=${dni} pertenecen a personas ` +
-        `distintas (${encontradas.map((p) => p.id).join(', ')}). Se usa la más antigua ${duena.id}; ` +
-        `no se fusiona automáticamente.`,
-    )
     return duena.id
   }
 
@@ -73,20 +92,29 @@ export async function linkPerson(keys: IdentityKeys): Promise<string | null> {
     // persona con el mismo mail". No cambiamos el comportamiento —no completar nunca rompería
     // el caso común de alguien que primero deja el email y después el DNI— pero sí dejamos
     // rastro para poder auditarlo, igual que con el conflicto simétrico de arriba.
-    console.warn(
-      `[personas] se completó una clave que faltaba en la persona ${duena.id}: ` +
-        `${Object.entries(faltantes)
-          .map(([clave, valor]) => `${clave}=${valor}`)
-          .join(', ')}.`,
-    )
     try {
       await prisma.person.update({ where: { id: duena.id }, data: faltantes })
+      // El log recién va ACÁ, después de que el update efectivamente commiteó: si lo
+      // emitiéramos antes de intentarlo, y el update fallara más abajo (P2002: la carrera de
+      // abajo), el log habría afirmado que esta persona se quedó con la clave cuando en
+      // realidad terminó siendo otra. Solo se registra lo que de verdad pasó.
+      console.warn(
+        `[personas] se completó una clave que faltaba en la persona ${duena.id}: ` +
+          `${Object.entries(faltantes)
+            .map(([clave, valor]) => `${clave}=${valor}`)
+            .join(', ')}.`,
+      )
     } catch (err) {
       // Misma carrera que en el create, pero en el camino de completar: otro request
       // concurrente le ganó de mano esa misma clave a OTRA persona antes de que este update
-      // commiteara. Reintentamos una vez buscando por las claves y devolvemos quien ganó.
+      // commiteara. Reintentamos una vez buscando por las claves; si el reintento encuentra a
+      // más de una dueña, es el mismo conflicto de siempre y se audita igual (ver
+      // elegirDuenaYRegistrarConflicto), y devolvemos quien ganó.
       if (!esConflictoDeUnicidad(err)) throw err
-      const [ganadora] = await buscarPorClaves(email, dni)
+      const ganadora = elegirDuenaYRegistrarConflicto(
+        await buscarPorClaves(email, dni),
+        'reintento tras carrera al completar una clave',
+      )
       if (!ganadora) throw err
       return ganadora.id
     }
