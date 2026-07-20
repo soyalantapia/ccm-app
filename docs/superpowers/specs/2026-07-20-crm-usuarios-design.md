@@ -264,7 +264,23 @@ Ninguno pasa de ~200 líneas. Si crecen, se parten: son los archivos que más se
 
 ---
 
-## 11. Decisiones tomadas
+## 11. Fases de implementación
+
+El diseño completo se construye en tres entregas, cada una útil por sí sola. Se parte porque un PR único sería enorme y esto toca `schema.prisma` y `routes/admin.ts`, los dos archivos con más colisiones entre sesiones paralelas.
+
+**Fase 1 — La base y la lista** *(primera a implementar)*
+Tabla `Person`, migración `10_person`, backfill, reglas de unificación, enganche en los caminos de escritura, `GET /people`, `GET /people/:id`, la lista con buscador y filtros, y la ficha en modo lectura. Permiso `people:read`.
+Al terminar, la página rota queda reemplazada por un CRM funcional. **Es la única fase que cambia el esquema.**
+
+**Fase 2 — Las acciones**
+`PATCH /people/:id`, notas (`PersonNote`), export CSV con consentimiento y registro, contacto por WhatsApp/email. Permisos `people:write` y `people:export`. No toca el esquema salvo `PersonNote`.
+
+**Fase 3 — La puerta**
+`Attendance`, acreditación manual e idempotente, ruta angosta `/people/puerta`, permiso `people:checkin` y habilitación del rol STAFF. Se construye cerca de septiembre para probarla en condiciones reales.
+
+---
+
+## 12. Decisiones tomadas
 
 1. **Tabla de Personas, no cálculo al vuelo** — porque notas, asistencia y correcciones necesitan identidad estable, y hoy la migración es gratis.
 2. **La Persona ancla identidad, no copia datos** — preservar la procedencia de cada campo es lo que hace valiosa a la base.
