@@ -1,4 +1,5 @@
 import type { AdSlot } from '../../data/types'
+import { PRICE_PER_HOUR_BY_SLOT, priceForCampaign } from '../../lib/pricing'
 
 /** Catálogo de espacios publicitarios autogestionables (PRD §11). */
 export interface SlotMeta {
@@ -15,10 +16,10 @@ export interface SlotMeta {
 }
 
 export const AD_SLOTS: SlotMeta[] = [
-  { slot: 'S1', name: 'Splash de apertura', where: 'Pantalla completa al abrir la app', pricePerHour: 9000, reachPerHour: 420, liveAt: '/app' },
-  { slot: 'S2', name: 'Feed nativo', where: 'Banner destacado en el inicio del público', pricePerHour: 6000, reachPerHour: 320, liveAt: '/app' },
-  { slot: 'S3', name: 'Pre-descarga de foto', where: 'Antes de bajar cada foto del evento', pricePerHour: 4500, reachPerHour: 260, liveAt: '/fotos' },
-  { slot: 'S6', name: 'Pantalla Mi QR', where: 'En el carnet de acceso de cada asistente', pricePerHour: 3000, reachPerHour: 180, liveAt: '/mi-qr' },
+  { slot: 'S1', name: 'Splash de apertura', where: 'Pantalla completa al abrir la app', pricePerHour: PRICE_PER_HOUR_BY_SLOT.S1, reachPerHour: 420, liveAt: '/app' },
+  { slot: 'S2', name: 'Feed nativo', where: 'Banner destacado en el inicio del público', pricePerHour: PRICE_PER_HOUR_BY_SLOT.S2, reachPerHour: 320, liveAt: '/app' },
+  { slot: 'S3', name: 'Pre-descarga de foto', where: 'Antes de bajar cada foto del evento', pricePerHour: PRICE_PER_HOUR_BY_SLOT.S3, reachPerHour: 260, liveAt: '/fotos' },
+  { slot: 'S6', name: 'Pantalla Mi QR', where: 'En el carnet de acceso de cada asistente', pricePerHour: PRICE_PER_HOUR_BY_SLOT.S6, reachPerHour: 180, liveAt: '/mi-qr' },
 ]
 
 export interface Duration {
@@ -38,7 +39,7 @@ export function slotMeta(slot: AdSlot): SlotMeta {
 }
 
 export function priceFor(slot: AdSlot, hours: number): number {
-  return slotMeta(slot).pricePerHour * hours
+  return priceForCampaign(slot, hours)
 }
 
 export function reachFor(slot: AdSlot, hours: number): number {

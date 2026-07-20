@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js'
 import { toMembership } from '../lib/serialize.js'
 import type { Membership } from '@domain/types'
+import { SOCIO_PRICE } from '../../../src/lib/pricing.js'
 
 /** Membresía del device (free por defecto si no hay fila). */
 export async function getMembership(deviceId: string): Promise<Membership> {
@@ -9,11 +10,11 @@ export async function getMembership(deviceId: string): Promise<Membership> {
 }
 
 /**
- * Alta de Socio CCM. Persiste la membresía server-side (antes vivía solo en localStorage,
- * por eso el gate socioOnly del backend rechazaba a TODOS). 🔶 El cobro real entra con la
- * Fase D (Mercado Pago); por ahora `paid` es el monto declarado por el flujo demo.
+ * Alta de Socio. El monto NO llega del cliente: antes `paid` venía en el body y alguien podía
+ * hacerse Socio declarando que pagó 0. Cuando el cobro por MP esté activo, el webhook es quien
+ * llama acá tras confirmar el pago real.
  */
-export async function becomeSocio(deviceId: string, paid: number): Promise<Membership> {
+export async function becomeSocio(deviceId: string, paid: number = SOCIO_PRICE): Promise<Membership> {
   const m = await prisma.membership.upsert({
     where: { deviceId },
     create: { deviceId, tier: 'socio', since: new Date(), paid },
