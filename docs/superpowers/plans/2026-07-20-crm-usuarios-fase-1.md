@@ -757,6 +757,18 @@ describe('listPeople', () => {
     expect((await listPeople({ q: 'buscame@' })).items.length).toBeGreaterThan(0)
     expect((await listPeople({ q: 'nadie-con-este-texto' })).items).toHaveLength(0)
   })
+
+  it('encuentra a alguien que NO está entre los más recientes (el filtro va en SQL)', async () => {
+    const viejo = await prisma.device.create({ data: { publicId: `old-${Date.now()}` } })
+    await saveFields(viejo.id, { email: 'perdida@x.com', firstName: 'Perdida' }, 'test')
+    // 60 personas más nuevas la empujan fuera de la primera página (limit 50)
+    for (let i = 0; i < 60; i++) {
+      const d = await prisma.device.create({ data: { publicId: `pad-${Date.now()}-${i}` } })
+      await saveFields(d.id, { email: `pad${i}-${Date.now()}@x.com` }, 'test')
+    }
+    const r = await listPeople({ q: 'Perdida' })
+    expect(r.items.map((x) => x.email)).toContain('perdida@x.com')
+  })
 })
 ```
 
@@ -770,6 +782,8 @@ Esperado: FALLA — `listPeople` no existe.
 Agregar a `server/src/services/personService.ts`:
 
 ```ts
+import type { Prisma } from '@prisma/client'
+
 export interface PersonaListItem {
   id: string
   nombre: string | null
@@ -803,7 +817,23 @@ export async function listPeople(opts: { q?: string; cursor?: string; limit?: nu
   const limit = Math.min(opts.limit ?? 50, 100)
   const q = opts.q?.trim().toLowerCase()
 
+  // El filtro va en SQL, no sobre la página ya armada: filtrar después de paginar solo
+  // encontraría coincidencias dentro de las 50 más recientes y perdería el resto en silencio.
+  // El nombre y el teléfono viven en ProfileField, y el nombre del postulante en el JSON de
+  // la postulación, así que la búsqueda entra por relación a las tres fuentes.
+  const where: Prisma.PersonWhereInput = q
+    ? {
+        OR: [
+          { email: { contains: q, mode: 'insensitive' } },
+          { dni: { contains: q } },
+          { devices: { some: { fields: { some: { value: { contains: q, mode: 'insensitive' } } } } } },
+          { applications: { some: { data: { path: ['nombre'], string_contains: q } } } },
+        ],
+      }
+    : {}
+
   const personas = await prisma.person.findMany({
+    where,
     take: limit + 1,
     ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
     orderBy: { createdAt: 'desc' },
@@ -823,7 +853,7 @@ export async function listPeople(opts: { q?: string; cursor?: string; limit?: nu
   const hayMas = personas.length > limit
   const pagina = hayMas ? personas.slice(0, limit) : personas
 
-  let items: PersonaListItem[] = pagina.map((p) => {
+  const items: PersonaListItem[] = pagina.map((p) => {
     const fields = p.devices.flatMap((d) => d.fields)
     const appData = p.applications[0]?.data ?? null
     const campo = (k: string) => fields.find((f) => f.key === k)?.value ?? null
@@ -842,20 +872,11 @@ export async function listPeople(opts: { q?: string; cursor?: string; limit?: nu
     }
   })
 
-  // El filtro de texto se aplica sobre el resultado armado porque el nombre no vive en Person:
-  // sale de ProfileField o del JSON de la postulación. Con el volumen esperado (miles, no millones)
-  // es correcto; si algún día no alcanza, se materializa una columna de búsqueda en Person.
-  if (q) {
-    items = items.filter((i) =>
-      [i.nombre, i.email, i.telefono, i.dni].some((v) => v?.toLowerCase().includes(q)),
-    )
-  }
-
   const anonimos = await prisma.device.count({ where: { personId: null } })
 
   return {
     items,
-    nextCursor: hayMas && !q ? pagina[pagina.length - 1].id : null,
+    nextCursor: hayMas ? pagina[pagina.length - 1].id : null,
     anonimos,
   }
 }
