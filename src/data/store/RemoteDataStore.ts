@@ -9,6 +9,7 @@ import type {
   NewGallery,
   NewCatalogProfile,
   NewConvocatoria,
+  NewCampaign,
   HydratableResource,
 } from './DataStore'
 import { slugify } from './overlay'
@@ -41,6 +42,10 @@ import type {
   ApplicationStatus,
   AnalyticsEvent,
   AdminStats,
+  TicketOrder,
+  AdCampaign,
+  OrderStatus,
+  AdSlot,
 } from '../types'
 
 interface BufferedEvent {
@@ -122,6 +127,7 @@ export class RemoteDataStore extends LocalDataStore {
     // Hidratación PÚBLICA: arranca ya (no necesita identidad).
     this.hydrateEvents()
     this.hydratePublicContent()
+    this.hydrateCampaigns() // públicas: ocupan espacios publicitarios en toda la app
     // Hidratación del DEVICE: primero asegura el token firmado (POST /devices si falta),
     // recién después pide /me, /registrations, /favorites, /downloads (requireDevice).
     void this.ensureDeviceToken().then(() => {
@@ -130,6 +136,7 @@ export class RemoteDataStore extends LocalDataStore {
       this.hydrateDeviceContent()
       this.hydrateMembership()
       this.hydrateApplications() // device ("Mis postulaciones")
+      this.hydrateOrders() // device ("Mis entradas")
       // Si ya hay sesión de organizador (token guardado al recargar), hidratar TODOS los cachés
       // admin. `refetchAdminScoped()` es el mismo método que corre al loguearse, así que recargar
       // la página deja el panel en el mismo estado que recién logueado.
@@ -501,6 +508,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.hydrateAdminApplications() // lista COMPLETA en un caché aparte (no pisa las del device)
     this.hydrateConvocatorias() // lista completa para gestionarlas (antes solo venían del seed)
     this.hydrateAdminContents() // youtubeId sin enmascarar para el panel
+    this.hydrateAdminOrders() // todas las órdenes, no solo las del navegador del organizador
     this.hydrateAnalytics() // analítica REAL — antes Dashboard/SponsorReport leían el seed fabricado (P1)
   }
 
@@ -993,6 +1001,125 @@ export class RemoteDataStore extends LocalDataStore {
       () => this.refetchPlans(),
       () => { if (prev) this.plans = prev; bus.emit('plans'); this.refetchPlans() },
     )
+  }
+
+  /* ─── Órdenes de entradas y campañas de publicidad ─────────────────────────────────
+   * Las tablas existían desde el diseño pero no tenían rutas: el front las guardaba SOLO en
+   * localStorage, así que cada comprador veía sus propias órdenes y el panel mostraba las del
+   * navegador donde estuviera abierto. Ahora van a la base como el resto.
+   *
+   * El TOTAL no viaja en el POST: lo calcula el server con el precio vigente del plan (si no,
+   * bastaba editar el request para comprar una VIP a cualquier precio). Por eso la orden que
+   * devuelve el backend reemplaza a la optimista. */
+  private orders?: TicketOrder[] // del device (Mis entradas)
+  private adminOrders?: TicketOrder[] // todas (panel)
+  private campaigns?: AdCampaign[]
+
+  private hydrateOrders(): void {
+    this.api.get<TicketOrder[]>('/orders').then((o) => { this.orders = o; bus.emit('orders') }).catch(() => {})
+  }
+  private hydrateAdminOrders(): void {
+    this.api.get<TicketOrder[]>('/admin/orders').then((o) => { this.adminOrders = o; bus.emit('orders') }).catch(() => {})
+  }
+  private hydrateCampaigns(): void {
+    this.api.get<AdCampaign[]>('/campaigns').then((c) => { this.campaigns = c; bus.emit('campaigns') }).catch(() => {})
+  }
+  /** Tras una escritura: la orden afecta la vista del comprador Y la del organizador. */
+  private refetchOrders(): void {
+    this.hydrateOrders()
+    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ccm:admin-token')) this.hydrateAdminOrders()
+  }
+
+  override getOrders(): TicketOrder[] {
+    return this.orders ?? super.getOrders()
+  }
+  override getAdminOrders(): TicketOrder[] {
+    return this.adminOrders ?? this.orders ?? super.getAdminOrders()
+  }
+
+  override createOrder(planId: PlanId, qty = 1): TicketOrder {
+    // El optimista usa el precio local para no dejar la UI en blanco; el server manda y la
+    // re-hidratación lo corrige si el precio cambió mientras tanto.
+    const plan = this.getPlan(planId)
+    const unit = (plan?.price ?? 0) + (plan?.serviceCharge ?? 0)
+    const profile = this.getProfile()
+    const order: TicketOrder = {
+      id: newId('ord'),
+      planId,
+      ts: new Date().toISOString(),
+      status: 'iniciada',
+      qty,
+      total: unit * qty,
+      ...(profile.fields.email?.value ? { buyerEmail: profile.fields.email.value } : {}),
+    }
+    if (this.orders) this.orders = [order, ...this.orders]
+    this.track('ticket_order_created', { planId, orderId: order.id, qty, total: order.total })
+    bus.emit('orders')
+    this.api
+      .post('/orders', {
+        id: order.id,
+        planId,
+        qty,
+        ...(order.buyerEmail ? { buyerEmail: order.buyerEmail } : {}),
+      })
+      .then(() => this.refetchOrders())
+      .catch(() => {
+        // La compra no llegó al backend: sacamos la orden fantasma y avisamos, en vez de
+        // dejar al comprador creyendo que tiene una entrada reservada.
+        if (this.orders) this.orders = this.orders.filter((o) => o.id !== order.id)
+        bus.emit('orders')
+        bus.emit('order:rejected')
+      })
+    return order
+  }
+
+  override markOrderRedirected(orderId: string): void {
+    if (this.orders) this.orders = this.orders.map((o) => (o.id === orderId ? { ...o, status: 'redirigida_mp' } : o))
+    this.track('ticket_order_redirected_mp', { orderId })
+    bus.emit('orders')
+    this.api.patch(`/orders/${orderId}/redirected`, {}).then(() => this.refetchOrders()).catch(() => this.refetchOrders())
+  }
+
+  /** Confirmar/cancelar es del ORGANIZADOR (ruta admin). */
+  override setOrderStatus(orderId: string, status: OrderStatus): void {
+    const prev = this.adminOrders
+    if (this.adminOrders) this.adminOrders = this.adminOrders.map((o) => (o.id === orderId ? { ...o, status } : o))
+    if (status === 'confirmada') this.track('ticket_order_confirmed', { orderId })
+    bus.emit('orders')
+    this.adminWrite(
+      this.api.patch(`/admin/orders/${orderId}`, { status }),
+      () => this.refetchOrders(),
+      () => { if (prev) this.adminOrders = prev; bus.emit('orders'); this.hydrateAdminOrders() },
+    )
+  }
+
+  override getCampaigns(): AdCampaign[] {
+    return this.campaigns ?? super.getCampaigns()
+  }
+  override getActiveCampaign(slot: AdSlot): AdCampaign | undefined {
+    if (!this.campaigns) return super.getActiveCampaign(slot)
+    const forSlot = this.campaigns.filter((c) => c.slot === slot)
+    return forSlot.length ? forSlot[forSlot.length - 1] : undefined
+  }
+  override createCampaign(input: NewCampaign): AdCampaign {
+    const campaign: AdCampaign = { ...input, id: newId('camp'), ts: new Date().toISOString() }
+    if (this.campaigns) this.campaigns = [...this.campaigns, campaign]
+    this.track('ad_campaign_purchased', {
+      campaignId: campaign.id,
+      slot: campaign.slot,
+      hours: campaign.hours,
+      total: campaign.total,
+    })
+    bus.emit('campaigns')
+    this.api
+      .post('/campaigns', campaign)
+      .then(() => this.hydrateCampaigns())
+      .catch(() => {
+        if (this.campaigns) this.campaigns = this.campaigns.filter((c) => c.id !== campaign.id)
+        bus.emit('campaigns')
+        bus.emit('order:rejected')
+      })
+    return campaign
   }
 
   override getCatalog(): CatalogProfile[] {

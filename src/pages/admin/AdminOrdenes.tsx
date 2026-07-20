@@ -26,7 +26,8 @@ interface OrderRow {
 
 export default function AdminOrdenes() {
   const plans = useStore((s) => s.getPlans())
-  const orders = useStore((s) => s.getOrders())
+  // TODAS las órdenes, no solo las del navegador del organizador.
+  const orders = useStore((s) => s.getAdminOrders())
   const analytics = useStore((s) => s.getAnalytics())
 
   const planName = (id: string) => plans.find((p) => p.id === id)?.name ?? id

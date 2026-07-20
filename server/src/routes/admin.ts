@@ -5,6 +5,7 @@ import * as admin from '../services/adminService.js'
 import * as applicationService from '../services/applicationService.js'
 import * as catalogService from '../services/catalogService.js'
 import { handleUpload } from '../services/uploadService.js'
+import * as orderService from '../services/orderService.js'
 import type { EventItem, EventBlock, ContentItem, Sponsor, Gallery, CatalogProfile, PlanId, Convocatoria } from '@domain/types'
 
 export const adminRouter = Router()
@@ -133,6 +134,26 @@ adminRouter.patch('/admin/plans/:id', requirePermission('sponsors:write'), async
   try {
     await admin.updatePlan(req.params.id as PlanId, req.body)
     res.status(204).end()
+  } catch (err) {
+    next(err)
+  }
+})
+
+/* ─── Órdenes de entradas (vista y decisión del organizador) ─── */
+adminRouter.get('/admin/orders', async (_req, res, next) => {
+  try {
+    res.json(await orderService.getAllOrders())
+  } catch (err) {
+    next(err)
+  }
+})
+
+const orderStatusSchema = z.object({ status: z.enum(['iniciada', 'redirigida_mp', 'confirmada', 'cancelada']) })
+/** El organizador confirma o cancela una orden (la conciliación por webhook de MP llega después). */
+adminRouter.patch('/admin/orders/:id', async (req, res, next) => {
+  try {
+    const { status } = orderStatusSchema.parse(req.body)
+    res.json(await orderService.setOrderStatus(req.params.id, status))
   } catch (err) {
     next(err)
   }

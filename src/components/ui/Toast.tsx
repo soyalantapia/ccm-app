@@ -58,6 +58,10 @@ export function ToastHost() {
         toast('No pudimos enviar tu postulación — probá de nuevo en un momento.', 'info')
       } else if (key === 'membership:rejected') {
         toast('No pudimos confirmar tu membresía — probá de nuevo en un momento.', 'info')
+      } else if (key === 'order:rejected') {
+        // La compra/campaña no llegó al backend: sin este aviso el comprador se quedaba con una
+        // orden fantasma en pantalla, creyendo que tenía la entrada reservada.
+        toast('No pudimos registrar tu compra — probá de nuevo en un momento.', 'info')
       } else if (key === 'admin:write-failed') {
         // Panel del organizador: el backend rechazó un alta/edición/baja. Sin este aviso el
         // cambio se deshacía solo y parecía que se había guardado.
