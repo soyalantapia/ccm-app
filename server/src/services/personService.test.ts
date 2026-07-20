@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { prisma } from '../lib/prisma.js'
-import { linkPerson, listPeople } from './personService.js'
+import { linkPerson, listPeople, getPerson } from './personService.js'
 import { saveFields } from './deviceService.js'
 import { backfillPersonas } from '../../scripts/backfill-personas.js'
 
@@ -281,5 +281,24 @@ describe('listPeople', () => {
     }
     const r = await listPeople({ q: 'Perdida' })
     expect(r.items.map((x) => x.email)).toContain('perdida@x.com')
+  })
+})
+
+describe('getPerson', () => {
+  it('trae los campos con su procedencia', async () => {
+    const d = await prisma.device.create({ data: { publicId: `fi-${Date.now()}` } })
+    await saveFields(d.id, { email: 'ficha@x.com', city: 'Córdoba' }, 'inscripcion')
+    const p = await prisma.device.findUniqueOrThrow({ where: { id: d.id } })
+
+    const ficha = await getPerson(p.personId!)
+    expect(ficha).toBeTruthy()
+    const ciudad = ficha!.campos.find((c) => c.key === 'city')
+    expect(ciudad!.value).toBe('Córdoba')
+    expect(ciudad!.source).toBe('inscripcion')   // la procedencia se conserva
+    expect(ciudad!.capturedAt).toBeTruthy()
+  })
+
+  it('devuelve null si no existe', async () => {
+    expect(await getPerson('no-existe')).toBeNull()
   })
 })

@@ -227,3 +227,88 @@ export async function listPeople(opts: { q?: string; cursor?: string; limit?: nu
     anonimos,
   }
 }
+
+export interface PersonaCampo {
+  key: string
+  value: string
+  source: string
+  capturedAt: string
+}
+
+export interface PersonaFicha extends PersonaListItem {
+  campos: PersonaCampo[]
+  consentimientos: { terms: string | null; news: string | null; sponsors: string | null }
+  inscripcionesDetalle: { id: string; eventId: string; blockId: string | null; status: string; ts: string }[]
+  postulacionesDetalle: { id: string; convocatoriaId: string; status: string; ts: string; data: unknown }[]
+  membresia: { tier: string; since: string | null } | null
+  actividad: { type: string; ts: string; meta: unknown }[]
+}
+
+export async function getPerson(id: string): Promise<PersonaFicha | null> {
+  const p = await prisma.person.findUnique({
+    where: { id },
+    include: {
+      devices: {
+        include: {
+          fields: true,
+          membership: true,
+          registrations: { orderBy: { ts: 'desc' } },
+          analytics: { orderBy: { ts: 'desc' }, take: 100 },
+          _count: { select: { registrations: true } },
+        },
+      },
+      applications: { orderBy: { ts: 'desc' } },
+    },
+  })
+  if (!p) return null
+
+  const fields = p.devices.flatMap((d) => d.fields)
+  const campo = (k: string) => fields.find((f) => f.key === k)?.value ?? null
+  // Los campos de consentimiento son por dispositivo: si la persona tiene más de uno, se
+  // muestra el primero que tenga ALGO marcado (en vez de siempre el primer dispositivo a
+  // secas, que dejaría la ficha en blanco si justo ese fue el que no consintió nada).
+  const primerDevice =
+    p.devices.find((d) => d.consentTerms || d.consentNews || d.consentSponsors) ?? p.devices[0] ?? null
+  const membership = p.devices.map((d) => d.membership).find(Boolean) ?? null
+  // Igual que en listPeople: NO ordenar AnalyticsEvent[] con .sort() sin comparador — el
+  // string-sort por defecto no es cronológico. Cada device.analytics ya viene ts-desc, pero
+  // flatMap de varios devices no queda globalmente ordenado, así que se reordena bien acá.
+  const analytics = p.devices
+    .flatMap((d) => d.analytics)
+    .sort((a, b) => b.ts.getTime() - a.ts.getTime())
+
+  return {
+    id: p.id,
+    nombre: nombreDe(fields, p.applications[0]?.data ?? null),
+    email: p.email,
+    telefono: campo('phone'),
+    dni: p.dni,
+    esSocio: membership?.tier === 'socio',
+    inscripciones: p.devices.reduce((s, d) => s + d._count.registrations, 0),
+    postulaciones: p.applications.length,
+    creadaEl: p.createdAt.toISOString(),
+    ultimaActividad: analytics[0]?.ts.toISOString() ?? null,
+    campos: fields.map((f) => ({
+      key: f.key,
+      value: f.value,
+      source: f.source,
+      capturedAt: f.capturedAt.toISOString(),
+    })),
+    consentimientos: {
+      terms: primerDevice?.consentTerms?.toISOString() ?? null,
+      news: primerDevice?.consentNews?.toISOString() ?? null,
+      sponsors: primerDevice?.consentSponsors?.toISOString() ?? null,
+    },
+    inscripcionesDetalle: p.devices.flatMap((d) =>
+      d.registrations.map((r) => ({
+        id: r.id, eventId: r.eventId, blockId: r.blockId, status: r.status, ts: r.ts.toISOString(),
+      })),
+    ),
+    postulacionesDetalle: p.applications.map((a) => ({
+      id: a.id, convocatoriaId: a.convocatoriaId, status: a.status, ts: a.ts.toISOString(), data: a.data,
+    })),
+    membresia: membership ? { tier: membership.tier, since: membership.since?.toISOString() ?? null } : null,
+    // AnalyticsEvent no tiene columnas `type`/`meta`: son `event` y `payload`.
+    actividad: analytics.map((a) => ({ type: a.event, ts: a.ts.toISOString(), meta: a.payload })),
+  }
+}

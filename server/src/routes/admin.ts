@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { requirePermission } from '../middlewares/admin.js'
+import { notFound } from '../lib/errors.js'
 import * as admin from '../services/adminService.js'
 import * as applicationService from '../services/applicationService.js'
 import * as personService from '../services/personService.js'
@@ -209,6 +210,18 @@ adminRouter.get('/admin/people', requirePermission('people:read'), async (req, r
         cursor: typeof req.query.cursor === 'string' ? req.query.cursor : undefined,
       }),
     )
+  } catch (err) {
+    next(err)
+  }
+})
+adminRouter.get('/admin/people/:id', requirePermission('people:read'), async (req, res, next) => {
+  try {
+    const ficha = await personService.getPerson(req.params.id)
+    if (!ficha) {
+      next(notFound('PERSON_NOT_FOUND', 'No encontramos a esa persona'))
+      return
+    }
+    res.json(ficha)
   } catch (err) {
     next(err)
   }
