@@ -19,6 +19,7 @@ import type {
   Sponsor,
   AdSlot,
   SponsorCreative,
+  MpStatus,
   TicketOrder,
   TicketPlan,
   Benefit,
@@ -228,4 +229,9 @@ export interface DataStore {
    * organizador, para que el panel vea borradores/ocultos/códigos sin recargar. No-op local.
    */
   refetchAdminScoped(): void
+
+  /* Cobros con Mercado Pago (panel del organizador). */
+  getMpStatus(): MpStatus | undefined
+  connectMp(): Promise<string>
+  disconnectMp(): Promise<void>
 }

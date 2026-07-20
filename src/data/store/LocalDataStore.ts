@@ -19,6 +19,7 @@ import type {
   Sponsor,
   AdSlot,
   SponsorCreative,
+  MpStatus,
   TicketOrder,
   TicketPlan,
   Benefit,
@@ -731,4 +732,17 @@ export class LocalDataStore implements DataStore {
   statsFailed(): boolean {
     return false
   }
+
+  /* ─── Cobros con Mercado Pago ─── */
+
+  /** Sin backend no hay nada conectado: la demo local siempre arranca desconectada. */
+  getMpStatus(): MpStatus | undefined {
+    return { conectado: false }
+  }
+
+  async connectMp(): Promise<string> {
+    throw new Error('Mercado Pago no está disponible en la demo local')
+  }
+
+  async disconnectMp(): Promise<void> {}
 }

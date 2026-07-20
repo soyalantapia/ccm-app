@@ -400,3 +400,13 @@ export interface AdminStats {
   }
   sponsors: { items: { sponsorId: string; nombre: string; nivel: string | null; descargas: number }[] }
 }
+
+/* ─── Cobros con Mercado Pago ─── */
+
+/** Estado de la conexión con Mercado Pago. Sin tokens: esto viaja al navegador. */
+export interface MpStatus {
+  conectado: boolean
+  cuenta?: string
+  desde?: string
+  vence?: string
+}

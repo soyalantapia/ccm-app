@@ -42,6 +42,7 @@ import type {
   ApplicationStatus,
   AnalyticsEvent,
   AdminStats,
+  MpStatus,
   TicketOrder,
   AdCampaign,
   OrderStatus,
@@ -124,6 +125,9 @@ export class RemoteDataStore extends LocalDataStore {
   private convocatorias = new Map<string, Convocatoria>()
   private convoInflight = new Set<string>()
   private convocatoriasList?: Convocatoria[] // lista admin (GET /admin/convocatorias)
+  // Estado de la conexión con Mercado Pago (panel del organizador). Sin fallback al seed: no
+  // conectado es el default seguro mientras no se sepa qué contesta el backend.
+  private mpStatus?: MpStatus
 
   constructor(apiBase: string) {
     super()
@@ -531,6 +535,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.hydrateAdminContents() // youtubeId sin enmascarar para el panel
     this.hydrateAdminOrders() // todas las órdenes, no solo las del navegador del organizador
     this.hydrateAnalytics() // analítica REAL — antes Dashboard/SponsorReport leían el seed fabricado (P1)
+    this.hydrateMpStatus() // conexión con Mercado Pago (Tarea 6)
   }
 
   /** Analítica real cross-device (admin-scoped). Una vez hidratada, getAnalytics deja de servir el
@@ -1313,6 +1318,29 @@ export class RemoteDataStore extends LocalDataStore {
       () => this.refetchAllContents(),
       () => { if (prev) this.contents = prev; bus.emit('contents') },
     )
+  }
+
+  /* ─── Cobros con Mercado Pago (panel del organizador, Tarea 6) ─── */
+
+  private hydrateMpStatus(): void {
+    this.api.get<MpStatus>('/admin/mp/status').then((s) => { this.mpStatus = s; bus.emit('mp') }).catch(() => {})
+  }
+
+  override getMpStatus(): MpStatus | undefined {
+    return this.mpStatus
+  }
+
+  override async connectMp(): Promise<string> {
+    const { url } = await this.api.post<{ url: string }>('/admin/mp/connect', {})
+    return url
+  }
+
+  // El endpoint real es POST (no DELETE): server/src/routes/mp.ts define
+  // `mpRouter.post('/admin/mp/disconnect', ...)` y responde 204.
+  override async disconnectMp(): Promise<void> {
+    await this.api.post('/admin/mp/disconnect', {})
+    this.mpStatus = { conectado: false }
+    bus.emit('mp')
   }
 
   private scheduleFlush(): void {
