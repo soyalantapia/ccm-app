@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react'
-import { Button, Field, Img, Input, Select, Sheet, Textarea, toast } from '../../components/ui'
+import { Button, Field, Img, ImageUpload, Input, Select, Sheet, Textarea, toast } from '../../components/ui'
 import { store } from '../../data/store'
 import { slugify } from '../../data/store/overlay'
 import type { Convocatoria, ConvocatoriaField } from '../../data/types'
@@ -291,6 +291,11 @@ export function OpsConvocatoriaForm({ open, convocatoria, onClose }: Props) {
                         </div>
                       )}
                       <Input value={l.logoUrl} onChange={(e) => setLogo(i, { logoUrl: e.target.value })} placeholder="URL del logo: https://…/logo.png" className="flex-1" />
+                      <ImageUpload
+                        label=""
+                        onUrl={(url) => setLogo(i, { logoUrl: url })}
+                        className="px-2"
+                      />
                     </div>
                     <div className="flex items-center gap-1.5">
                       <Input value={l.url} onChange={(e) => setLogo(i, { url: e.target.value })} placeholder="Link (opcional)" className="flex-1" />
