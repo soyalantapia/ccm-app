@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { requireAdmin } from '../middlewares/admin.js'
+import { requirePermission } from '../middlewares/admin.js'
 import * as notaService from '../services/notaService.js'
 import type { Nota } from '@domain/types'
 
@@ -26,7 +26,7 @@ notasRouter.get('/notas/:slug', async (req, res, next) => {
 
 const hasId = z.object({ id: z.string().min(1) }).passthrough()
 
-notasRouter.get('/admin/notas', requireAdmin, async (_req, res, next) => {
+notasRouter.get('/admin/notas', requirePermission('content:write'), async (_req, res, next) => {
   try {
     res.json(await notaService.getAllNotas())
   } catch (err) {
@@ -34,7 +34,7 @@ notasRouter.get('/admin/notas', requireAdmin, async (_req, res, next) => {
   }
 })
 
-notasRouter.post('/admin/notas', requireAdmin, (req, res, next) => {
+notasRouter.post('/admin/notas', requirePermission('content:write'), (req, res, next) => {
   try {
     hasId.parse(req.body)
     notaService.createNota(req.body as Nota).then((n) => res.status(201).json(n)).catch(next)
@@ -43,7 +43,7 @@ notasRouter.post('/admin/notas', requireAdmin, (req, res, next) => {
   }
 })
 
-notasRouter.patch('/admin/notas/:id', requireAdmin, async (req, res, next) => {
+notasRouter.patch('/admin/notas/:id', requirePermission('content:write'), async (req, res, next) => {
   try {
     res.json(await notaService.updateNota(req.params.id, req.body as Partial<Nota>))
   } catch (err) {
@@ -51,7 +51,7 @@ notasRouter.patch('/admin/notas/:id', requireAdmin, async (req, res, next) => {
   }
 })
 
-notasRouter.delete('/admin/notas/:id', requireAdmin, async (req, res, next) => {
+notasRouter.delete('/admin/notas/:id', requirePermission('content:write'), async (req, res, next) => {
   try {
     await notaService.deleteNota(req.params.id)
     res.status(204).end()

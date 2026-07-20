@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -18,23 +18,40 @@ import {
   Ticket,
   ClipboardList,
   Users,
+  ShieldCheck,
+  LogOut,
 } from 'lucide-react'
-import { Button, Field, Input, Sheet } from '../ui'
-import { IS_REMOTE, store } from '../../data/store'
+import { Sheet } from '../ui'
+import { IS_REMOTE, apiBase, store } from '../../data/store'
+import { hasAdminToken, adminAuthHeaders, setMe, clearSession, getMe, onSessionChange } from '../../data/adminSession'
+import { ROLE_LABEL, type Permission } from '../../data/adminRoles'
 
-const SECTIONS = [
-  { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/admin/eventos', label: 'Eventos', icon: CalendarDays },
-  { to: '/admin/convocatorias', label: 'Convocatorias', icon: ClipboardList },
-  { to: '/admin/postulaciones', label: 'Postulaciones', icon: Inbox },
-  { to: '/admin/personas', label: 'Personas', icon: Users },
-  { to: '/admin/galerias', label: 'Galerías y sponsors', icon: Images },
-  { to: '/admin/catalogo', label: 'Expositores', icon: Store },
-  { to: '/admin/contenido', label: 'Contenido', icon: Film },
-  { to: '/admin/novedades', label: 'Novedades', icon: Newspaper },
-  { to: '/admin/beneficios', label: 'Beneficios', icon: Gift },
-  { to: '/admin/banners', label: 'Banners', icon: Megaphone },
-  { to: '/admin/ordenes', label: 'Entradas y órdenes', icon: Ticket },
+// Cada sección declara qué permiso la habilita. `needs: undefined` = la ve cualquiera que
+// haya entrado. Esconder acá es SOLO cosmética: quien decide es el backend, que responde 403
+// aunque alguien escriba la URL a mano.
+interface NavItem {
+  to: string
+  label: string
+  icon: typeof Users
+  end?: boolean
+  /** Permiso que habilita la sección. Sin esto, la ve cualquiera que haya entrado. */
+  needs?: Permission
+}
+
+const SECTIONS: NavItem[] = [
+  { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true, needs: 'analytics:read' },
+  { to: '/admin/eventos', label: 'Eventos', icon: CalendarDays, needs: 'events:write' },
+  { to: '/admin/convocatorias', label: 'Convocatorias', icon: ClipboardList, needs: 'convocatorias:write' },
+  { to: '/admin/postulaciones', label: 'Postulaciones', icon: Inbox, needs: 'applications:read' },
+  { to: '/admin/personas', label: 'Personas', icon: Users, needs: 'applications:read' },
+  { to: '/admin/galerias', label: 'Galerías y sponsors', icon: Images, needs: 'content:write' },
+  { to: '/admin/catalogo', label: 'Expositores', icon: Store, needs: 'catalog:write' },
+  { to: '/admin/contenido', label: 'Contenido', icon: Film, needs: 'content:write' },
+  { to: '/admin/novedades', label: 'Novedades', icon: Newspaper, needs: 'content:write' },
+  { to: '/admin/beneficios', label: 'Beneficios', icon: Gift, needs: 'content:write' },
+  { to: '/admin/banners', label: 'Banners', icon: Megaphone, needs: 'content:write' },
+  { to: '/admin/ordenes', label: 'Entradas y órdenes', icon: Ticket, needs: 'orders:read' },
+  { to: '/admin/equipo', label: 'Equipo y permisos', icon: ShieldCheck, needs: 'team:manage' },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]
 
@@ -46,67 +63,130 @@ const NAV_LEFT = [
 ]
 const NAV_CENTER = { to: '/admin', label: 'Panel', icon: LayoutDashboard, end: true }
 const NAV_RIGHT = [{ to: '/admin/galerias', label: 'Sponsors', icon: Images }]
-const MORE = [
-  { to: '/admin/postulaciones', label: 'Postulaciones', icon: Inbox },
-  { to: '/admin/catalogo', label: 'Expositores', icon: Store },
-  { to: '/admin/contenido', label: 'Contenido', icon: Film },
-  { to: '/admin/novedades', label: 'Novedades', icon: Newspaper },
-  { to: '/admin/beneficios', label: 'Beneficios', icon: Gift },
-  { to: '/admin/banners', label: 'Banners', icon: Megaphone },
-  { to: '/admin/ordenes', label: 'Entradas y órdenes', icon: Ticket },
+const MORE: NavItem[] = [
+  { to: '/admin/postulaciones', label: 'Postulaciones', icon: Inbox, needs: 'applications:read' },
+  { to: '/admin/catalogo', label: 'Expositores', icon: Store, needs: 'catalog:write' },
+  { to: '/admin/contenido', label: 'Contenido', icon: Film, needs: 'content:write' },
+  { to: '/admin/novedades', label: 'Novedades', icon: Newspaper, needs: 'content:write' },
+  { to: '/admin/beneficios', label: 'Beneficios', icon: Gift, needs: 'content:write' },
+  { to: '/admin/banners', label: 'Banners', icon: Megaphone, needs: 'content:write' },
+  { to: '/admin/ordenes', label: 'Entradas y órdenes', icon: Ticket, needs: 'orders:read' },
+  { to: '/admin/equipo', label: 'Equipo y permisos', icon: ShieldCheck, needs: 'team:manage' },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]
 
-function AdminGate({ onUnlock }: { onUnlock: () => void }) {
-  const [key, setKey] = useState('')
+/**
+ * Puerta del panel. Valida la sesión contra el SERVIDOR, no contra una marca en el navegador.
+ *
+ * Antes alcanzaba con `sessionStorage.getItem('ccm:admin') === '1'` para ver el panel entero:
+ * cualquiera podía escribir esa marca desde la consola. Los datos igual venían vacíos porque el
+ * backend rechazaba sin token, pero la estructura del panel quedaba expuesta. Ahora se le
+ * pregunta a /auth/admin/me, que es la única fuente de verdad.
+ */
+function GateSesion({ children }: { children: ReactNode }) {
+  const [estado, setEstado] = useState<'cargando' | 'adentro' | 'afuera'>('cargando')
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault()
-    // Demo (sin backend): cualquier clave habilita el panel. Con backend (Fase G), la
-    // clave ES el ADMIN_TOKEN: se guarda y viaja como Bearer en las escrituras /admin/*.
-    sessionStorage.setItem('ccm:admin', '1')
-    sessionStorage.setItem('ccm:admin-token', key)
-    // Ahora que hay token, re-traer notas/banners/beneficios con vista admin (borradores/ocultos/códigos).
-    store.refetchAdminScoped()
-    onUnlock()
+  useEffect(() => {
+    // Sin backend (demo de GitHub Pages) no hay sesión que validar: el panel se muestra con
+    // los datos del seed, como siempre.
+    if (!IS_REMOTE) {
+      setEstado('adentro')
+      return
+    }
+    if (!hasAdminToken()) {
+      setEstado('afuera')
+      return
+    }
+    let vigente = true
+    fetch(`${apiBase}/api/v1/auth/admin/me`, { headers: adminAuthHeaders() })
+      .then(async (r) => {
+        if (!vigente) return
+        if (r.ok) {
+          const d = await r.json()
+          setMe(d.user)
+          setEstado('adentro')
+          // Con la sesión confirmada, traer las vistas admin (borradores, ocultos, códigos).
+          store.refetchAdminScoped()
+          return
+        }
+        // 401/403 = la sesión NO sirve (venció o fue revocada): al login.
+        // Cualquier otro código o un fallo de red NO son motivo para echar a nadie — el token
+        // puede estar perfecto y ser el backend el que está caído. En ese caso dejamos entrar
+        // con lo que haya en caché en vez de mandar a un login que tampoco va a andar.
+        if (r.status === 401 || r.status === 403) {
+          clearSession()
+          setEstado('afuera')
+        } else {
+          setEstado('adentro')
+        }
+      })
+      .catch(() => {
+        // Error de RED (backend caído, sin conexión). No es una sesión inválida: no echamos.
+        if (vigente) setEstado('adentro')
+      })
+    // Si la sesión se pierde mientras se usa el panel (un 401 en cualquier acción llama a
+    // clearSession), reaccionar: sin token → al login en el próximo render.
+    const off = onSessionChange(() => {
+      if (vigente && IS_REMOTE && !hasAdminToken()) setEstado('afuera')
+    })
+    return () => {
+      vigente = false
+      off()
+    }
+  }, [])
+
+  if (estado === 'cargando') {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-night text-night-ink/50">
+        <p className="text-sm">Verificando tu sesión…</p>
+      </div>
+    )
+  }
+  if (estado === 'afuera') return <Navigate to="/admin/login" replace />
+  return <>{children}</>
+}
+
+/**
+ * Quién está usando el panel, y cómo salir.
+ *
+ * Cerrar sesión avisa al servidor para que borre la fila —eso es lo que revoca el token de
+ * verdad— y recién después limpia lo local. Si el aviso falla (sin red), se limpia igual:
+ * peor sería dejar a la persona adentro creyendo que salió.
+ */
+function QuienSoy() {
+  const navigate = useNavigate()
+  const [yo, setYo] = useState(getMe)
+  const [saliendo, setSaliendo] = useState(false)
+
+  // El estado vive en memoria del módulo: hay que re-leerlo cuando el gate lo puebla.
+  useEffect(() => onSessionChange(() => setYo(getMe())), [])
+
+  if (!IS_REMOTE || !yo) return null
+
+  async function salir() {
+    setSaliendo(true)
+    try {
+      await fetch(`${apiBase}/api/v1/auth/admin/logout`, { method: 'POST', headers: adminAuthHeaders() })
+    } catch {
+      /* sin red: se limpia igual, la sesión vence sola en el server */
+    }
+    clearSession()
+    navigate('/admin/login', { replace: true })
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-night px-6">
-      <div className="w-full max-w-sm animate-rise">
-        <div className="text-center">
-          <div className="type-display text-5xl text-night-ink">CCM</div>
-          <p className="eyebrow mt-3 text-[9px] text-night-ink/50">Panel de administración</p>
-        </div>
-        <form
-          onSubmit={submit}
-          className="mt-8 space-y-4 rounded-lg border border-night-soft bg-night-soft/40 p-6"
-        >
-          <Field label="Clave de acceso">
-            <Input
-              type="password"
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              placeholder="Cualquier clave entra (demo)"
-              autoFocus
-              className="border-night-soft bg-night text-night-ink placeholder:text-night-ink/30"
-            />
-          </Field>
-          <Button type="submit" className="w-full">
-            Ingresar
-          </Button>
-          <p className="text-center text-[11px] leading-relaxed text-night-ink/40">
-            Demo: cualquier clave habilita el panel. En Fase 1 se reemplaza por usuarios con email,
-            contraseña y roles por sección.
-          </p>
-        </form>
-        <Link
-          to="/"
-          className="eyebrow mt-6 flex items-center justify-center gap-2 text-[9px] text-night-ink/40 transition-colors hover:text-night-ink"
-        >
-          <ArrowLeft size={12} /> Volver a la app
-        </Link>
+    <div className="space-y-2">
+      <div className="min-w-0">
+        <p className="truncate text-[11px] font-medium text-night-ink/80">{yo.name || yo.email}</p>
+        <p className="truncate text-[10px] text-night-ink/40">{ROLE_LABEL[yo.role]}</p>
       </div>
+      <button
+        onClick={salir}
+        disabled={saliendo}
+        className="eyebrow flex items-center gap-2 text-[9px] text-night-ink/45 transition-colors hover:text-night-ink disabled:opacity-50"
+      >
+        <LogOut size={11} /> {saliendo ? 'Saliendo…' : 'Cerrar sesión'}
+      </button>
     </div>
   )
 }
@@ -198,19 +278,27 @@ function AdminBottomNav({ moreActive, onMore }: { moreActive: boolean; onMore: (
 }
 
 export default function AdminLayout() {
-  const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem('ccm:admin') === '1')
   const [moreOpen, setMoreOpen] = useState(false)
   const { pathname } = useLocation()
+
+  // Suscribirse a la sesión con useSyncExternalStore: el GateSesion puebla `me` DESPUÉS de que
+  // este componente ya renderizó, así que leerlo una sola vez dejaba el menú con todas las
+  // secciones hasta navegar. Así se recomputa apenas la sesión se resuelve.
+  const me = useSyncExternalStore(onSessionChange, getMe)
+  // Sin sesión cargada (modo demo sin backend) se muestran todas: ahí no hay roles.
+  const permisos = me?.permissions
+  const visible = (i: NavItem) => !permisos || !i.needs || permisos.includes(i.needs)
+  const secciones = SECTIONS.filter(visible)
+  const masOpciones = MORE.filter(visible)
 
   const active =
     SECTIONS.find((s) => s.to === pathname) ??
     SECTIONS.find((s) => !s.end && pathname.startsWith(`${s.to}/`)) ??
     SECTIONS[0]
-  const moreActive = MORE.some((m) => pathname === m.to || pathname.startsWith(`${m.to}/`))
-
-  if (!unlocked) return <AdminGate onUnlock={() => setUnlocked(true)} />
+  const moreActive = masOpciones.some((m) => pathname === m.to || pathname.startsWith(`${m.to}/`))
 
   return (
+    <GateSesion>
     <div className="flex min-h-dvh flex-col md:flex-row">
       {/* Sidebar desktop */}
       <aside className="hidden w-60 shrink-0 flex-col bg-night text-night-ink md:flex">
@@ -220,7 +308,7 @@ export default function AdminLayout() {
             <span className="eyebrow text-[8px] text-accent">Admin</span>
           </Link>
           <nav className="mt-8 flex-1 space-y-0.5">
-            {SECTIONS.map((s) => {
+            {secciones.map((s) => {
               const Icon = s.icon
               return (
                 <NavLink
@@ -242,6 +330,7 @@ export default function AdminLayout() {
             })}
           </nav>
           <div className="space-y-3 border-t border-night-soft pt-4">
+            <QuienSoy />
             <Link
               to="/"
               className="eyebrow flex items-center gap-2 text-[9px] text-night-ink/45 transition-colors hover:text-night-ink"
@@ -280,7 +369,7 @@ export default function AdminLayout() {
       {/* Sheet "Más": secciones secundarias + volver a la app */}
       <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title="Más secciones">
         <div className="space-y-1">
-          {MORE.map((m) => {
+          {masOpciones.map((m) => {
             const Icon = m.icon
             return (
               <Link
@@ -307,5 +396,6 @@ export default function AdminLayout() {
         </Link>
       </Sheet>
     </div>
+    </GateSesion>
   )
 }

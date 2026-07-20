@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { requireAdmin } from '../middlewares/admin.js'
+import { requirePermission } from '../middlewares/admin.js'
 import * as benefitService from '../services/benefitService.js'
 import type { Benefit } from '@domain/types'
 
@@ -18,7 +18,7 @@ benefitsRouter.get('/benefits', async (req, res, next) => {
 /* ─── Admin (marketing) ─── */
 const hasId = z.object({ id: z.string().min(1) }).passthrough()
 
-benefitsRouter.get('/admin/benefits', requireAdmin, async (_req, res, next) => {
+benefitsRouter.get('/admin/benefits', requirePermission('content:write'), async (_req, res, next) => {
   try {
     res.json(await benefitService.getAllBenefits())
   } catch (err) {
@@ -26,7 +26,7 @@ benefitsRouter.get('/admin/benefits', requireAdmin, async (_req, res, next) => {
   }
 })
 
-benefitsRouter.post('/admin/benefits', requireAdmin, (req, res, next) => {
+benefitsRouter.post('/admin/benefits', requirePermission('content:write'), (req, res, next) => {
   try {
     hasId.parse(req.body)
     benefitService.createBenefit(req.body as Benefit).then((b) => res.status(201).json(b)).catch(next)
@@ -35,7 +35,7 @@ benefitsRouter.post('/admin/benefits', requireAdmin, (req, res, next) => {
   }
 })
 
-benefitsRouter.patch('/admin/benefits/:id', requireAdmin, async (req, res, next) => {
+benefitsRouter.patch('/admin/benefits/:id', requirePermission('content:write'), async (req, res, next) => {
   try {
     res.json(await benefitService.updateBenefit(req.params.id, req.body as Partial<Benefit>))
   } catch (err) {
@@ -43,7 +43,7 @@ benefitsRouter.patch('/admin/benefits/:id', requireAdmin, async (req, res, next)
   }
 })
 
-benefitsRouter.delete('/admin/benefits/:id', requireAdmin, async (req, res, next) => {
+benefitsRouter.delete('/admin/benefits/:id', requirePermission('content:write'), async (req, res, next) => {
   try {
     await benefitService.deleteBenefit(req.params.id)
     res.status(204).end()

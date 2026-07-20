@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { requireAdmin } from '../middlewares/admin.js'
+import { requirePermission } from '../middlewares/admin.js'
 import * as bannerService from '../services/bannerService.js'
 import type { Banner } from '@domain/types'
 
@@ -17,7 +17,7 @@ bannersRouter.get('/banners', async (_req, res, next) => {
 
 const hasId = z.object({ id: z.string().min(1) }).passthrough()
 
-bannersRouter.get('/admin/banners', requireAdmin, async (_req, res, next) => {
+bannersRouter.get('/admin/banners', requirePermission('content:write'), async (_req, res, next) => {
   try {
     res.json(await bannerService.getAllBanners())
   } catch (err) {
@@ -25,7 +25,7 @@ bannersRouter.get('/admin/banners', requireAdmin, async (_req, res, next) => {
   }
 })
 
-bannersRouter.post('/admin/banners', requireAdmin, (req, res, next) => {
+bannersRouter.post('/admin/banners', requirePermission('content:write'), (req, res, next) => {
   try {
     hasId.parse(req.body)
     bannerService.createBanner(req.body as Banner).then((b) => res.status(201).json(b)).catch(next)
@@ -34,7 +34,7 @@ bannersRouter.post('/admin/banners', requireAdmin, (req, res, next) => {
   }
 })
 
-bannersRouter.patch('/admin/banners/:id', requireAdmin, async (req, res, next) => {
+bannersRouter.patch('/admin/banners/:id', requirePermission('content:write'), async (req, res, next) => {
   try {
     res.json(await bannerService.updateBanner(req.params.id, req.body as Partial<Banner>))
   } catch (err) {
@@ -42,7 +42,7 @@ bannersRouter.patch('/admin/banners/:id', requireAdmin, async (req, res, next) =
   }
 })
 
-bannersRouter.delete('/admin/banners/:id', requireAdmin, async (req, res, next) => {
+bannersRouter.delete('/admin/banners/:id', requirePermission('content:write'), async (req, res, next) => {
   try {
     await bannerService.deleteBanner(req.params.id)
     res.status(204).end()

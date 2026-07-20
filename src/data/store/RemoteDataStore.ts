@@ -16,6 +16,7 @@ import { newId, writeJSON } from '../../lib/storage'
 import { createApi, type ApiClient } from '../../lib/api'
 import { bus } from '../../lib/bus'
 import { hydrateFromRemote, getDeviceToken, setDeviceCredentials } from '../../lib/identity'
+import { hasAdminToken } from '../adminSession'
 import type {
   DeviceProfile,
   ProfileFieldKey,
@@ -129,9 +130,9 @@ export class RemoteDataStore extends LocalDataStore {
       this.hydrateDeviceContent()
       this.hydrateMembership()
       this.hydrateApplications() // device ("Mis postulaciones")
-      // Si ya hay sesión de organizador (token en sessionStorage al recargar), hidratar TODOS
-      // los cachés admin. `refetchAdminScoped()` es el mismo método que corre al loguearse, así
-      // que recargar la página deja el panel en el mismo estado que recién logueado.
+      // Si ya hay sesión de organizador (token guardado al recargar), hidratar TODOS los cachés
+      // admin. `refetchAdminScoped()` es el mismo método que corre al loguearse, así que recargar
+      // la página deja el panel en el mismo estado que recién logueado.
       //
       // Antes acá se hidrataban solo applications y analytics: los otros cuatro cachés
       // (notas, beneficios, banners, convocatorias) quedaban `undefined` tras un F5 y, como
@@ -139,7 +140,7 @@ export class RemoteDataStore extends LocalDataStore {
       // localStorage con cartel de éxito. El organizador cargaba una nota, la veía en la lista
       // y no llegaba nunca al backend. Llamar al método agrupado evita que vuelva a pasar
       // cuando se sume un séptimo caché.
-      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ccm:admin-token')) {
+      if (hasAdminToken()) {
         this.refetchAdminScoped()
       }
       this.hydrateBenefits()

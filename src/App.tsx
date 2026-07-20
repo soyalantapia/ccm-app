@@ -8,6 +8,7 @@ import {
 } from 'react-router-dom'
 import SiteLayout from './components/layout/SiteLayout'
 import AdminLayout from './components/layout/AdminLayout'
+import AdminLogin from './pages/admin/AdminLogin'
 import { ScrollManager } from './components/layout/ScrollManager'
 import { UpdatePrompt } from './components/layout/UpdatePrompt'
 import { RouteError } from './components/layout/RouteError'
@@ -54,6 +55,7 @@ const AdminBanners = lazyWithReload(() => import('./pages/admin/AdminBanners'))
 const AdminNotas = lazyWithReload(() => import('./pages/admin/AdminNotas'))
 const AdminOrdenes = lazyWithReload(() => import('./pages/admin/AdminOrdenes'))
 const AdminConfiguracion = lazyWithReload(() => import('./pages/admin/AdminConfiguracion'))
+const AdminEquipo = lazyWithReload(() => import('./pages/admin/AdminEquipo'))
 
 /** Suspense de página pública/app: skeleton con forma de página. */
 function S({ children }: { children: ReactNode }) {
@@ -121,6 +123,11 @@ const router = createBrowserRouter(
           ],
         },
         {
+          // Fuera del layout a propósito: adentro, el gate taparía el propio login.
+          path: '/admin/login',
+          element: <AdminLogin />,
+        },
+        {
           path: '/admin',
           element: <AdminLayout />,
           children: [
@@ -137,6 +144,7 @@ const router = createBrowserRouter(
             { path: 'banners', element: <SA><AdminBanners /></SA> },
             { path: 'novedades', element: <SA><AdminNotas /></SA> },
             { path: 'ordenes', element: <SA><AdminOrdenes /></SA> },
+            { path: 'equipo', element: <SA><AdminEquipo /></SA> },
             { path: 'configuracion', element: <SA><AdminConfiguracion /></SA> },
           ],
         },

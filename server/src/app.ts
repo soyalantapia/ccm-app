@@ -17,6 +17,9 @@ import { registrationsRouter } from './routes/registrations.js'
 import { catalogRouter } from './routes/catalog.js'
 import { photosRouter } from './routes/photos.js'
 import { adminRouter } from './routes/admin.js'
+import { adminAuthRouter } from './routes/adminAuth.js'
+import { adminTeamRouter } from './routes/adminTeam.js'
+import { requireAdmin } from './middlewares/admin.js'
 import { deviceContext } from './middlewares/device.js'
 import { errorHandler, notFoundHandler } from './middlewares/error.js'
 
@@ -70,6 +73,16 @@ export function createApp() {
   v1.use(writeLimiter)
   v1.use(analyticsLimiter)
   v1.use(devicesRouter) // POST /devices: alta de identidad (emite el token de device)
+  // Login del organizador: /auth/admin/*. Va acá, FUERA del prefijo /admin, porque ese prefijo
+  // está cubierto por requireAdmin — colgar el login ahí sería exigir sesión para poder abrirla.
+  v1.use(adminAuthRouter)
+  // Red de seguridad: TODO lo que cuelgue de /admin exige, como mínimo, estar autenticado.
+  // Cada ruta declara además QUÉ permiso necesita (requirePermission), que es lo que distingue
+  // un rol de otro. Esta capa existe porque el permiso por ruta se puede olvidar: sin ella, una
+  // ruta nueva nacería PÚBLICA. Con ella, lo peor que puede pasar es que quede accesible a
+  // cualquier organizador logueado — malo, pero no una filtración abierta. adminGuards.test.ts
+  // igual falla si a una ruta le falta su permiso.
+  v1.use('/admin', requireAdmin)
   // Identidad por device (verifica X-Device-Token firmado) para todo lo de abajo.
   v1.use(deviceContext)
   v1.use(meRouter) // Fase A: /me, /me/fields, /me/consents
@@ -82,6 +95,7 @@ export function createApp() {
   v1.use(registrationsRouter) // Fase B: /registrations
   v1.use(catalogRouter) // Fase E: /catalog, /galleries, /contents
   v1.use(photosRouter) // Fase E: /favorites, /downloads
+  v1.use(adminTeamRouter) // Gestión del equipo: /admin/team* (sólo OWNER)
   v1.use(adminRouter) // Fase G: CRUD admin de events|blocks|contents|sponsors|galleries|catalog|notas|banners|benefits|applications|plans
   // Pendiente real: /orders (Fase C, bloqueada por checkout MP) y CRUD admin de memberships.
   // (sponsors/galleries/catalog/applications CRUD YA están: los sirven catalogRouter + adminRouter.)
