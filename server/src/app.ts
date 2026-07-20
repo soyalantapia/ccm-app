@@ -79,6 +79,13 @@ export function createApp() {
   // (sponsors/galleries/catalog/applications CRUD YA están: los sirven catalogRouter + adminRouter.)
   app.use('/api/v1', v1)
 
+  // Uploads: si UPLOAD_DIR está seteado, sirve los archivos subidos (Volume Railway).
+  // Montado ANTES de la SPA para que /uploads/* no sea absorbido por el fallback a index.html.
+  if (env.UPLOAD_DIR) {
+    const uploadPrefix = env.UPLOAD_URL_PREFIX.replace(/\/$/, '')
+    app.use(uploadPrefix, express.static(env.UPLOAD_DIR, { index: false }))
+  }
+
   // SPA: si FRONT_DIST está seteada, este service también sirve el front buildeado.
   // Estáticos con cache larga (assets hasheados); el resto de las rutas → index.html
   // (fallback del router), EXCEPTO /api/* (que cae al notFoundHandler como 404 JSON).
