@@ -5,8 +5,12 @@ import type {
   TextareaHTMLAttributes,
 } from 'react'
 
+// 16px en mobile, 15px recién en lg: por debajo de 16px, WebKit en iOS reescala el viewport al
+// enfocar un control y —como el meta viewport NO declara maximum-scale, que es lo correcto por
+// accesibilidad— el zoom queda pegado después del blur. La app se usa desde el celular durante
+// el evento, así que cada input del formulario dejaba la pantalla ampliada.
 export const inputClass =
-  'w-full rounded-sm border border-line bg-bg/50 px-3.5 py-3 text-[15px] text-ink placeholder:text-ink-soft/50 transition-colors focus:border-accent focus:outline-none'
+  'w-full rounded-sm border border-line bg-bg/50 px-3.5 py-3 text-[16px] lg:text-[15px] text-ink placeholder:text-ink-soft/50 transition-colors focus:border-accent focus:outline-none'
 
 interface FieldProps {
   label: ReactNode

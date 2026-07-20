@@ -7,6 +7,8 @@ import { store, useDataVersion } from '../../data/store'
 import { useFocusTrap } from '../../lib/useFocusTrap'
 import type { AdSlot, Sponsor } from '../../data/types'
 import { ctr, formatDate } from './opsFormat'
+import { bloquearScroll } from '../../lib/useFocusTrap'
+import { csvCell } from '../../lib/csv'
 
 /** Slots con un nombre legible para el desglose del reporte (PRD §11). */
 const SLOT_LABELS: Record<AdSlot, string> = {
@@ -98,10 +100,7 @@ function slugify(name: string): string {
 
 /** Arma y descarga un CSV real (por slot + totales) como blob. */
 function downloadCsv(sponsor: Sponsor, metrics: ReportMetrics, period: string): void {
-  const esc = (v: string | number) => {
-    const s = String(v)
-    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-  }
+  const esc = csvCell // helper compartido: neutraliza prefijos de fórmula, no solo RFC4180
   const lines: string[] = []
   lines.push(`Reporte Tecnico de Impacto;CCM ${config.year}`)
   lines.push(`Sponsor;${esc(sponsor.name)}`)
@@ -164,10 +163,7 @@ export function SponsorReport({ sponsor, onClose }: SponsorReportProps) {
 
   // Bloquea el scroll del fondo mientras el reporte está abierto.
   useEffect(() => {
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = ''
-    }
+    return bloquearScroll() // conteo compartido: un diálogo encima no desbloquea a este
   }, [])
 
   // Foco atrapado + Escape para cerrar + restitución del foco al botón que abrió.

@@ -92,7 +92,19 @@ export function createApp() {
   if (env.FRONT_DIST) {
     const dist = env.FRONT_DIST
     app.use(express.static(dist, { index: false }))
-    app.get(/^\/(?!api\/).*/, (_req, res) => res.sendFile(join(dist, 'index.html')))
+    // El fallback es para RUTAS del router, no para archivos. Antes cualquier path sin /api/
+    // devolvía 200 + HTML, así que un asset inexistente (una imagen borrada, un chunk viejo
+    // tras un deploy) era indistinguible de una ruta válida: el navegador recibía HTML donde
+    // esperaba binario, y el Service Worker lo cacheaba con CacheFirst — el 200 mentiroso
+    // quedaba pegado. Un path que parece archivo (tiene extensión) y no existe → 404 honesto.
+    // Lista explícita en vez de "tiene un punto": los slugs pasan por slugify (solo a-z0-9-),
+    // pero si alguna vez entrara uno sin slugificar, un punto en el nombre no debe dar 404.
+    const EXT_DE_ASSET =
+      /\.(js|mjs|css|map|json|webmanifest|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|eot|mp4|webm|mov|mp3|pdf|txt|xml)$/i
+    app.get(/^\/(?!api\/).*/, (req, res, next) => {
+      if (EXT_DE_ASSET.test(req.path)) return next() // → notFoundHandler (404 honesto)
+      res.sendFile(join(dist, 'index.html'))
+    })
   }
 
   app.use(notFoundHandler)

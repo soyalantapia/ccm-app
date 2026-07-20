@@ -6,6 +6,7 @@ import { registerFree } from '../../lib/actions'
 import { useStore } from '../../data/store'
 import { IDS } from '../../data/ids'
 import { config } from '../../config'
+import { bloquearScroll } from '../../lib/useFocusTrap'
 
 // Foco (tesis Gastón: simple, de nicho): la app SON las 5 pestañas. PRIMARY =
 // las que compiten por atención (top-nav en desktop; bottom-nav en mobile). El
@@ -89,10 +90,8 @@ function Header() {
   useEffect(() => setMenuOpen(false), [location.pathname])
 
   useEffect(() => {
-    document.body.style.overflow = menuOpen ? 'hidden' : ''
-    return () => {
-      document.body.style.overflow = ''
-    }
+    if (!menuOpen) return
+    return bloquearScroll() // conteo compartido: un diálogo encima no desbloquea a este
   }, [menuOpen])
 
   return (

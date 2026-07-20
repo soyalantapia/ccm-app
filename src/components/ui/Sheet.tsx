@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useFocusTrap } from '../../lib/useFocusTrap'
+import { bloquearScroll } from '../../lib/useFocusTrap'
 
 interface SheetProps {
   open: boolean
@@ -19,10 +20,7 @@ export function Sheet({ open, onClose, title, children, size = 'md' }: SheetProp
 
   useEffect(() => {
     if (!open) return
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = ''
-    }
+    return bloquearScroll() // conteo compartido: un diálogo encima no desbloquea a este
   }, [open])
 
   // Atrapa el foco, lo restituye al cerrar y unifica el cierre con Escape.
