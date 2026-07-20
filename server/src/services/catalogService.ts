@@ -56,6 +56,14 @@ export async function getContents(deviceId?: string): Promise<ContentItem[]> {
   )
 }
 
+/** Contenido para el PANEL: sin el gate de socio. El organizador tiene que ver (y poder editar)
+ *  el youtubeId de sus propios videos solo-socios; leyendo la lista pública le llegaba vacío y
+ *  el formulario no lo dejaba guardar. Va detrás de requireAdmin. */
+export async function getAdminContents(): Promise<ContentItem[]> {
+  const rows = await prisma.contentItem.findMany({ orderBy: { publishedAt: 'desc' } })
+  return rows.map((c) => toContentItem(c))
+}
+
 /* ─── Sponsors ─── */
 export async function getSponsors(): Promise<Sponsor[]> {
   const rows = await prisma.sponsor.findMany({

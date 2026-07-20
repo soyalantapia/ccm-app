@@ -132,5 +132,3 @@ export function describeAnalyticsEvent(
     }
   }
 }
-
-/* ─── Export CSV (PRD §10.1) ───────────────────────────────────────── */

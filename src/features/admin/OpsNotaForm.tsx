@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Button, Field, Input, Select, Sheet, Textarea, ImageUpload } from '../../components/ui'
+import { Button, Field, Input, RichTextEditor, Select, Sheet, Textarea, ImageUpload } from '../../components/ui'
 import { store } from '../../data/store'
 import { asset } from '../../lib/assets'
 import type { Nota } from '../../data/types'
@@ -65,7 +65,10 @@ export function OpsNotaForm({ open, nota, onClose }: Props) {
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    if (!f.title.trim() || !f.excerpt.trim() || !f.body.trim() || !f.publishedAt.trim()) {
+    // El editor devuelve "<p></p>" cuando está vacío: con .trim() a secas eso pasaría como
+    // cuerpo válido y se publicaría una nota en blanco. Miramos el texto sin etiquetas.
+    const cuerpoVacio = !f.body.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
+    if (!f.title.trim() || !f.excerpt.trim() || cuerpoVacio || !f.publishedAt.trim()) {
       setError('Completá título, bajada, cuerpo y fecha.')
       return
     }
@@ -101,9 +104,13 @@ export function OpsNotaForm({ open, nota, onClose }: Props) {
         <Field
           label="Cuerpo"
           required
-          hint="Un salto de línea = párrafo nuevo. Formato: **negrita**, *itálica*, [texto](https://link)."
+          hint="Escribí con la barra de formato, o tocá HTML para pegar/editar el código. Pegar desde Word o una web se limpia solo."
         >
-          <Textarea value={f.body} onChange={set('body')} rows={8} placeholder="El cuerpo de la nota…  Podés usar **negrita**." required />
+          <RichTextEditor
+            value={f.body}
+            onChange={(html) => setF((p) => ({ ...p, body: html }))}
+            placeholder="El cuerpo de la nota…"
+          />
         </Field>
 
         <Field label="Imagen de portada (URL)" hint="Opcional — subila desde tu compu o pegá la URL">
