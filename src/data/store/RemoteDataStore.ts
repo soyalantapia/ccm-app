@@ -123,11 +123,18 @@ export class RemoteDataStore extends LocalDataStore {
       this.hydrateDeviceContent()
       this.hydrateMembership()
       this.hydrateApplications() // device ("Mis postulaciones")
-      // Si ya hay sesión de organizador (token en sessionStorage al recargar), hidratar también
-      // el caché admin — el panel /admin/postulaciones lo necesita sin re-loguear por el gate.
+      // Si ya hay sesión de organizador (token en sessionStorage al recargar), hidratar TODOS
+      // los cachés admin. `refetchAdminScoped()` es el mismo método que corre al loguearse, así
+      // que recargar la página deja el panel en el mismo estado que recién logueado.
+      //
+      // Antes acá se hidrataban solo applications y analytics: los otros cuatro cachés
+      // (notas, beneficios, banners, convocatorias) quedaban `undefined` tras un F5 y, como
+      // create/update/delete hacen `if (!this.adminX) return super.X()`, cada alta caía en
+      // localStorage con cartel de éxito. El organizador cargaba una nota, la veía en la lista
+      // y no llegaba nunca al backend. Llamar al método agrupado evita que vuelva a pasar
+      // cuando se sume un séptimo caché.
       if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ccm:admin-token')) {
-        this.hydrateAdminApplications()
-        this.hydrateAnalytics() // reporte a sponsors con datos reales sin re-loguear
+        this.refetchAdminScoped()
       }
       this.hydrateBenefits()
       // Re-fetch de /contents YA CON el device token: el backend gatea el youtubeId de los videos
