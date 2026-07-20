@@ -15,6 +15,28 @@ El Dashboard del panel de organizador no cuenta entidades: cuenta **eventos de a
 
 Además, el Dashboard responde mal la pregunta que importa. Muestra volumen acumulado, pero no dice **qué hacer hoy**: qué postulación quedó sin responder, qué compra se cayó a mitad de camino, qué bloque no se está llenando, qué convocatoria vence esta semana.
 
+## Evidencia medida
+
+No es una hipótesis. Se montó un banco de pruebas con cantidades conocidas (`server/scripts/audit-metricas/`, ver su README) y se comparó lo que muestra el Dashboard contra la verdad de la base. Con 10 registrados reales y 900 eventos:
+
+```
+MÉTRICA                 DASHBOARD      VERDAD    VEREDICTO
+Registrados                  200          10     MAL (infla 20x)
+Inscripciones                  0           6     MAL
+Socios CCM                     0           3     MAL
+Ingreso socios                 0       20000     MAL
+Órdenes cobradas               0           2     MAL
+Plata trabada                  —       45000     NO SE PUEDE CALCULAR HOY
+Postulaciones pend.            —           4     NO SE PUEDE CALCULAR HOY
+Descargas de fotos             0           7     MAL
+```
+
+Seis de ocho métricas dan un número equivocado; las otras dos no se pueden calcular con el modelo actual.
+
+Los **ceros** son el hallazgo más grave, más que el número inflado: los hechos existen en la base pero el Dashboard muestra 0 porque no había eventos de analytics correspondientes. La telemetría es best-effort — si se pierde el flush, el hecho ocurrió y el número lo niega.
+
+El **200** tiene dos causas sumadas: de las 500 filas que entrega la API solo 200 son `user_created` (300 `ad_impression` más recientes empujaron al resto fuera de la ventana), y además cuenta eventos en vez de devices, así que cualquier reemisión infla el número.
+
 ## Decisiones tomadas
 
 | Decisión | Elegido |
