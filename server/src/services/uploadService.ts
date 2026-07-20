@@ -52,6 +52,11 @@ export async function handleUpload(req: IncomingMessage): Promise<{ url: string 
     maxFileSize: MAX_BYTES,
     maxFiles: 1,
     filter: ({ mimetype }) => !!(mimetype && ALLOWED[mimetype]),
+    // El temporal se escribe DENTRO del volumen: en Railway, /tmp (filesystem del
+    // contenedor) y /app/uploads (volumen montado) son dispositivos distintos, y mover
+    // entre ellos con rename() falla con EXDEV. Escribiendo acá, el rename final es
+    // dentro del mismo filesystem.
+    uploadDir: env.UPLOAD_DIR,
   })
 
   // formidable aborta con su propio error cuando el archivo excede maxFileSize (u otro
@@ -79,7 +84,15 @@ export async function handleUpload(req: IncomingMessage): Promise<{ url: string 
   // Nombre único; ext normalizada → sin path traversal.
   const filename = `${randomUUID()}.${ext}`
   const dest = path.join(env.UPLOAD_DIR, filename)
-  fs.renameSync(raw.filepath, dest)
+  try {
+    fs.renameSync(raw.filepath, dest)
+  } catch (err) {
+    // Red de seguridad si el temporal igual quedó en otro dispositivo (EXDEV): copiar y
+    // borrar el origen es equivalente y funciona entre filesystems.
+    if ((err as NodeJS.ErrnoException)?.code !== 'EXDEV') throw err
+    fs.copyFileSync(raw.filepath, dest)
+    fs.unlinkSync(raw.filepath)
+  }
 
   return { url: publicUrl(filename) }
 }
