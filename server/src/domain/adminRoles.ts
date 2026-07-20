@@ -69,6 +69,10 @@ export const LOGIN_ENABLED_ROLES: readonly AdminRole[] = ['OWNER', 'EDITOR', 'CO
 
 export const canLogin = (role: AdminRole): boolean => LOGIN_ENABLED_ROLES.includes(role)
 
+/** Roles que se pueden asignar desde el panel. Se ofrecen sólo los que sirven para algo:
+ *  invitar a alguien a un rol que no puede entrar sería regalarle una cuenta muerta. */
+export const ROLES_ASIGNABLES = LOGIN_ENABLED_ROLES
+
 /** ¿El rol tiene esta capacidad? OWNER siempre; el resto, según la matriz. */
 export function can(role: AdminRole, permission: Permission): boolean {
   if (role === 'OWNER') return true

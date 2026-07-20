@@ -18,6 +18,7 @@ import { catalogRouter } from './routes/catalog.js'
 import { photosRouter } from './routes/photos.js'
 import { adminRouter } from './routes/admin.js'
 import { adminAuthRouter } from './routes/adminAuth.js'
+import { adminTeamRouter } from './routes/adminTeam.js'
 import { deviceContext } from './middlewares/device.js'
 import { errorHandler, notFoundHandler } from './middlewares/error.js'
 
@@ -78,6 +79,7 @@ export function createApp() {
   v1.use(registrationsRouter) // Fase B: /registrations
   v1.use(catalogRouter) // Fase E: /catalog, /galleries, /contents
   v1.use(photosRouter) // Fase E: /favorites, /downloads
+  v1.use(adminTeamRouter) // Gestión del equipo: /admin/team* (sólo OWNER)
   v1.use(adminRouter) // Fase G: CRUD admin de events|blocks|contents|sponsors|galleries|catalog|notas|banners|benefits|applications|plans
   // Pendiente real: /orders (Fase C, bloqueada por checkout MP) y CRUD admin de memberships.
   // (sponsors/galleries/catalog/applications CRUD YA están: los sirven catalogRouter + adminRouter.)
