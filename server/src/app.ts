@@ -17,6 +17,7 @@ import { registrationsRouter } from './routes/registrations.js'
 import { catalogRouter } from './routes/catalog.js'
 import { photosRouter } from './routes/photos.js'
 import { adminRouter } from './routes/admin.js'
+import { adminAuthRouter } from './routes/adminAuth.js'
 import { deviceContext } from './middlewares/device.js'
 import { errorHandler, notFoundHandler } from './middlewares/error.js'
 
@@ -62,6 +63,9 @@ export function createApp() {
   v1.use(writeLimiter)
   v1.use(analyticsLimiter)
   v1.use(devicesRouter) // POST /devices: alta de identidad (emite el token de device)
+  // Login del organizador: /auth/admin/*. Va acá, FUERA del prefijo /admin, porque ese prefijo
+  // está cubierto por requireAdmin — colgar el login ahí sería exigir sesión para poder abrirla.
+  v1.use(adminAuthRouter)
   // Identidad por device (verifica X-Device-Token firmado) para todo lo de abajo.
   v1.use(deviceContext)
   v1.use(meRouter) // Fase A: /me, /me/fields, /me/consents

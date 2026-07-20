@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { requireAdmin } from '../middlewares/admin.js'
+import { requirePermission } from '../middlewares/admin.js'
 import * as analyticsService from '../services/analyticsService.js'
 
 export const analyticsRouter = Router()
@@ -29,7 +29,7 @@ analyticsRouter.post('/analytics', async (req, res, next) => {
 })
 
 /** GET /api/v1/admin/analytics — para el dashboard del organizador (Fase G: requireAdmin). */
-analyticsRouter.get('/admin/analytics', requireAdmin, async (req, res, next) => {
+analyticsRouter.get('/admin/analytics', requirePermission('analytics:read'), async (req, res, next) => {
   try {
     const limit = z.coerce.number().int().positive().max(2000).optional().parse(req.query.limit)
     res.json(await analyticsService.list(limit))

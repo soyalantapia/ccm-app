@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { requireAdmin } from '../middlewares/admin.js'
+import { requirePermission } from '../middlewares/admin.js'
 import * as admin from '../services/adminService.js'
 import * as applicationService from '../services/applicationService.js'
 import * as catalogService from '../services/catalogService.js'
@@ -9,8 +9,9 @@ import type { EventItem, EventBlock, ContentItem, Sponsor, Gallery, CatalogProfi
 
 export const adminRouter = Router()
 
-// Todo /admin/* exige token de organizador (Fase G temporal).
-adminRouter.use('/admin', requireAdmin)
+// Cada ruta declara QUÉ permiso exige (no hay un guard único sobre el prefijo): así agregar
+// una ruta obliga a decidir quién puede usarla, y admin.routes.test.ts falla si alguna quedó
+// sin protección.
 
 // El front manda el objeto completo con id/slug ya generados (cliente).
 const hasId = z.object({ id: z.string().min(1) }).passthrough()
@@ -25,7 +26,7 @@ const route = <T>(handler: (body: T, id: string) => Promise<unknown>, status = 2
   }
 
 /* ─── Eventos ─── */
-adminRouter.post('/admin/events', (req, res, next) => {
+adminRouter.post('/admin/events', requirePermission('events:write'), (req, res, next) => {
   try {
     hasId.parse(req.body)
     admin.createEvent(req.body as EventItem).then((e) => res.status(201).json(e)).catch(next)
@@ -33,8 +34,8 @@ adminRouter.post('/admin/events', (req, res, next) => {
     next(err)
   }
 })
-adminRouter.patch('/admin/events/:id', route<Partial<EventItem>>((b, id) => admin.updateEvent(id, b)))
-adminRouter.delete('/admin/events/:id', async (req, res, next) => {
+adminRouter.patch('/admin/events/:id', requirePermission('events:write'), route<Partial<EventItem>>((b, id) => admin.updateEvent(id, b)))
+adminRouter.delete('/admin/events/:id', requirePermission('events:write'), async (req, res, next) => {
   try {
     await admin.deleteEvent(req.params.id)
     res.status(204).end()
@@ -44,7 +45,7 @@ adminRouter.delete('/admin/events/:id', async (req, res, next) => {
 })
 
 /* ─── Bloques ─── */
-adminRouter.post('/admin/blocks', (req, res, next) => {
+adminRouter.post('/admin/blocks', requirePermission('events:write'), (req, res, next) => {
   try {
     hasId.parse(req.body)
     admin.createBlock(req.body as EventBlock).then((b) => res.status(201).json(b)).catch(next)
@@ -52,8 +53,8 @@ adminRouter.post('/admin/blocks', (req, res, next) => {
     next(err)
   }
 })
-adminRouter.patch('/admin/blocks/:id', route<Partial<EventBlock>>((b, id) => admin.updateBlock(id, b)))
-adminRouter.delete('/admin/blocks/:id', async (req, res, next) => {
+adminRouter.patch('/admin/blocks/:id', requirePermission('events:write'), route<Partial<EventBlock>>((b, id) => admin.updateBlock(id, b)))
+adminRouter.delete('/admin/blocks/:id', requirePermission('events:write'), async (req, res, next) => {
   try {
     await admin.deleteBlock(req.params.id)
     res.status(204).end()
@@ -63,7 +64,7 @@ adminRouter.delete('/admin/blocks/:id', async (req, res, next) => {
 })
 
 /* ─── Contenido ─── */
-adminRouter.post('/admin/contents', (req, res, next) => {
+adminRouter.post('/admin/contents', requirePermission('content:write'), (req, res, next) => {
   try {
     hasId.parse(req.body)
     admin.createContent(req.body as ContentItem).then((c) => res.status(201).json(c)).catch(next)
@@ -71,8 +72,8 @@ adminRouter.post('/admin/contents', (req, res, next) => {
     next(err)
   }
 })
-adminRouter.patch('/admin/contents/:id', route<Partial<ContentItem>>((b, id) => admin.updateContent(id, b)))
-adminRouter.delete('/admin/contents/:id', async (req, res, next) => {
+adminRouter.patch('/admin/contents/:id', requirePermission('content:write'), route<Partial<ContentItem>>((b, id) => admin.updateContent(id, b)))
+adminRouter.delete('/admin/contents/:id', requirePermission('content:write'), async (req, res, next) => {
   try {
     await admin.deleteContent(req.params.id)
     res.status(204).end()
@@ -101,34 +102,34 @@ const del = (fn: (id: string) => Promise<void>): Handler => async (req, res, nex
 }
 
 /* ─── Sponsors ─── */
-adminRouter.post('/admin/sponsors', create<Sponsor>((b) => admin.createSponsor(b)))
-adminRouter.patch('/admin/sponsors/:id', route<Partial<Sponsor>>((b, id) => admin.updateSponsor(id, b)))
-adminRouter.delete('/admin/sponsors/:id', del((id) => admin.deleteSponsor(id)))
+adminRouter.post('/admin/sponsors', requirePermission('sponsors:write'), create<Sponsor>((b) => admin.createSponsor(b)))
+adminRouter.patch('/admin/sponsors/:id', requirePermission('sponsors:write'), route<Partial<Sponsor>>((b, id) => admin.updateSponsor(id, b)))
+adminRouter.delete('/admin/sponsors/:id', requirePermission('sponsors:write'), del((id) => admin.deleteSponsor(id)))
 
 /* ─── Galerías ─── */
-adminRouter.post('/admin/galleries', create<Gallery>((b) => admin.createGallery(b)))
-adminRouter.patch('/admin/galleries/:id', route<Partial<Gallery>>((b, id) => admin.updateGallery(id, b)))
-adminRouter.delete('/admin/galleries/:id', del((id) => admin.deleteGallery(id)))
+adminRouter.post('/admin/galleries', requirePermission('content:write'), create<Gallery>((b) => admin.createGallery(b)))
+adminRouter.patch('/admin/galleries/:id', requirePermission('content:write'), route<Partial<Gallery>>((b, id) => admin.updateGallery(id, b)))
+adminRouter.delete('/admin/galleries/:id', requirePermission('content:write'), del((id) => admin.deleteGallery(id)))
 
 /* ─── Catálogo ─── */
-adminRouter.post('/admin/catalog', create<CatalogProfile>((b) => admin.createCatalogProfile(b)))
-adminRouter.patch('/admin/catalog/:id', route<Partial<CatalogProfile>>((b, id) => admin.updateCatalogProfile(id, b)))
-adminRouter.delete('/admin/catalog/:id', del((id) => admin.deleteCatalogProfile(id)))
+adminRouter.post('/admin/catalog', requirePermission('catalog:write'), create<CatalogProfile>((b) => admin.createCatalogProfile(b)))
+adminRouter.patch('/admin/catalog/:id', requirePermission('catalog:write'), route<Partial<CatalogProfile>>((b, id) => admin.updateCatalogProfile(id, b)))
+adminRouter.delete('/admin/catalog/:id', requirePermission('catalog:write'), del((id) => admin.deleteCatalogProfile(id)))
 
 /* ─── Convocatorias ─── */
-adminRouter.get('/admin/convocatorias', async (_req, res, next) => {
+adminRouter.get('/admin/convocatorias', requirePermission('convocatorias:write'), async (_req, res, next) => {
   try {
     res.json(await catalogService.getConvocatorias())
   } catch (err) {
     next(err)
   }
 })
-adminRouter.post('/admin/convocatorias', create<Convocatoria>((b) => admin.createConvocatoria(b)))
-adminRouter.patch('/admin/convocatorias/:id', route<Partial<Convocatoria>>((b, id) => admin.updateConvocatoria(id, b)))
-adminRouter.delete('/admin/convocatorias/:id', del((id) => admin.deleteConvocatoria(id)))
+adminRouter.post('/admin/convocatorias', requirePermission('convocatorias:write'), create<Convocatoria>((b) => admin.createConvocatoria(b)))
+adminRouter.patch('/admin/convocatorias/:id', requirePermission('convocatorias:write'), route<Partial<Convocatoria>>((b, id) => admin.updateConvocatoria(id, b)))
+adminRouter.delete('/admin/convocatorias/:id', requirePermission('convocatorias:write'), del((id) => admin.deleteConvocatoria(id)))
 
 /* ─── Planes (precio / mpLink) ─── */
-adminRouter.patch('/admin/plans/:id', async (req, res, next) => {
+adminRouter.patch('/admin/plans/:id', requirePermission('sponsors:write'), async (req, res, next) => {
   try {
     await admin.updatePlan(req.params.id as PlanId, req.body)
     res.status(204).end()
@@ -140,7 +141,7 @@ adminRouter.patch('/admin/plans/:id', async (req, res, next) => {
 /* ─── Upload de archivos (Volume Railway) ─── */
 // POST /admin/upload  Content-Type: multipart/form-data  campo: "file" (imagen ≤5 MB)
 // Devuelve { url } que el front pega en el campo de imagen.
-adminRouter.post('/admin/upload', async (req, res, next) => {
+adminRouter.post('/admin/upload', requirePermission('upload'), async (req, res, next) => {
   try {
     const result = await handleUpload(req)
     res.status(201).json(result)
@@ -150,7 +151,7 @@ adminRouter.post('/admin/upload', async (req, res, next) => {
 })
 
 /* ─── Postulaciones ─── */
-adminRouter.get('/admin/applications', async (_req, res, next) => {
+adminRouter.get('/admin/applications', requirePermission('applications:read'), async (_req, res, next) => {
   try {
     res.json(await applicationService.getApplications())
   } catch (err) {
@@ -158,7 +159,7 @@ adminRouter.get('/admin/applications', async (_req, res, next) => {
   }
 })
 const decideSchema = z.object({ status: z.enum(['aceptada', 'rechazada']) })
-adminRouter.patch('/admin/applications/:id', async (req, res, next) => {
+adminRouter.patch('/admin/applications/:id', requirePermission('applications:decide'), async (req, res, next) => {
   try {
     const { status } = decideSchema.parse(req.body)
     await applicationService.decideApplication(req.params.id, status)
