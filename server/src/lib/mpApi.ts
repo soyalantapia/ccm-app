@@ -6,6 +6,9 @@ import { env } from './env.js'
 import { ApiError } from './errors.js'
 
 const AUTH_BASE = 'https://api.mercadopago.com'
+// Si MP no contesta en este lapso abortamos, en vez de dejar el await colgado para siempre:
+// en /mp/callback eso es una persona mirando una request eterna en vez de un error rápido.
+const TIMEOUT_MS = 10_000
 
 export interface MpTokenResponse {
   access_token: string
@@ -23,8 +26,24 @@ export interface MpPayment {
   transaction_amount?: number
 }
 
+/** fetch con timeout: si a los TIMEOUT_MS no hubo respuesta, aborta y tira el mismo ApiError de siempre. */
+async function fetchConTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new ApiError(502, 'MP_API_ERROR', 'Mercado Pago no respondió a tiempo')
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function post<T>(path: string, body: unknown, token?: string): Promise<T> {
-  const res = await fetch(`${AUTH_BASE}${path}`, {
+  const res = await fetchConTimeout(`${AUTH_BASE}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -70,7 +89,7 @@ export function createPreference(
 
 /** Consulta el estado REAL de un pago. Nunca se le cree al cuerpo del webhook. */
 export async function getPayment(accessToken: string, paymentId: string): Promise<MpPayment> {
-  const res = await fetch(`${AUTH_BASE}/v1/payments/${paymentId}`, {
+  const res = await fetchConTimeout(`${AUTH_BASE}/v1/payments/${paymentId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
   if (!res.ok) throw new ApiError(502, 'MP_API_ERROR', `Mercado Pago respondió ${res.status} al consultar el pago`)

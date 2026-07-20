@@ -43,7 +43,12 @@ mpRouter.get('/mp/callback', async (req, res) => {
   try {
     await oauth.exchangeCode(code, state)
     res.redirect('/admin/configuracion?mp=ok')
-  } catch {
+  } catch (err) {
+    // Esta ruta SIEMPRE redirige (nunca pasa por errorHandler), así que si no logueamos acá
+    // el motivo del fallo se pierde para siempre: el organizador solo ve "no puedo conectar
+    // Mercado Pago" y no queda ni una línea para saber si fue MP caído, state vencido o
+    // credenciales mal. Mismo formato que middlewares/error.ts.
+    console.error('[mp.callback]', err instanceof Error ? err.stack : err)
     res.redirect('/admin/configuracion?mp=error')
   }
 })
