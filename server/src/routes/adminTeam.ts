@@ -29,6 +29,14 @@ export const adminTeamRouter = Router()
 
 const rolSchema = z.enum(ROLES_ASIGNABLES as unknown as [string, ...string[]])
 
+/** Nombre de quien está invitando, tomado de su sesión. Con el token compartido de la etapa
+ *  anterior no hay persona identificable detrás, así que se firma de forma genérica. */
+async function nombreDeQuienInvita(req: import('express').Request): Promise<string> {
+  if (!req.admin?.userId) return 'El equipo de CCM'
+  const yo = await findAdminById(req.admin.userId)
+  return yo?.name?.trim() || yo?.email || 'El equipo de CCM'
+}
+
 /** Manda el "ya tenés acceso". Si el envío falla, no se pierde el alta: se informa y listo. */
 async function avisarAcceso(
   user: { email: string; name: string | null; role: (typeof ROLES_ASIGNABLES)[number] },
@@ -84,13 +92,18 @@ adminTeamRouter.post('/admin/team/invite', requirePermission('team:manage'), asy
     const yaEsta = await findAdminForLogin(input.email)
     if (yaEsta) throw conflict('USER_EXISTS', 'Ya hay alguien del equipo con ese email.')
 
+    // Quién invita sale de la SESIÓN, no del body: si viniera del cliente, cualquiera podría
+    // firmar la invitación con el nombre de otro. Con el token compartido viejo no hay persona
+    // detrás, así que queda genérico.
+    const quienInvita = await nombreDeQuienInvita(req)
+
     const user = await createInvitedAdmin({
       email: input.email,
       name: input.name,
       role: input.role as (typeof ROLES_ASIGNABLES)[number],
-      invitedBy: req.admin?.userId ? undefined : 'Organizador',
+      invitedBy: quienInvita,
     })
-    const email = await avisarAcceso(user, req.body?.invitedByName)
+    const email = await avisarAcceso(user, quienInvita)
     res.status(201).json({ user, email })
   } catch (err) {
     next(err)
@@ -102,7 +115,7 @@ adminTeamRouter.post('/admin/team/:id/resend', requirePermission('team:manage'),
   try {
     const user = await findAdminById(req.params.id)
     if (!user) throw notFound('USER_NOT_FOUND', 'No existe esa persona en el equipo.')
-    res.json({ ok: true, email: await avisarAcceso(user) })
+    res.json({ ok: true, email: await avisarAcceso(user, await nombreDeQuienInvita(req)) })
   } catch (err) {
     next(err)
   }

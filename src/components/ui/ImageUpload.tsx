@@ -10,6 +10,7 @@
  */
 import { useRef, useState } from 'react'
 import { toast } from './Toast'
+import { getAdminToken } from '../../data/adminSession'
 
 interface Props {
   /** Se llama con la URL pública del archivo subido. */
@@ -28,8 +29,9 @@ function apiBase() {
   return raw.replace(/\/+$/, '') + '/api/v1'
 }
 
+// La sesión la sabe un solo módulo: acá no se lee sessionStorage a mano.
 function adminToken() {
-  try { return sessionStorage.getItem('ccm:admin-token') ?? '' } catch { return '' }
+  return getAdminToken() ?? ''
 }
 
 export function ImageUpload({ onUrl, className = '', label = 'Subir imagen' }: Props) {

@@ -16,6 +16,7 @@ import { newId } from '../../lib/storage'
 import { createApi, type ApiClient } from '../../lib/api'
 import { bus } from '../../lib/bus'
 import { hydrateFromRemote, getDeviceToken, setDeviceCredentials } from '../../lib/identity'
+import { hasAdminToken } from '../adminSession'
 import type {
   DeviceProfile,
   ProfileFieldKey,
@@ -125,7 +126,7 @@ export class RemoteDataStore extends LocalDataStore {
       this.hydrateApplications() // device ("Mis postulaciones")
       // Si ya hay sesión de organizador (token en sessionStorage al recargar), hidratar también
       // el caché admin — el panel /admin/postulaciones lo necesita sin re-loguear por el gate.
-      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ccm:admin-token')) {
+      if (hasAdminToken()) {
         this.hydrateAdminApplications()
         this.hydrateAnalytics() // reporte a sponsors con datos reales sin re-loguear
       }

@@ -1,4 +1,5 @@
 import { getDeviceToken, clearDeviceCredentials } from './identity'
+import { getAdminToken } from '../data/adminSession'
 
 /**
  * Cliente HTTP del backend de CCM (Fase 1). Manda el token firmado del dispositivo en
@@ -26,7 +27,7 @@ export function createApi(apiBase: string): ApiClient {
     if (deviceToken) headers['X-Device-Token'] = deviceToken
     // Auth del organizador (Fase G): token Bearer en las rutas /admin/*.
     if (path.startsWith('/admin')) {
-      const token = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('ccm:admin-token') : null
+      const token = getAdminToken()
       if (token) headers.Authorization = `Bearer ${token}`
     }
     const res = await fetch(base + path, {

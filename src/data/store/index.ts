@@ -12,6 +12,8 @@ export type { DataStore, BlockAvailability, PhotoDownload } from './DataStore'
  * (demo offline / GH Pages) — el fallback nunca se rompe.
  */
 const API_BASE = import.meta.env.VITE_API_URL as string | undefined
+/** Base de la API, para quien necesite pegarle sin pasar por el store (el login del panel). */
+export const apiBase = (API_BASE ?? '').replace(/\/+$/, '')
 export const store: DataStore = API_BASE ? new RemoteDataStore(API_BASE) : new LocalDataStore()
 
 /**
