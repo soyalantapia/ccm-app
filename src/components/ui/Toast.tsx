@@ -59,11 +59,21 @@ export function ToastHost() {
       } else if (key === 'membership:rejected') {
         toast('No pudimos confirmar tu membresía — probá de nuevo en un momento.', 'info')
       } else if (key === 'admin:write-failed') {
-        // El backend rechazó una escritura del panel. El form ya toasteó "✓ guardado" de forma
-        // optimista y la re-hidratación va a borrar el ítem: sin este aviso, el organizador ve
-        // desaparecer lo que cargó sin ninguna explicación. El mensaje viene del backend.
+        // Panel del organizador: el backend rechazó un alta/edición/baja. Sin este aviso el
+        // cambio se deshacía solo y parecía que se había guardado.
+        //
+        // Los formularios cantan "✓ Creado" apenas llaman al store, sin esperar la respuesta
+        // (store.createX es síncrono). Si el server rechaza, ese cartel verde sigue en pantalla
+        // y contradice al error. Lo retiramos antes de avisar: queda solo el mensaje verdadero.
+        setItems((prev) => prev.filter((t) => t.tone !== 'success'))
+        // Preferimos el motivo que manda el backend ("ya existe una nota con ese slug", "el cupo
+        // está lleno"): decirle al organizador QUÉ pasó le permite corregirlo, y el genérico de
+        // conexión es engañoso cuando el server contestó perfecto con un 409.
         const msg = (detail as { message?: string } | undefined)?.message
-        toast(msg || 'No se pudo guardar el cambio. Probá de nuevo.', { tone: 'info', duration: 6000 })
+        toast(msg || 'No se pudo guardar en el servidor. Revisá la conexión y probá de nuevo.', {
+          tone: 'info',
+          duration: 6000,
+        })
       }
     })
     return () => {
