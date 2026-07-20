@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Button, Field, Img, Input, Select, Sheet, Textarea, toast, ImageUpload } from '../../components/ui'
 import { store } from '../../data/store'
 import type { EventItem, EventType } from '../../data/types'
+import { fechaEnTexto, esTextoAutomatico, textoContradiceLaFecha } from '../../lib/eventDate'
+import { config } from '../../config'
 
 const TYPE_OPTIONS: { value: EventType; label: string }[] = [
   { value: 'camino', label: 'Camino a CCM (previo)' },
@@ -39,6 +41,9 @@ type Form = {
   socioOnly: boolean
 }
 
+// La sede de siempre viene puesta: los seis eventos cargados usan la misma. Es editable —hay
+// Caminos fuera del hotel— pero no tiene sentido hacer retipear en cada alta algo que el sistema
+// ya sabe.
 const empty: Form = {
   title: '',
   type: 'camino',
@@ -46,8 +51,8 @@ const empty: Form = {
   dateLabel: '',
   startDate: '',
   timeLabel: '',
-  venue: '',
-  address: '',
+  venue: config.venue.name,
+  address: config.venue.address,
   description: '',
   past: false,
   socioOnly: false,
@@ -83,15 +88,43 @@ export function OpsEventForm({ open, event, onClose }: Props) {
   const [f, setF] = useState<Form>(empty)
   const [error, setError] = useState('')
 
+  // ¿El texto de la fecha lo escribió una persona, o lo derivamos nosotros? Al editar un evento
+  // que ya existe se deduce: si el texto guardado no es el que produciría su fecha, alguien lo
+  // escribió a propósito (el evento principal dice "19 y 20 de septiembre") y no hay que pisarlo.
+  const [textoPersonalizado, setTextoPersonalizado] = useState(false)
+
   useEffect(() => {
-    if (open) {
-      setF(event ? fromEvent(event) : empty)
-      setError('')
-    }
+    if (!open) return
+    const inicial = event ? fromEvent(event) : empty
+    setF(inicial)
+    setError('')
+    setTextoPersonalizado(
+      !!event && !!inicial.dateLabel && !esTextoAutomatico(inicial.startDate, inicial.dateLabel),
+    )
   }, [open, event])
 
   const set = (k: keyof Form) => (e: { target: { value: string } }) =>
     setF((prev) => ({ ...prev, [k]: e.target.value }))
+
+  /** Al elegir la fecha, el texto se reescribe solo — salvo que lo hayan personalizado. */
+  const onCambiarFecha = (e: { target: { value: string } }) => {
+    const startDate = e.target.value
+    setF((prev) => ({
+      ...prev,
+      startDate,
+      dateLabel: textoPersonalizado ? prev.dateLabel : fechaEnTexto(startDate),
+    }))
+  }
+
+  const volverAlTextoAutomatico = () => {
+    setTextoPersonalizado(false)
+    setF((prev) => ({ ...prev, dateLabel: fechaEnTexto(prev.startDate) }))
+  }
+
+  const textoFecha = f.startDate ? fechaEnTexto(f.startDate) : ''
+  // Si personalizaron el texto y nombra un día de la semana que no es el de la fecha, avisamos.
+  // No lo bloqueamos: puede haber un texto raro y válido; lo que no puede pasar es que nadie mire.
+  const avisoFecha = textoPersonalizado ? textoContradiceLaFecha(f.startDate, f.dateLabel) : null
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -176,14 +209,37 @@ export function OpsEventForm({ open, event, onClose }: Props) {
         <Field label="Subtítulo" hint="Opcional, una línea corta">
           <Input value={f.subtitle} onChange={set('subtitle')} placeholder="Charlas, networking y desfile cápsula" />
         </Field>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Fecha (texto)" required>
-            <Input value={f.dateLabel} onChange={set('dateLabel')} placeholder="18 de julio de 2026" required />
+        {/* UNA fecha. El texto que ve el público se escribe solo a partir de ella; antes eran dos
+            campos independientes y nadie verificaba que dijeran lo mismo — en producción dos
+            capacitaciones anunciaron el día de la semana equivocado durante semanas. */}
+        <Field label="Fecha" required hint={textoFecha ? `Se va a mostrar: “${textoFecha}”` : undefined}>
+          <Input type="date" value={f.startDate} onChange={onCambiarFecha} required />
+        </Field>
+
+        {textoPersonalizado ? (
+          <Field
+            label="Texto de la fecha"
+            hint="Para casos como “19 y 20 de septiembre”, que no salen de una sola fecha."
+          >
+            <Input value={f.dateLabel} onChange={set('dateLabel')} placeholder={textoFecha} />
+            {avisoFecha && <p className="mt-1.5 text-xs text-danger">{avisoFecha}</p>}
+            <button
+              type="button"
+              onClick={volverAlTextoAutomatico}
+              className="mt-2 text-xs text-accent-strong underline-offset-2 hover:underline"
+            >
+              Volver al texto automático
+            </button>
           </Field>
-          <Field label="Fecha (para ordenar)" required>
-            <Input type="date" value={f.startDate} onChange={set('startDate')} required />
-          </Field>
-        </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setTextoPersonalizado(true)}
+            className="-mt-1 text-xs text-ink-soft underline-offset-2 hover:text-ink hover:underline"
+          >
+            Escribir otro texto (ej: un evento de dos días)
+          </button>
+        )}
         <Field label="Horario" hint="Opcional">
           <Input value={f.timeLabel} onChange={set('timeLabel')} placeholder="17 a 21 hs" />
         </Field>
