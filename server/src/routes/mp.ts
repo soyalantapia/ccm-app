@@ -86,9 +86,21 @@ mpRouter.post('/mp/webhook', async (req, res) => {
   res.status(200).end()
   if (!dataId) return
   const headers = req.headers as Record<string, string | undefined>
+  const firmaValida = verificarFirma(headers, dataId)
+  if (!firmaValida) {
+    // Defecto D: antes esto no dejaba NINGÚN rastro. Sin este log, un ataque (alguien probando
+    // dataIds con una firma trucha) y una configuración rota (MP_WEBHOOK_SECRET mal seteado, o
+    // el problema del proxy del defecto A) se ven EXACTAMENTE igual: nada. Mismo formato que
+    // /mp/callback más abajo.
+    console.error('[mp.webhook] firma inválida', { dataId })
+  }
   try {
-    await handleNotification(dataId, verificarFirma(headers, dataId))
-  } catch {
-    // Nunca propagamos: el 200 ya salió. El pago queda pendiente y MP reintenta.
+    await handleNotification(dataId, firmaValida)
+  } catch (err) {
+    // Nunca propagamos: el 200 ya salió y MP no debe reintentar en loop por esto. Pero si no
+    // logueamos acá, los defectos A/B/C de la Tarea 5 vuelven a ser invisibles: MP cobra, nada
+    // se activa, y no queda ni una línea para saber por qué. Mismo formato que /mp/callback y
+    // middlewares/error.ts.
+    console.error('[mp.webhook]', err instanceof Error ? err.stack : err)
   }
 })

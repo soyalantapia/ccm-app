@@ -116,3 +116,34 @@ describe('POST /mp/webhook — la ruta responde 200 siempre, rápido, y no se ca
     await request(app).post('/api/v1/mp/webhook').send({ data: { id: { raro: true } } }).expect(200)
   })
 })
+
+/**
+ * Defecto D de la Tarea 5: el catch de la ruta no dejaba rastro de nada, lo que volvía
+ * invisibles a los defectos A/B/C (la firma falla siempre detrás del proxy, o la activación
+ * falla y nadie se entera). Acá se verifica que ahora SÍ queda un log, distinguiendo firma
+ * inválida de una excepción real.
+ */
+describe('POST /mp/webhook — defecto D: nada de esto pasa en silencio', () => {
+  it('firma inválida deja un log (para no confundirlo con una excepción)', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(webhook.verificarFirma).mockReturnValue(false)
+    vi.mocked(webhook.handleNotification).mockResolvedValue(undefined)
+
+    await request(app).post('/api/v1/mp/webhook').send({ data: { id: '444' } }).expect(200)
+
+    expect(errSpy).toHaveBeenCalled()
+    errSpy.mockRestore()
+  })
+
+  it('si handleNotification tira, el catch de la ruta loguea el error (no lo descarta)', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(webhook.verificarFirma).mockReturnValue(true)
+    vi.mocked(webhook.handleNotification).mockRejectedValue(new Error('la activación falló'))
+
+    await request(app).post('/api/v1/mp/webhook').send({ data: { id: '555' } }).expect(200)
+    await new Promise((r) => setImmediate(r))
+
+    expect(errSpy).toHaveBeenCalled()
+    errSpy.mockRestore()
+  })
+})
