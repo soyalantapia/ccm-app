@@ -67,14 +67,45 @@ export async function exchangeCode(code: string, state: string): Promise<void> {
   await guardar(await mpApi.exchangeCodeForTokens(code))
 }
 
+/**
+ * Lock en proceso para la renovación. Sin esto, dos requests que caen juntas dentro de
+ * MARGEN_RENOVACION_MS leen el mismo refreshToken y llaman las dos a mpApi.refreshTokens()
+ * con ese valor. MP ROTA el refresh token en cada uso: la segunda llamada explota en el acto
+ * (502 MP_API_ERROR), y encima cuál de los dos upsert gana es una carrera — el que pierde deja
+ * guardado un refreshToken que MP ya no reconoce, lo que rompe en silencio la PRÓXIMA
+ * renovación, recién cuando falle un cobro real meses después.
+ * Con esta promesa compartida, si ya hay una renovación en vuelo todas las llamadas que caen
+ * mientras tanto esperan ESA (no disparan una propia) y reciben su mismo resultado.
+ * Alcanza con un lock en memoria (no distribuido) porque hoy el servicio corre en un solo
+ * contenedor de Railway, sin réplicas. Si el día de mañana esto escala horizontalmente, cada
+ * instancia tiene su propio lock y deja de alcanzar — ahí hace falta coordinación entre
+ * procesos (advisory lock de Postgres, Redis, etc.).
+ */
+let renovacionEnCurso: Promise<string> | null = null
+
+async function renovarYGuardar(refreshToken: string): Promise<string> {
+  const renovado = await mpApi.refreshTokens(refreshToken)
+  await guardar(renovado)
+  return renovado.access_token
+}
+
 /** Token utilizable. Renueva solo si está por vencer. */
 export async function getValidToken(): Promise<string> {
+  if (renovacionEnCurso) return renovacionEnCurso
+
   const fila = await prisma.mpConnection.findUnique({ where: { id: FILA } })
   if (!fila) throw new ApiError(503, 'MP_NOT_CONNECTED', 'Mercado Pago no está conectado')
   if (fila.expiresAt.getTime() - Date.now() > MARGEN_RENOVACION_MS) return fila.accessToken
-  const renovado = await mpApi.refreshTokens(fila.refreshToken)
-  await guardar(renovado)
-  return renovado.access_token
+
+  // Puede que otra llamada haya arrancado la renovación mientras esperábamos este findUnique.
+  if (renovacionEnCurso) return renovacionEnCurso
+
+  // Si falla, el finally libera el lock igual: no queda una promesa rechazada cacheada
+  // rompiendo todas las llamadas siguientes.
+  renovacionEnCurso = renovarYGuardar(fila.refreshToken).finally(() => {
+    renovacionEnCurso = null
+  })
+  return renovacionEnCurso
 }
 
 export async function isConnected(): Promise<boolean> {

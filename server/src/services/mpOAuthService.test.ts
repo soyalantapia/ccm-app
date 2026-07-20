@@ -16,6 +16,7 @@ vi.mock('../lib/mpApi.js', () => ({
 
 import { prisma } from '../lib/prisma.js'
 import * as mpApi from '../lib/mpApi.js'
+import { ApiError } from '../lib/errors.js'
 import { buildAuthUrl, exchangeCode, getStatus, getValidToken, disconnect } from './mpOAuthService.js'
 
 const filaConectada = (vence: Date) => ({
@@ -93,6 +94,37 @@ describe('mpOAuthService — renovación del token', () => {
   it('si no hay conexión, falla con un código que la UI entiende', async () => {
     vi.mocked(prisma.mpConnection.findUnique).mockResolvedValue(null as never)
     await expect(getValidToken()).rejects.toMatchObject({ code: 'MP_NOT_CONNECTED' })
+  })
+
+  it('dos llamadas concurrentes con el token por vencer disparan una sola renovación', async () => {
+    const enUnaHora = new Date(Date.now() + 3600_000)
+    vi.mocked(prisma.mpConnection.findUnique).mockResolvedValue(filaConectada(enUnaHora) as never)
+    vi.mocked(mpApi.refreshTokens).mockResolvedValue({
+      access_token: 'ACCESS-nuevo', refresh_token: 'REFRESH-2', user_id: 1928447, public_key: 'P', expires_in: 15552000,
+    } as never)
+    vi.mocked(prisma.mpConnection.upsert).mockResolvedValue({} as never)
+
+    const [t1, t2] = await Promise.all([getValidToken(), getValidToken()])
+
+    expect(t1).toBe('ACCESS-nuevo')
+    expect(t2).toBe('ACCESS-nuevo')
+    expect(mpApi.refreshTokens).toHaveBeenCalledTimes(1)
+  })
+
+  it('si la renovación falla, el lock se libera y una llamada posterior puede reintentar', async () => {
+    const enUnaHora = new Date(Date.now() + 3600_000)
+    vi.mocked(prisma.mpConnection.findUnique).mockResolvedValue(filaConectada(enUnaHora) as never)
+    vi.mocked(mpApi.refreshTokens).mockRejectedValueOnce(new ApiError(502, 'MP_API_ERROR', 'Mercado Pago respondió 500'))
+
+    await expect(getValidToken()).rejects.toMatchObject({ code: 'MP_API_ERROR' })
+
+    vi.mocked(mpApi.refreshTokens).mockResolvedValue({
+      access_token: 'ACCESS-reintento', refresh_token: 'REFRESH-3', user_id: 1928447, public_key: 'P', expires_in: 15552000,
+    } as never)
+    vi.mocked(prisma.mpConnection.upsert).mockResolvedValue({} as never)
+
+    expect(await getValidToken()).toBe('ACCESS-reintento')
+    expect(mpApi.refreshTokens).toHaveBeenCalledTimes(2)
   })
 })
 
