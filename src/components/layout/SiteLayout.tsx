@@ -330,7 +330,9 @@ export default function SiteLayout() {
           <Outlet />
         </div>
       </main>
-      {/* En mobile el footer web solo vive en la landing; adentro manda el bottom nav */}
+      {/* En mobile el footer web solo vive en la landing; adentro manda el bottom nav.
+          El corte es lg (NO md) porque el bottom-nav y el top-nav del header conmutan en lg:
+          con md acá quedaba una franja 768–1023px con footer y bottom-nav a la vez. */}
       <div className={pathname === '/' ? '' : 'hidden lg:block'}>
         <Footer />
       </div>

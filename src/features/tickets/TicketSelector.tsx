@@ -179,7 +179,10 @@ export function TicketSelector({ className }: { className?: string }) {
           transición de página crea un containing block y rompería el fixed */}
       {totalQty > 0 &&
         createPortal(
-          <div className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 px-4 md:bottom-6 animate-rise">
+          // El offset inferior despeja el bottom-nav, así que conmuta en lg (donde el nav
+          // desaparece) y NO en md: con md la barra bajaba a 24px, dentro de la banda de 64px
+          // del nav, y al ir por portal a body lo tapaba — incluido el botón central de QR.
+          <div className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 px-4 lg:bottom-6 animate-rise">
             <div className="mx-auto flex max-w-xl items-center justify-between gap-4 rounded-md bg-night p-3 pl-5 text-night-ink shadow-2xl">
               <div>
                 <div className="type-serif text-lg leading-tight">{formatMoney(total)}</div>
