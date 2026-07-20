@@ -4,6 +4,7 @@ import { requirePermission } from '../middlewares/admin.js'
 import { requireDevice } from '../middlewares/device.js'
 import * as oauth from '../services/mpOAuthService.js'
 import { createCheckout } from '../services/mpCheckoutService.js'
+import { handleNotification, verificarFirma } from '../services/mpWebhookService.js'
 
 export const mpRouter = Router()
 
@@ -72,5 +73,22 @@ mpRouter.post('/payments/preference', requireDevice, async (req, res, next) => {
     res.status(201).json(await createCheckout(kind, resourceId, req.deviceId!))
   } catch (err) {
     next(err)
+  }
+})
+
+/**
+ * POST /api/v1/mp/webhook — aviso de pago de Mercado Pago.
+ * Responde 200 SIEMPRE y rápido: MP reintenta si tarda o si contesta error, y no queremos que
+ * un reintento en loop dependa de nuestra lógica. La validación real ocurre adentro.
+ */
+mpRouter.post('/mp/webhook', async (req, res) => {
+  const dataId = String((req.body as { data?: { id?: string } })?.data?.id ?? req.query['data.id'] ?? '')
+  res.status(200).end()
+  if (!dataId) return
+  const headers = req.headers as Record<string, string | undefined>
+  try {
+    await handleNotification(dataId, verificarFirma(headers, dataId))
+  } catch {
+    // Nunca propagamos: el 200 ya salió. El pago queda pendiente y MP reintenta.
   }
 })
