@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -281,8 +281,12 @@ export default function AdminLayout() {
   const [moreOpen, setMoreOpen] = useState(false)
   const { pathname } = useLocation()
 
+  // Suscribirse a la sesión con useSyncExternalStore: el GateSesion puebla `me` DESPUÉS de que
+  // este componente ya renderizó, así que leerlo una sola vez dejaba el menú con todas las
+  // secciones hasta navegar. Así se recomputa apenas la sesión se resuelve.
+  const me = useSyncExternalStore(onSessionChange, getMe)
   // Sin sesión cargada (modo demo sin backend) se muestran todas: ahí no hay roles.
-  const permisos = getMe()?.permissions
+  const permisos = me?.permissions
   const visible = (i: NavItem) => !permisos || !i.needs || permisos.includes(i.needs)
   const secciones = SECTIONS.filter(visible)
   const masOpciones = MORE.filter(visible)

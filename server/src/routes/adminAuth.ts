@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { env } from '../lib/env.js'
-import { unauthorized, forbidden, ApiError } from '../lib/errors.js'
+import { unauthorized, ApiError } from '../lib/errors.js'
 import {
   generateOtp,
   hashOtp,
@@ -12,7 +12,7 @@ import {
   OTP_TTL_MIN,
 } from '../lib/adminOtp.js'
 import { signSessionToken, sessionExpiry } from '../lib/adminSession.js'
-import { canLogin, permissionsOf, homePathFor, ROLE_LABEL } from '../domain/adminRoles.js'
+import { canLogin, permissionsOf, homePathFor } from '../domain/adminRoles.js'
 import {
   findAdminForLogin,
   issueLoginCode,
@@ -24,6 +24,7 @@ import {
   deleteAdminSession,
   touchLastLogin,
   findAdminById,
+  purgeStaleAuthRows,
 } from '../db/adminAuth.js'
 import { getMailer } from '../mail/mailer.js'
 import { otpEmail } from '../mail/templates.js'
@@ -54,40 +55,43 @@ const codigoInvalido = () =>
 const publicBase = () => (env.PUBLIC_BASE_URL ?? 'http://localhost:5173').replace(/\/$/, '')
 export const loginUrl = () => `${publicBase()}/admin/login`
 
+/** Emite y manda el código, en segundo plano. Todo el trabajo que sólo ocurre cuando el email
+ *  EXISTE vive acá, corriendo DESPUÉS de responder — ver por qué en el handler. */
+async function emitirYEnviar(user: { id: string; email: string; name: string | null; role: import('@prisma/client').AdminRole }): Promise<void> {
+  const now = new Date()
+  // Tope de códigos por ventana: frena el email-bombing y acota cuántos intentos totales puede
+  // hacer alguien probando. Si se pasa, no se emite ni se manda nada.
+  const recientes = await countCodesSince(user.id, otpWindowStart(now))
+  if (isOtpThrottled(recientes)) return
+  const code = generateOtp()
+  await issueLoginCode(user.id, hashOtp(code, user.id, pepper()), otpExpiry(now))
+  try {
+    await getMailer().send(user.email, otpEmail({ name: user.name ?? user.email, code, ttlMin: OTP_TTL_MIN }))
+  } catch (err) {
+    // Que falle el proveedor no puede tumbar nada: el código ya quedó emitido y se puede pedir otro.
+    console.error('[auth] no se pudo enviar el código:', err)
+  }
+}
+
 /**
  * POST /api/v1/auth/admin/request-otp
  *
- * Responde SIEMPRE { ok: true }, exista el email o no, esté throttleado o no. Cualquier otra
- * cosa convertiría este endpoint en una forma de averiguar quién tiene acceso al panel.
+ * Responde SIEMPRE { ok: true }, exista el email o no. Y responde ANTES de emitir o mandar nada:
+ * si el trabajo del camino "el email existe" (contar códigos, insertar, esperar al SMTP) corriera
+ * antes de responder, ese camino tardaría segundos y el del email inexistente milisegundos — y esa
+ * diferencia de tiempo delataría quién es organizador, justo lo que el cuerpo idéntico busca ocultar.
+ * Emitir y mandar quedan en segundo plano, después de cerrar la respuesta.
  */
 adminAuthRouter.post('/auth/admin/request-otp', async (req, res, next) => {
   try {
     const { email } = z.object({ email: z.string().trim().email().max(254) }).parse(req.body)
     const user = await findAdminForLogin(email)
 
-    if (user && user.status !== 'disabled' && canLogin(user.role)) {
-      const now = new Date()
-      // Tope de códigos por ventana: frena el email-bombing y acota cuántos intentos totales
-      // puede hacer alguien probando. Si se pasa, no se emite ni se manda nada — pero la
-      // respuesta es la misma de siempre.
-      const recientes = await countCodesSince(user.id, otpWindowStart(now))
-      if (!isOtpThrottled(recientes)) {
-        const code = generateOtp()
-        await issueLoginCode(user.id, hashOtp(code, user.id, pepper()), otpExpiry(now))
-        try {
-          await getMailer().send(
-            user.email,
-            otpEmail({ name: user.name ?? user.email, code, ttlMin: OTP_TTL_MIN }),
-          )
-        } catch (err) {
-          // Que falle el proveedor no puede tumbar el request ni delatar nada: el código ya
-          // quedó emitido y la persona puede pedir otro.
-          console.error('[auth] no se pudo enviar el código:', err)
-        }
-      }
-    }
-
     res.json({ ok: true })
+
+    if (user && user.status !== 'disabled' && canLogin(user.role)) {
+      void emitirYEnviar(user).catch((err) => console.error('[auth] emitirYEnviar falló:', err))
+    }
   } catch (err) {
     next(err)
   }
@@ -100,11 +104,12 @@ adminAuthRouter.post('/auth/admin/verify-otp', async (req, res, next) => {
       .object({ email: z.string().trim().email().max(254), code: z.string().trim().regex(/^\d{6}$/) })
       .parse(req.body)
 
+    // Todo lo que no sea un canje válido responde el MISMO error genérico: email inexistente,
+    // dado de baja, rol sin acceso, sin código vivo, código equivocado, vencido, agotado. Un
+    // mensaje o un status distinto para cada caso volvería a convertir esto en un oráculo de
+    // enumeración (el 429 de "demasiados intentos" delataba que la cuenta existía y estaba activa).
     const user = await findAdminForLogin(email)
-    if (!user || user.status === 'disabled') throw codigoInvalido()
-    if (!canLogin(user.role)) {
-      throw forbidden('ROLE_NOT_ENABLED', `El rol ${ROLE_LABEL[user.role]} todavía no tiene acceso al panel.`)
-    }
+    if (!user || user.status === 'disabled' || !canLogin(user.role)) throw codigoInvalido()
 
     const record = await latestLiveCode(user.id)
     if (!record) throw codigoInvalido()
@@ -112,11 +117,9 @@ adminAuthRouter.post('/auth/admin/verify-otp', async (req, res, next) => {
     const now = new Date()
     const verdict = verifyOtp(record, code, { now, userId: user.id, pepper: pepper() })
     if (verdict !== 'ok') {
-      // Sólo un código equivocado gasta un intento: si ya venció o se usó, no hay nada que gastar.
+      // Sólo un código equivocado gasta un intento: si ya venció, se usó o se agotó, no hay
+      // nada que gastar. El mensaje de codigoInvalido() ya guía a pedir uno nuevo.
       if (verdict === 'mismatch') await bumpAttempts(record.id)
-      if (verdict === 'too_many_attempts') {
-        throw new ApiError(429, 'TOO_MANY_ATTEMPTS', 'Demasiados intentos. Pedí un código nuevo.')
-      }
       throw codigoInvalido()
     }
 
@@ -139,6 +142,10 @@ adminAuthRouter.post('/auth/admin/verify-otp', async (req, res, next) => {
       },
       home: homePathFor(user.role),
     })
+
+    // Mantenimiento oportunista, después de responder (no agrega latencia al login): purga
+    // sesiones vencidas y códigos ya muertos para que esas tablas no crezcan sin fin.
+    void purgeStaleAuthRows(now).catch((err) => console.error('[auth] purga falló:', err))
   } catch (err) {
     next(err)
   }

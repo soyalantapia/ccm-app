@@ -9,7 +9,7 @@ import {
   findAdminForLogin,
   createInvitedAdmin,
   updateAdminUser,
-  countActiveOwners,
+  updateLeavingOwner,
   deleteAllSessionsOf,
 } from '../db/adminAuth.js'
 import { getMailer } from '../mail/mailer.js'
@@ -151,24 +151,29 @@ adminTeamRouter.patch('/admin/team/:id', requirePermission('team:manage'), async
       throw new ApiError(422, 'SELF_LOCKOUT', 'No podés quitarte a vos mismo el acceso de dueño.')
     }
 
-    // ¿Este cambio deja a la plataforma sin ningún dueño que pueda entrar?
-    const dejaDeSerOwner = target.role === 'OWNER' && (patch.status === 'disabled' || (patch.role != null && patch.role !== 'OWNER'))
+    const datos = {
+      role: patch.role as (typeof ROLES_ASIGNABLES)[number] | undefined,
+      status: patch.status,
+      name: patch.name,
+    }
+
+    // ¿Este cambio deja de mantener a alguien como OWNER activo? Si sí, el update va por la vía
+    // atómica que re-valida "queda otro owner" DENTRO del propio statement — si no, dos bajas
+    // concurrentes podrían dejar la plataforma sin ningún dueño (el chequeo separado tenía TOCTOU).
+    const dejaDeSerOwner =
+      target.role === 'OWNER' && (patch.status === 'disabled' || (patch.role != null && patch.role !== 'OWNER'))
     if (dejaDeSerOwner) {
-      const otros = await countActiveOwners(target.id)
-      if (otros === 0) {
+      const ok = await updateLeavingOwner(target.id, datos)
+      if (!ok) {
         throw new ApiError(
           422,
           'LAST_OWNER',
           'Es el único dueño con acceso. Nombrá a otro antes de cambiarle el rol o darlo de baja.',
         )
       }
+    } else {
+      await updateAdminUser(target.id, datos)
     }
-
-    await updateAdminUser(target.id, {
-      role: patch.role as (typeof ROLES_ASIGNABLES)[number] | undefined,
-      status: patch.status,
-      name: patch.name,
-    })
 
     // Dar de baja tiene que cortar el acceso YA. El guard igual lo rechazaría en el request
     // siguiente (lee el estado de la base), pero borrar las sesiones deja el rastro limpio y

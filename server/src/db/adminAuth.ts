@@ -56,11 +56,20 @@ export async function deleteAllSessionsOf(userId: string): Promise<number> {
   return count
 }
 
-/** Limpia sesiones vencidas. No es crítico (validateSession ya las rechaza), pero evita que la
- *  tabla crezca sin fin. */
-export async function purgeExpiredSessions(now: Date): Promise<number> {
-  const { count } = await prisma.adminSession.deleteMany({ where: { expiresAt: { lte: now } } })
-  return count
+/**
+ * Barrido de mantenimiento: borra sesiones vencidas y códigos ya muertos (consumidos o vencidos).
+ * No es crítico para la seguridad —validateSession y verifyOtp ya rechazan lo vencido— pero sin
+ * esto AdminLoginCode y AdminSession crecen para siempre. Se llama de forma oportunista tras cada
+ * login, así que se mantiene solo sin necesitar un cron.
+ */
+export async function purgeStaleAuthRows(now: Date): Promise<{ sessions: number; codes: number }> {
+  const [s, c] = await Promise.all([
+    prisma.adminSession.deleteMany({ where: { expiresAt: { lte: now } } }),
+    prisma.adminLoginCode.deleteMany({
+      where: { OR: [{ consumedAt: { not: null } }, { expiresAt: { lte: now } }] },
+    }),
+  ])
+  return { sessions: s.count, codes: c.count }
 }
 
 /* ─── Códigos de un solo uso ─── */
@@ -152,14 +161,30 @@ export async function updateAdminUser(
   return prisma.adminUser.update({ where: { id }, data: patch })
 }
 
-/** Cuántos OWNER quedan en condiciones de entrar. Es la red que evita quedarse sin nadie
- *  que pueda administrar el equipo. */
-export async function countActiveOwners(exceptUserId?: string): Promise<number> {
-  return prisma.adminUser.count({
-    where: {
-      role: 'OWNER',
-      status: { not: 'disabled' },
-      ...(exceptUserId ? { id: { not: exceptUserId } } : {}),
-    },
-  })
+/**
+ * Actualiza a alguien que ESTÁ DEJANDO de ser OWNER (baja o cambio de rol), pero sólo si el
+ * cambio no deja la plataforma sin ningún OWNER activo. Devuelve true si actualizó, false si lo
+ * habría dejado sin owners.
+ *
+ * La invariante ("queda otro owner activo") se re-chequea DENTRO del mismo UPDATE con un EXISTS,
+ * en un único statement atómico. Contarla antes y actualizar después —dos statements— tenía un
+ * TOCTOU: dos bajas concurrentes del anteúltimo y el último owner pasaban ambas el count y dejaban
+ * la plataforma con cero owners (reproducido: 20/25 corridas). Con el chequeo adentro del UPDATE,
+ * Postgres serializa las dos escrituras y la segunda no encuentra "otro owner" → no afecta filas.
+ */
+export async function updateLeavingOwner(
+  id: string,
+  patch: { role?: AdminRole; status?: 'invited' | 'active' | 'disabled'; name?: string },
+): Promise<boolean> {
+  const affected = await prisma.$executeRaw`
+    UPDATE "AdminUser"
+    SET role   = COALESCE(${patch.role ?? null}::"AdminRole", role),
+        status = COALESCE(${patch.status ?? null}::"AdminUserStatus", status),
+        name   = COALESCE(${patch.name ?? null}, name)
+    WHERE id = ${id}
+      AND EXISTS (
+        SELECT 1 FROM "AdminUser"
+        WHERE role = 'OWNER' AND status <> 'disabled' AND id <> ${id}
+      )`
+  return affected > 0
 }

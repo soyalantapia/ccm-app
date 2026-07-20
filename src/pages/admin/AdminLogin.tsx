@@ -103,11 +103,9 @@ export default function AdminLogin() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setError(
-          data?.error?.code === 'TOO_MANY_ATTEMPTS'
-            ? 'Demasiados intentos. Pedí un código nuevo.'
-            : 'El código no es válido, ya venció o ya se usó.',
-        )
+        // El backend responde lo MISMO para todos los motivos (equivocado, vencido, usado,
+        // agotado, cuenta inexistente): distinguirlos acá delataría qué emails son del equipo.
+        setError('El código no es válido, ya venció o ya se usó. Pedí uno nuevo.')
         return
       }
       setAdminToken(data.token)

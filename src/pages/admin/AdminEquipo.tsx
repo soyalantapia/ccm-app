@@ -4,7 +4,7 @@ import { Badge, Button, Field, Input, Modal, Select, Stat, toast } from '../../c
 import type { BadgeTone } from '../../components/ui/Badge'
 import { CorePageHeader } from '../../features/admin/CorePageHeader'
 import { apiBase } from '../../data/store'
-import { adminAuthHeaders, getMe } from '../../data/adminSession'
+import { adminAuthHeaders, getMe, clearSession } from '../../data/adminSession'
 import { ROLE_LABEL, ROLE_BLURB, type AdminRole } from '../../data/adminRoles'
 
 /**
@@ -49,6 +49,9 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { 'Content-Type': 'application/json', ...adminAuthHeaders(), ...(init?.headers ?? {}) },
   })
+  // Sesión vencida o revocada a mitad de uso: limpiar el estado local. El GateSesion del layout,
+  // suscripto a este cambio, redirige al login — mismo criterio que el cliente HTTP central.
+  if (res.status === 401) clearSession()
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data?.error?.message ?? 'No pudimos completar la acción.')
   return data as T
