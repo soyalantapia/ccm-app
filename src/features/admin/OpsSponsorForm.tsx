@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Button, Field, Input, Select, Sheet, Textarea, toast } from '../../components/ui'
+import { Button, Field, Img, Input, Select, Sheet, Textarea, toast } from '../../components/ui'
 import { store } from '../../data/store'
 import { newId } from '../../lib/storage'
 import type { AdSlot, Sponsor, SponsorCreative } from '../../data/types'
@@ -194,6 +194,11 @@ export function OpsSponsorForm({ open, sponsor, onClose }: Props) {
             onChange={set('banner')}
             placeholder="https://… o img/sponsors/marca.svg"
           />
+          {f.banner.trim() && (
+            <div className="mt-2.5 overflow-hidden rounded-sm border border-line">
+              <Img src={f.banner.trim()} alt="" ratio="3/1" className="w-full" />
+            </div>
+          )}
         </Field>
 
         <div className="space-y-3 border-t border-line pt-4">
