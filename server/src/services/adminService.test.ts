@@ -112,3 +112,40 @@ describe('updateGallery — preserva la identidad de las fotos que sobreviven', 
     expect(tx.photo.update).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * Ninguna capa de la cadena admin acotaba los precios: ni el input, ni el submit
+ * (`Number(raw)` crudo), ni la ruta (el helper `create` solo valida que venga un id). Las tres
+ * columnas price del schema son Int?, así que un decimal, un negativo o un número fuera del
+ * rango de int4 salían como 500 en vez de un 400 — o se persistía un precio absurdo que
+ * después se le muestra al público en la ficha del catálogo.
+ */
+describe('updatePlan — el precio se valida antes de llegar a una columna Int', () => {
+  const plan = { ticketPlan: { update: vi.fn() } }
+
+  it('acepta un precio normal y lo redondea a entero', async () => {
+    const { updatePlan } = await import('./adminService.js')
+    Object.assign(mockPrisma, plan)
+    await updatePlan('general' as never, { price: 15000.4 })
+    expect(plan.ticketPlan.update.mock.calls[0][0].data.price).toBe(15000)
+  })
+
+  it('acepta null (precio pendiente)', async () => {
+    const { updatePlan } = await import('./adminService.js')
+    Object.assign(mockPrisma, plan)
+    plan.ticketPlan.update.mockClear()
+    await updatePlan('general' as never, { price: null })
+    expect(plan.ticketPlan.update.mock.calls[0][0].data.price).toBeNull()
+  })
+
+  it('RECHAZA negativos, NaN, Infinity y valores fuera del rango de int4', async () => {
+    const { updatePlan } = await import('./adminService.js')
+    Object.assign(mockPrisma, plan)
+    for (const malo of [-1, NaN, Infinity, -Infinity, 3_000_000_000, 'abc']) {
+      await expect(
+        updatePlan('general' as never, { price: malo as never }),
+        `${String(malo)} debería rechazarse`,
+      ).rejects.toThrow()
+    }
+  })
+})

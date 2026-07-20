@@ -23,6 +23,9 @@ type Form = {
   platform: string
   sponsorId: string
   publishedAt: string
+  /** Gating de contenido premium. Sin esto en el Form nunca entraba al patch y el organizador
+   *  no podía marcar (ni desmarcar) un video como exclusivo de Socios desde el panel. */
+  socioOnly: boolean
 }
 
 const empty: Form = {
@@ -33,6 +36,7 @@ const empty: Form = {
   platform: '',
   sponsorId: '',
   publishedAt: '',
+  socioOnly: false,
 }
 
 function fromContent(c: ContentItem): Form {
@@ -44,6 +48,7 @@ function fromContent(c: ContentItem): Form {
     platform: c.platform ?? '',
     sponsorId: c.sponsorId ?? '',
     publishedAt: c.publishedAt.slice(0, 10),
+    socioOnly: c.socioOnly ?? false,
   }
 }
 
@@ -92,6 +97,7 @@ export function OpsContentForm({ open, content, onClose }: Props) {
       platform: f.platform || undefined,
       sponsorId: f.sponsorId || undefined,
       publishedAt: f.publishedAt,
+      socioOnly: f.socioOnly, // booleano explícito: destildarlo debe llegar como false
     }
     if (content) {
       store.updateContent(content.id, data)
@@ -160,6 +166,18 @@ export function OpsContentForm({ open, content, onClose }: Props) {
             <Select options={sponsorOptions} value={f.sponsorId} onChange={set('sponsorId')} />
           </Field>
         </div>
+
+        <label className="flex cursor-pointer items-center gap-2.5 rounded-md border border-line bg-surface p-3">
+          <input
+            type="checkbox"
+            checked={f.socioOnly}
+            onChange={(e) => setF((prev) => ({ ...prev, socioOnly: e.target.checked }))}
+            className="size-4 accent-accent"
+          />
+          <span className="text-[15px] text-ink">
+            Exclusivo para Socios CCM <span className="text-ink-soft">— el video se muestra con candado</span>
+          </span>
+        </label>
 
         {error && <p className="text-xs text-danger">{error}</p>}
 
