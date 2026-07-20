@@ -39,6 +39,7 @@ import type {
   PlanId,
   ApplicationStatus,
   AnalyticsEvent,
+  AdminStats,
 } from '../types'
 
 interface BufferedEvent {
@@ -101,6 +102,10 @@ export class RemoteDataStore extends LocalDataStore {
   private adminNotas?: Nota[]
   private adminContents?: ContentItem[] // /admin/contents: sin gate de socio (el panel debe ver el youtubeId)
   private analytics?: AnalyticsEvent[] // analítica real cross-device (GET /admin/analytics), P1
+  // Métricas del Dashboard (GET /admin/stats). Sin fallback al seed a propósito.
+  private adminStats?: AdminStats
+  private statsInflight = false
+  private statsError = false
   private generalCounts = new Map<string, number>() // inscripciones generales server-wide por evento (#13)
   private generalInflight = new Set<string>()
   /** Negative cache: ms timestamp del último fallo de general-count por eventId. */
@@ -505,6 +510,44 @@ export class RemoteDataStore extends LocalDataStore {
   }
   override getAnalytics(): AnalyticsEvent[] {
     return this.analytics ?? super.getAnalytics()
+  }
+
+  /**
+   * Métricas del Dashboard (GET /admin/stats), calculadas por el backend sobre las tablas.
+   *
+   * A diferencia del resto de las lecturas, esta NO cae a super cuando no hay dato: el
+   * seed daría números fabricados presentados como reales. Devolver null deja que el
+   * Dashboard distinga "cargando" de "falló" de "no hay nada".
+   */
+  override getAdminStats(): AdminStats | null {
+    return this.adminStats ?? null
+  }
+
+  /** Re-pide las métricas. La llama el Dashboard al montar, así cada entrada trae datos
+   *  frescos sin necesidad de polling ni de recargar la página entera. */
+  override refetchAdminStats(): void {
+    if (this.statsInflight) return
+    this.statsInflight = true
+    this.api
+      .get<AdminStats>('/admin/stats')
+      .then((s) => {
+        this.adminStats = s
+        this.statsError = false
+      })
+      .catch(() => {
+        // El error se EXPONE (no se traga en un catch vacío como hacía hydrateAnalytics):
+        // si el backend no responde, el Dashboard tiene que decirlo, no mostrar ceros.
+        this.statsError = true
+      })
+      .finally(() => {
+        this.statsInflight = false
+        bus.emit('adminStats')
+      })
+  }
+
+  /** true si el último intento falló → el Dashboard muestra el error en vez de un cero. */
+  override statsFailed(): boolean {
+    return this.statsError
   }
 
   private hydrateConvocatorias(): void {

@@ -351,3 +351,52 @@ export interface AnalyticsEvent {
   /** Históricos del seed (para que el dashboard no nazca vacío). */
   seed?: boolean
 }
+
+/* ─── Métricas del panel ─── */
+
+/**
+ * Respuesta de GET /admin/stats. Cada número sale de un COUNT sobre la tabla que es
+ * fuente de verdad, calculado en el servidor y en un único instante — NO de contar
+ * eventos de analytics en el navegador, que es lo que hacía el Dashboard anterior.
+ */
+export interface AdminStats {
+  /** Instante del cálculo. Alimenta el "actualizado hace X". */
+  generatedAt: string
+  kpis: {
+    registrados: number
+    inscripciones: number
+    socios: number
+    /** Pesos enteros. */
+    ingresoSocios: number
+    /** Sólo órdenes cobradas; las trabadas van en plataTrabada. */
+    ordenesConfirmadas: number
+    postulaciones: number
+    descargas: number
+  }
+  postulacionesPendientes: {
+    total: number
+    masAntiguaDias: number | null
+    items: { id: string; convocatoriaTitulo: string; diasEsperando: number; ts: string }[]
+  }
+  plataTrabada: {
+    montoTotal: number
+    cantidad: number
+    porEstado: { status: string; cantidad: number; monto: number }[]
+  }
+  bloquesFlojos: {
+    items: {
+      id: string
+      titulo: string
+      eventoTitulo: string
+      dia: string
+      capacity: number
+      taken: number
+      faltan: number
+      ocupacion: number
+    }[]
+  }
+  convocatoriasPorCerrar: {
+    items: { id: string; slug: string; titulo: string; deadline: string; diasRestantes: number; postulaciones: number }[]
+  }
+  sponsors: { items: { sponsorId: string; nombre: string; nivel: string | null; descargas: number }[] }
+}

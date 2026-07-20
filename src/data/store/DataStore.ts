@@ -1,6 +1,7 @@
 import type {
   AdCampaign,
   AnalyticsEvent,
+  AdminStats,
   Application,
   ApplicationStatus,
   CatalogProfile,
@@ -202,6 +203,21 @@ export interface DataStore {
   /* Analytics */
   track(event: string, payload?: Record<string, unknown>): void
   getAnalytics(): AnalyticsEvent[]
+
+  /**
+   * Métricas del Dashboard, calculadas por el BACKEND sobre las tablas de negocio.
+   *
+   * Devuelve null cuando no hay backend (modo demo) o cuando el fetch todavía no
+   * resolvió. Deliberadamente NO cae al seed: un número fabricado presentado como
+   * real es peor que un estado vacío — el Dashboard anterior mostraba ~1200
+   * registrados inventados cuando el fetch fallaba, y nadie podía notarlo.
+   */
+  getAdminStats(): AdminStats | null
+  /** Pide las métricas de nuevo. El Dashboard la llama al montar: cada entrada trae datos frescos. */
+  refetchAdminStats(): void
+  /** true si el último intento falló. Distingue "el backend no respondió" de "no hay datos":
+   *  se ven igual (ambos sin números) y significan lo contrario. */
+  statsFailed(): boolean
 
   /**
    * Re-hidrata los recursos con vista admin (notas/banners/beneficios) tras loguear el

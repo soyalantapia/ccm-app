@@ -23,7 +23,6 @@ import {
 import type { AnalyticsEvent, PlanId, ProfileFieldKey } from '../../data/types'
 import type { DataStore } from '../../data/store'
 import { PROFILE_FIELD_LABELS, formatMoney } from './coreFormat'
-import { csvCell } from '../../lib/csv'
 
 function str(value: unknown): string | undefined {
   return typeof value === 'string' && value ? value : undefined
@@ -132,33 +131,4 @@ export function describeAnalyticsEvent(
       return { icon: Activity, label: pretty.charAt(0).toUpperCase() + pretty.slice(1) }
     }
   }
-}
-
-/* ─── Export CSV (PRD §10.1) ───────────────────────────────────────── */
-
-/** Genera el CSV de analytics en memoria y dispara la descarga (blob). */
-export function downloadAnalyticsCsv(events: AnalyticsEvent[]): void {
-  const header = ['id', 'event', 'ts', 'device_id', 'origin', 'payload']
-  const rows = events.map((e) =>
-    [
-      e.id,
-      e.event,
-      e.ts,
-      e.deviceId ?? '',
-      e.seed ? 'seed' : 'demo',
-      e.payload ? JSON.stringify(e.payload) : '',
-    ]
-      .map(csvCell)
-      .join(','),
-  )
-  const csv = '\uFEFF' + [header.join(','), ...rows].join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `ccm-analytics-${new Date().toISOString().slice(0, 10)}.csv`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
 }
