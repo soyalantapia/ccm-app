@@ -780,3 +780,20 @@ model AdminLoginCode {
   // los emitidos en la ventana de rate limit.
   @@index([userId, createdAt])
 }
+
+// ─────────────────────────────────────────────────────────
+//  MERCADO PAGO
+// ─────────────────────────────────────────────────────────
+
+/// Conexión OAuth con Mercado Pago. Una sola fila (id "default"): CCM cobra en UNA cuenta.
+model MpConnection {
+  id           String   @id @default("default")
+  mpUserId     String // la cuenta de MP a la que entra la plata
+  accessToken  String
+  refreshToken String
+  publicKey    String?
+  expiresAt    DateTime // vencimiento del access token
+  scope        String?
+  connectedAt  DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

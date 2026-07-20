@@ -50,8 +50,12 @@ const schema = z.object({
   // Email del primer OWNER: se crea al arrancar si todavía no hay ninguno (bootstrap).
   ADMIN_BOOTSTRAP_EMAIL: z.string().email().optional(),
 
-  // Mercado Pago (fases C/D/F)
-  MP_ACCESS_TOKEN: z.string().optional(),
+  // Mercado Pago. La app se crea en el panel de developers; sin estas tres, /admin/mp/connect
+  // responde 503 y la venta sigue con el link manual.
+  MP_CLIENT_ID: z.string().optional(),
+  MP_CLIENT_SECRET: z.string().optional(),
+  MP_REDIRECT_URI: z.string().optional(),
+  MP_ACCESS_TOKEN: z.string().optional(), // ⏳ solo para el plan B (token pegado, sin OAuth)
   MP_WEBHOOK_SECRET: z.string().optional(),
 
   // Object storage (fase E — S3-compatible, Cloudflare R2, etc.)
