@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button, Card, Eyebrow, SectionTitle, Sheet, toast } from '../../components/ui'
+import { IS_REMOTE } from '../../data/store'
 import { removeKey } from '../../lib/storage'
 import { OpsThemeEditor } from '../../features/admin/OpsThemeEditor'
 import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
@@ -53,8 +54,9 @@ export default function AdminConfiguracion() {
         <Eyebrow>Demo</Eyebrow>
         <Card className="mt-5 max-w-xl p-5 md:p-6">
           <p className="text-[15px] leading-relaxed text-ink-soft">
-            Demo local · los datos viven en este dispositivo; la sincronización en la nube llega en
-            Fase 1.
+            {IS_REMOTE
+              ? 'Conectado al sistema: lo que carga tu equipo se guarda en la nube y lo ve todo el público.'
+              : 'Demo local · sin backend: los datos viven solo en este dispositivo.'}
           </p>
           <div className="mt-5 border-t border-line pt-5">
             <OpsDangerButton onClick={() => setConfirming(true)}>
