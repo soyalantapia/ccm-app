@@ -137,6 +137,15 @@ adminRouter.patch('/admin/plans/:id', async (req, res, next) => {
   }
 })
 
+/* ─── Contenido (vista del panel, sin gate de socio) ─── */
+adminRouter.get('/admin/contents', async (_req, res, next) => {
+  try {
+    res.json(await catalogService.getAdminContents())
+  } catch (err) {
+    next(err)
+  }
+})
+
 /* ─── Upload de archivos (Volume Railway) ─── */
 // POST /admin/upload  Content-Type: multipart/form-data  campo: "file" (imagen ≤5 MB)
 // Devuelve { url } que el front pega en el campo de imagen.

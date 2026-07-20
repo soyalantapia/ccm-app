@@ -166,6 +166,8 @@ export interface DataStore {
   getAdminBanners(): Banner[]
   getAdminNotas(): Nota[]
   getAdminBenefits(): Benefit[]
+  /** Contenido para el panel: sin el gate de socio (el organizador debe ver el youtubeId real). */
+  getAdminContents(): ContentItem[]
   createBanner(input: NewBanner): Banner
   updateBanner(id: string, patch: Partial<Banner>): void
   deleteBanner(id: string): void
