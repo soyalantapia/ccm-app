@@ -580,6 +580,11 @@ export class RemoteDataStore extends LocalDataStore {
     return this.statsError
   }
 
+  /** Esta clase solo se instancia si hay VITE_API_URL, así que si existe, hay backend. */
+  override hasBackend(): boolean {
+    return true
+  }
+
   private hydrateConvocatorias(): void {
     this.refetch<Convocatoria[]>('/admin/convocatorias', (v) => (this.convocatoriasList = v), 'convocatorias')
   }

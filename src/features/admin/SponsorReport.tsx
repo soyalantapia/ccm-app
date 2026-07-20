@@ -225,8 +225,9 @@ export function SponsorReport({ sponsor, onClose }: SponsorReportProps) {
                 <span className="rounded-sm border border-line px-2 py-0.5 text-[10px] text-ink-soft">
                   {sponsor.level}
                 </span>
+                {/* accent-strong: texto de 10px, el acento puro no llega a 4,5:1 */}
                 {sponsor.exclusive && (
-                  <span className="rounded-sm bg-accent px-2 py-0.5 text-[10px] text-accent-ink">
+                  <span className="rounded-sm bg-accent-strong px-2 py-0.5 text-[10px] text-accent-ink">
                     Exclusividad de rubro
                   </span>
                 )}
