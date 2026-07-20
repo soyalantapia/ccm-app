@@ -17,15 +17,15 @@ import { accessGrantedEmail } from '../mail/templates.js'
 import { loginUrl } from './adminAuth.js'
 
 /**
- * Gestión del equipo. Todo acá exige `team:manage`, que sólo tiene OWNER.
+ * Gestión del equipo. Cada ruta repite `requirePermission('team:manage')` en vez de usar un
+ * alias: el permiso tiene que LEERSE al lado de la ruta, y adminGuards.test.ts lo verifica
+ * literalmente — un alias mal definido sería invisible para esa verificación.
  *
  * Invitar es simplemente crear a la persona y avisarle por mail. No hay token de invitación:
  * el mail la manda al login de siempre y ahí pide su código como cualquier otro día. Un único
  * mecanismo de entrada, sin una segunda credencial que expirar, revocar y poder filtrar.
  */
 export const adminTeamRouter = Router()
-
-const soloOwner = requirePermission('team:manage')
 
 const rolSchema = z.enum(ROLES_ASIGNABLES as unknown as [string, ...string[]])
 
@@ -50,7 +50,7 @@ async function avisarAcceso(
 }
 
 /** GET /admin/team/roles — catálogo para el selector del panel. */
-adminTeamRouter.get('/admin/team/roles', soloOwner, (_req, res) => {
+adminTeamRouter.get('/admin/team/roles', requirePermission('team:manage'), (_req, res) => {
   res.json({
     roles: ROLES_ASIGNABLES.map((id) => ({
       id,
@@ -62,7 +62,7 @@ adminTeamRouter.get('/admin/team/roles', soloOwner, (_req, res) => {
 })
 
 /** GET /admin/team — el equipo. */
-adminTeamRouter.get('/admin/team', soloOwner, async (_req, res, next) => {
+adminTeamRouter.get('/admin/team', requirePermission('team:manage'), async (_req, res, next) => {
   try {
     res.json(await listAdminUsers())
   } catch (err) {
@@ -71,7 +71,7 @@ adminTeamRouter.get('/admin/team', soloOwner, async (_req, res, next) => {
 })
 
 /** POST /admin/team/invite — dar de alta a alguien y avisarle. */
-adminTeamRouter.post('/admin/team/invite', soloOwner, async (req, res, next) => {
+adminTeamRouter.post('/admin/team/invite', requirePermission('team:manage'), async (req, res, next) => {
   try {
     const input = z
       .object({
@@ -98,7 +98,7 @@ adminTeamRouter.post('/admin/team/invite', soloOwner, async (req, res, next) => 
 })
 
 /** POST /admin/team/:id/resend — reenviar el aviso de acceso. */
-adminTeamRouter.post('/admin/team/:id/resend', soloOwner, async (req, res, next) => {
+adminTeamRouter.post('/admin/team/:id/resend', requirePermission('team:manage'), async (req, res, next) => {
   try {
     const user = await findAdminById(req.params.id)
     if (!user) throw notFound('USER_NOT_FOUND', 'No existe esa persona en el equipo.')
@@ -115,7 +115,7 @@ adminTeamRouter.post('/admin/team/:id/resend', soloOwner, async (req, res, next)
  *  - nadie puede quitarse a sí mismo el acceso (el error clásico de un solo click),
  *  - no se puede dejar la plataforma sin ningún OWNER en condiciones de entrar.
  */
-adminTeamRouter.patch('/admin/team/:id', soloOwner, async (req, res, next) => {
+adminTeamRouter.patch('/admin/team/:id', requirePermission('team:manage'), async (req, res, next) => {
   try {
     const patch = z
       .object({
