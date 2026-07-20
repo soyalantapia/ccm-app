@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link, NavLink, Navigate, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -19,11 +19,12 @@ import {
   ClipboardList,
   Users,
   ShieldCheck,
+  LogOut,
 } from 'lucide-react'
 import { Sheet } from '../ui'
 import { IS_REMOTE, apiBase, store } from '../../data/store'
-import { hasAdminToken, adminAuthHeaders, setMe, clearSession, getMe } from '../../data/adminSession'
-import type { Permission } from '../../data/adminRoles'
+import { hasAdminToken, adminAuthHeaders, setMe, clearSession, getMe, onSessionChange } from '../../data/adminSession'
+import { ROLE_LABEL, type Permission } from '../../data/adminRoles'
 
 // Cada sección declara qué permiso la habilita. `needs: undefined` = la ve cualquiera que
 // haya entrado. Esconder acá es SOLO cosmética: quien decide es el backend, que responde 403
@@ -98,21 +99,39 @@ function GateSesion({ children }: { children: ReactNode }) {
     }
     let vigente = true
     fetch(`${apiBase}/api/v1/auth/admin/me`, { headers: adminAuthHeaders() })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => {
+      .then(async (r) => {
         if (!vigente) return
-        setMe(d.user)
-        setEstado('adentro')
-        // Con la sesión confirmada, traer las vistas admin (borradores, ocultos, códigos).
-        store.refetchAdminScoped()
+        if (r.ok) {
+          const d = await r.json()
+          setMe(d.user)
+          setEstado('adentro')
+          // Con la sesión confirmada, traer las vistas admin (borradores, ocultos, códigos).
+          store.refetchAdminScoped()
+          return
+        }
+        // 401/403 = la sesión NO sirve (venció o fue revocada): al login.
+        // Cualquier otro código o un fallo de red NO son motivo para echar a nadie — el token
+        // puede estar perfecto y ser el backend el que está caído. En ese caso dejamos entrar
+        // con lo que haya en caché en vez de mandar a un login que tampoco va a andar.
+        if (r.status === 401 || r.status === 403) {
+          clearSession()
+          setEstado('afuera')
+        } else {
+          setEstado('adentro')
+        }
       })
       .catch(() => {
-        if (!vigente) return
-        clearSession() // venció o fue revocada
-        setEstado('afuera')
+        // Error de RED (backend caído, sin conexión). No es una sesión inválida: no echamos.
+        if (vigente) setEstado('adentro')
       })
+    // Si la sesión se pierde mientras se usa el panel (un 401 en cualquier acción llama a
+    // clearSession), reaccionar: sin token → al login en el próximo render.
+    const off = onSessionChange(() => {
+      if (vigente && IS_REMOTE && !hasAdminToken()) setEstado('afuera')
+    })
     return () => {
       vigente = false
+      off()
     }
   }, [])
 
@@ -125,6 +144,51 @@ function GateSesion({ children }: { children: ReactNode }) {
   }
   if (estado === 'afuera') return <Navigate to="/admin/login" replace />
   return <>{children}</>
+}
+
+/**
+ * Quién está usando el panel, y cómo salir.
+ *
+ * Cerrar sesión avisa al servidor para que borre la fila —eso es lo que revoca el token de
+ * verdad— y recién después limpia lo local. Si el aviso falla (sin red), se limpia igual:
+ * peor sería dejar a la persona adentro creyendo que salió.
+ */
+function QuienSoy() {
+  const navigate = useNavigate()
+  const [yo, setYo] = useState(getMe)
+  const [saliendo, setSaliendo] = useState(false)
+
+  // El estado vive en memoria del módulo: hay que re-leerlo cuando el gate lo puebla.
+  useEffect(() => onSessionChange(() => setYo(getMe())), [])
+
+  if (!IS_REMOTE || !yo) return null
+
+  async function salir() {
+    setSaliendo(true)
+    try {
+      await fetch(`${apiBase}/api/v1/auth/admin/logout`, { method: 'POST', headers: adminAuthHeaders() })
+    } catch {
+      /* sin red: se limpia igual, la sesión vence sola en el server */
+    }
+    clearSession()
+    navigate('/admin/login', { replace: true })
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="min-w-0">
+        <p className="truncate text-[11px] font-medium text-night-ink/80">{yo.name || yo.email}</p>
+        <p className="truncate text-[10px] text-night-ink/40">{ROLE_LABEL[yo.role]}</p>
+      </div>
+      <button
+        onClick={salir}
+        disabled={saliendo}
+        className="eyebrow flex items-center gap-2 text-[9px] text-night-ink/45 transition-colors hover:text-night-ink disabled:opacity-50"
+      >
+        <LogOut size={11} /> {saliendo ? 'Saliendo…' : 'Cerrar sesión'}
+      </button>
+    </div>
+  )
 }
 
 /** Pestaña plana (lateral) de la bottom nav. */
@@ -262,6 +326,7 @@ export default function AdminLayout() {
             })}
           </nav>
           <div className="space-y-3 border-t border-night-soft pt-4">
+            <QuienSoy />
             <Link
               to="/"
               className="eyebrow flex items-center gap-2 text-[9px] text-night-ink/45 transition-colors hover:text-night-ink"

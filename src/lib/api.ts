@@ -1,5 +1,5 @@
 import { getDeviceToken, clearDeviceCredentials } from './identity'
-import { getAdminToken } from '../data/adminSession'
+import { getAdminToken, clearSession } from '../data/adminSession'
 
 /**
  * Cliente HTTP del backend de CCM (Fase 1). Manda el token firmado del dispositivo en
@@ -43,6 +43,10 @@ export function createApi(apiBase: string): ApiClient {
       // próximo arranque re-emita identidad (antes ensureDeviceToken solo chequeaba existencia, no
       // validez → el device quedaba degradado para siempre). No tocar /admin (usa Bearer aparte).
       if (res.status === 401 && deviceToken && !path.startsWith('/admin')) clearDeviceCredentials()
+      // Sesión de organizador vencida o revocada en medio del uso: limpiar el estado local. El
+      // GateSesion del layout, al re-renderizar sin token, redirige al login — sin acoplar este
+      // cliente HTTP al router. clearSession avisa a los suscriptores (el "quién soy" del sidebar).
+      if (res.status === 401 && path.startsWith('/admin') && getAdminToken()) clearSession()
       throw new Error(`API ${method} ${path} → ${res.status}`)
     }
     return (res.status === 204 ? undefined : await res.json()) as T
