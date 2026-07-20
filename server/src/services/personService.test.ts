@@ -271,17 +271,24 @@ describe('listPeople', () => {
     expect((await listPeople({ q: 'nadie-con-este-texto' })).items).toHaveLength(0)
   })
 
-  it('encuentra a alguien que NO está entre los más recientes (el filtro va en SQL)', async () => {
-    const viejo = await prisma.device.create({ data: { publicId: `old-${Date.now()}` } })
-    await saveFields(viejo.id, { email: 'perdida@x.com', firstName: 'Perdida' }, 'test')
-    // 60 personas más nuevas la empujan fuera de la primera página (limit 50)
-    for (let i = 0; i < 60; i++) {
-      const d = await prisma.device.create({ data: { publicId: `pad-${Date.now()}-${i}` } })
-      await saveFields(d.id, { email: `pad${i}-${Date.now()}@x.com` }, 'test')
-    }
-    const r = await listPeople({ q: 'Perdida' })
-    expect(r.items.map((x) => x.email)).toContain('perdida@x.com')
-  })
+  it(
+    'encuentra a alguien que NO está entre los más recientes (el filtro va en SQL)',
+    async () => {
+      const viejo = await prisma.device.create({ data: { publicId: `old-${Date.now()}` } })
+      await saveFields(viejo.id, { email: 'perdida@x.com', firstName: 'Perdida' }, 'test')
+      // 60 personas más nuevas la empujan fuera de la primera página (limit 50)
+      for (let i = 0; i < 60; i++) {
+        const d = await prisma.device.create({ data: { publicId: `pad-${Date.now()}-${i}` } })
+        await saveFields(d.id, { email: `pad${i}-${Date.now()}@x.com` }, 'test')
+      }
+      const r = await listPeople({ q: 'Perdida' })
+      expect(r.items.map((x) => x.email)).toContain('perdida@x.com')
+    },
+    // 61 escrituras secuenciales (device + saveFields, cada uno con su propio upsert +
+    // linkPerson): el default de 5s de vitest alcanza corriendo el archivo solo, pero no
+    // siempre cuando toda la suite corre en paralelo y compite por conexiones a Postgres.
+    15_000,
+  )
 })
 
 describe('getPerson', () => {
