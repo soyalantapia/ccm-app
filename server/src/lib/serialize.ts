@@ -173,13 +173,16 @@ export function toGallery(g: Gallery & { photos?: Photo[] }): DomainGallery {
   }
 }
 
-export function toContentItem(c: ContentItem): DomainContentItem {
+/** withVideo=false blanquea el youtubeId (gate socioOnly server-side): el video "unlisted"
+ *  depende ENTERAMENTE del secreto del id, así que emitirlo a un no-Socio filtra el contenido
+ *  pago. Espeja toBenefit(b, withCode). El front ya muestra el candado; acá le sacamos el id real. */
+export function toContentItem(c: ContentItem, withVideo = true): DomainContentItem {
   return {
     id: c.id,
     type: 'video',
     title: c.title,
     description: c.description,
-    youtubeId: c.youtubeId,
+    youtubeId: withVideo ? c.youtubeId : '',
     ...(c.duration ? { duration: c.duration } : {}),
     ...(c.platform ? { platform: c.platform } : {}),
     ...(c.sponsorId ? { sponsorId: c.sponsorId } : {}),

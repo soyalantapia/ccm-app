@@ -18,9 +18,7 @@ export default function AdminEventos() {
       const avail = blocks.map((b) => s.blockAvailability(b.id))
       const capacity = avail.reduce((n, a) => n + a.capacity, 0)
       const taken = avail.reduce((n, a) => n + a.taken, 0)
-      const generals = s
-        .getRegistrations()
-        .filter((r) => r.eventId === event.id && !r.blockId && r.status === 'confirmada').length
+      const generals = s.generalRegistrationCount(event.id)
       return { event, blockCount: blocks.length, capacity, taken, registered: taken + generals }
     }),
   )

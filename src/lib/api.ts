@@ -1,4 +1,4 @@
-import { getDeviceToken } from './identity'
+import { getDeviceToken, clearDeviceCredentials } from './identity'
 
 /**
  * Cliente HTTP del backend de CCM (Fase 1). Manda el token firmado del dispositivo en
@@ -37,7 +37,13 @@ export function createApi(apiBase: string): ApiClient {
       // navegador aborta el fetch al descartar el documento y se pierde el último batch.
       ...(keepalive ? { keepalive: true } : {}),
     })
-    if (!res.ok) throw new Error(`API ${method} ${path} → ${res.status}`)
+    if (!res.ok) {
+      // Token de device inválido/corrupto (401 en ruta no-admin): purgar credenciales para que el
+      // próximo arranque re-emita identidad (antes ensureDeviceToken solo chequeaba existencia, no
+      // validez → el device quedaba degradado para siempre). No tocar /admin (usa Bearer aparte).
+      if (res.status === 401 && deviceToken && !path.startsWith('/admin')) clearDeviceCredentials()
+      throw new Error(`API ${method} ${path} → ${res.status}`)
+    }
     return (res.status === 204 ? undefined : await res.json()) as T
   }
 

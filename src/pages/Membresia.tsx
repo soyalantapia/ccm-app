@@ -62,7 +62,10 @@ export default function Membresia() {
     setStep('done')
   }
 
-  const isMember = alreadySocio || step === 'done'
+  // Gate reactivo desde la fuente de verdad (isSocio): becomeSocio setea la membresía optimista
+  // (isSocio→true al instante) y la REVIERTE si el server rechaza. Antes el OR con el flag pegajoso
+  // step==='done' dejaba "Membresía activa" tras un rechazo (falso éxito contradictorio con la lista).
+  const isMember = alreadySocio
 
   return (
     <div className="mx-auto max-w-4xl px-5 py-10 md:py-16">

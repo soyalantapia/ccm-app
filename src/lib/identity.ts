@@ -87,6 +87,13 @@ export function setDeviceCredentials(deviceId: string, token: string): void {
   writeJSON(TOKEN_KEY, token)
 }
 
+/** Purga el token+id del device. Se llama ante un 401 (token inválido/corrupto): así el próximo
+ *  arranque hace POST /devices y re-emite una identidad fresca, en vez de quedar degradado para siempre. */
+export function clearDeviceCredentials(): void {
+  writeJSON(SERVER_ID_KEY, null)
+  writeJSON(TOKEN_KEY, null)
+}
+
 export function saveProfileFields(
   values: Partial<Record<ProfileFieldKey, string>>,
   source: string,

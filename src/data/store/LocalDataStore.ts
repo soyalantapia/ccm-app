@@ -30,6 +30,7 @@ import type {
 import type {
   BlockAvailability,
   DataStore,
+  HydratableResource,
   NewBlock,
   NewCampaign,
   NewCatalogProfile,
@@ -135,6 +136,11 @@ export class LocalDataStore implements DataStore {
     return membership
   }
 
+  /** Demo/seed: nunca "hidratando" — el seed es autoritativo al instante. */
+  isHydrating(_resource: HydratableResource): boolean {
+    return false
+  }
+
   /* ─── Eventos ─── */
 
   getEvents(): EventItem[] {
@@ -209,6 +215,12 @@ export class LocalDataStore implements DataStore {
 
   getRegistrations(): Registration[] {
     return readJSON<Registration[]>(K.registrations, [])
+  }
+
+  generalRegistrationCount(eventId: string): number {
+    return this.getRegistrations().filter(
+      (r) => r.eventId === eventId && !r.blockId && r.status === 'confirmada',
+    ).length
   }
 
   isRegistered(eventId: string, blockId?: string): boolean {
@@ -474,6 +486,12 @@ export class LocalDataStore implements DataStore {
       .sort((a, b) => a.order - b.order || b.publishedAt.localeCompare(a.publishedAt))
   }
 
+  getAdminNotas(): Nota[] {
+    return mergeOverlay(seedNotas, K.notasOverlay).sort(
+      (a, b) => a.order - b.order || b.publishedAt.localeCompare(a.publishedAt),
+    )
+  }
+
   getNota(slug: string): Nota | undefined {
     return mergeOverlay(seedNotas, K.notasOverlay).find((n) => n.slug === slug && n.published)
   }
@@ -510,6 +528,10 @@ export class LocalDataStore implements DataStore {
       .sort((a, b) => a.order - b.order)
   }
 
+  getAdminBanners(): Banner[] {
+    return mergeOverlay(seedBanners, K.bannersOverlay).sort((a, b) => a.order - b.order)
+  }
+
   createBanner(input: NewBanner): Banner {
     const banner: Banner = { ...input, id: newId('bnr') }
     overlayCreate(K.bannersOverlay, banner)
@@ -535,6 +557,10 @@ export class LocalDataStore implements DataStore {
       .filter((b) => b.active)
       .sort((a, b) => a.order - b.order)
       .map((b) => (registered ? b : { ...b, code: undefined }))
+  }
+
+  getAdminBenefits(): Benefit[] {
+    return mergeOverlay(seedBenefits, K.benefitsOverlay).sort((a, b) => a.order - b.order)
   }
 
   createBenefit(input: NewBenefit): Benefit {

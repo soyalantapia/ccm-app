@@ -55,6 +55,21 @@ function spaFallback(): Plugin {
 
 export default defineConfig({
   base: BASE,
+  build: {
+    // Partimos el vendor monolítico de 485 KB en chunks independientes con su propio hash:
+    // react/react-dom cambian solo con actualizaciones de versión (no con cada build del app),
+    // por lo que el navegador los sirve desde caché salvo cambio real de dependencia.
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'vendor-react'
+          if (id.includes('react-router')) return 'vendor-router'
+          if (id.includes('@tanstack')) return 'vendor-query'
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),

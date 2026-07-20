@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { Badge, ButtonLink, EmptyState, Eyebrow, Img } from '../components/ui'
 import { useStore } from '../data/store'
+import { bus } from '../lib/bus'
 import type { Application, ConvocatoriaLogo } from '../data/types'
 import { ConvocatoriaForm } from '../features/convocatoria/ConvocatoriaForm'
 import { ConvocatoriaSuccess } from '../features/convocatoria/ConvocatoriaSuccess'
@@ -45,6 +46,10 @@ export default function Convocatoria() {
       : undefined,
   )
   const [justSubmitted, setJustSubmitted] = useState<Application | null>(null)
+
+  // Si el server rechaza el POST de la postulación (bus 'application:rejected'), sacamos la pantalla
+  // de éxito: antes quedaba "postulación enviada" aunque el backend nunca la recibiera (falso éxito).
+  useEffect(() => bus.on((key) => { if (key === 'application:rejected') setJustSubmitted(null) }), [])
 
   if (!convocatoria) {
     return (

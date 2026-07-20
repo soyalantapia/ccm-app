@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { AdBanner, Badge, ButtonLink, EmptyState, Eyebrow, Img, YouTubeEmbed } from '../components/ui'
+import { AdBanner, Badge, ButtonLink, EmptyState, Eyebrow, Img, PagePending, YouTubeEmbed } from '../components/ui'
 import { store, useStore } from '../data/store'
 import { renderInline } from '../lib/richText'
 
@@ -17,6 +17,7 @@ function fmtDate(iso: string) {
 export default function NotaDetalle() {
   const { slug = '' } = useParams()
   const nota = useStore((s) => s.getNota(slug))
+  const hydrating = useStore((s) => s.isHydrating('notas'))
 
   const notaId = nota?.id
   useEffect(() => {
@@ -24,6 +25,7 @@ export default function NotaDetalle() {
   }, [notaId])
 
   if (!nota) {
+    if (hydrating) return <PagePending />
     return (
       <section className="mx-auto max-w-3xl px-5 py-16 md:py-24">
         <EmptyState

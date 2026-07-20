@@ -13,7 +13,7 @@ const CAT_LABEL: Record<string, string> = {
 }
 
 export default function AdminBeneficios() {
-  const benefits = useStore((s) => s.getBenefits())
+  const benefits = useStore((s) => s.getAdminBenefits())
 
   const [form, setForm] = useState<{ open: boolean; benefit?: Benefit }>({ open: false })
   const [deleteTarget, setDeleteTarget] = useState<Benefit | null>(null)

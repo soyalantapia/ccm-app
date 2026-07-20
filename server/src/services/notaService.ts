@@ -1,14 +1,8 @@
 import { prisma } from '../lib/prisma.js'
 import { toNota } from '../lib/serialize.js'
-import { notFound, badRequest } from '../lib/errors.js'
+import { notFound } from '../lib/errors.js'
+import { parseDate } from '../lib/dates.js'
 import type { Nota } from '@domain/types'
-
-/** Parsea una fecha y falla con 400 (no 500 opaco) si es inválida/ausente. */
-function parseDate(v: unknown, field: string): Date {
-  const d = new Date(v as string)
-  if (!v || isNaN(d.getTime())) throw badRequest('INVALID_DATE', `Fecha inválida en ${field}`)
-  return d
-}
 
 /** Notas publicadas: orden manual de prensa (order asc) y, a igualdad, más recientes primero. */
 export async function getNotas(): Promise<Nota[]> {
@@ -48,7 +42,7 @@ export async function updateNota(id: string, patch: Partial<Nota>): Promise<Nota
   for (const k of ['slug', 'title', 'excerpt', 'body', 'cover', 'author', 'category', 'youtubeId', 'published', 'order'] as const) {
     if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   }
-  if (patch.publishedAt) data.publishedAt = new Date(patch.publishedAt)
+  if (patch.publishedAt) data.publishedAt = parseDate(patch.publishedAt, 'fecha de publicación')
   const row = await prisma.nota.update({ where: { id }, data })
   return toNota(row)
 }

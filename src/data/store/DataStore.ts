@@ -59,6 +59,9 @@ export type NewCampaign = Omit<AdCampaign, 'id' | 'ts'>
 /** Alta de convocatoria desde el admin (el store genera id + slug). */
 export type NewConvocatoria = Omit<Convocatoria, 'id' | 'slug'> & { slug?: string }
 
+/** Recursos hidratados en bloque desde el backend (para isHydrating → páginas :slug). */
+export type HydratableResource = 'events' | 'catalog' | 'galleries' | 'notas'
+
 /**
  * DataStore — única puerta de acceso a datos de TODA la UI (patrón repositorio).
  * Fase 0: seed estático + localStorage. Fase 1: se enchufa un backend real
@@ -75,6 +78,13 @@ export interface DataStore {
   isSocio(): boolean
   becomeSocio(paid: number): Membership
 
+  /**
+   * ¿El recurso todavía se está hidratando del backend? Sirve para distinguir "cargando" de
+   * "no existe" en las páginas :slug (evita el flash de "link vencido" cuando el slug existe en
+   * prod pero aún no en el caché). Local siempre false (el seed es autoritativo al instante).
+   */
+  isHydrating(resource: HydratableResource): boolean
+
   /* Eventos e inscripciones */
   getEvents(): EventItem[]
   getEvent(slug: string): EventItem | undefined
@@ -88,6 +98,9 @@ export interface DataStore {
   updateBlock(id: string, patch: Partial<EventBlock>): void
   deleteBlock(id: string): void
   blockAvailability(blockId: string): BlockAvailability
+  /** Inscripciones generales (sin bloque) confirmadas de un evento, server-wide (para el admin).
+   *  getRegistrations() es device-scoped; esto agrega todos los devices (como blockAvailability). */
+  generalRegistrationCount(eventId: string): number
   getRegistrations(): Registration[]
   isRegistered(eventId: string, blockId?: string): boolean
   register(eventId: string, blockId?: string): Registration | null
@@ -148,6 +161,11 @@ export interface DataStore {
 
   /* Banners gestionados (publicidad simple) */
   getBanners(): Banner[]
+  /** Vista ADMIN (todos, incl. ocultos/borradores). Las páginas públicas usan getBanners/getNotas/
+   *  getBenefits (subset público); el panel usa estos para no contaminar el público en el mismo tab. */
+  getAdminBanners(): Banner[]
+  getAdminNotas(): Nota[]
+  getAdminBenefits(): Benefit[]
   createBanner(input: NewBanner): Banner
   updateBanner(id: string, patch: Partial<Banner>): void
   deleteBanner(id: string): void

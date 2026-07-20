@@ -12,7 +12,7 @@ const SLOT_LABEL: Record<string, string> = {
 }
 
 export default function AdminBanners() {
-  const banners = useStore((s) => s.getBanners())
+  const banners = useStore((s) => s.getAdminBanners())
   const analytics = useStore((s) => s.getAnalytics())
 
   // Clicks / impresiones por banner (medidos vía el bus de analytics).

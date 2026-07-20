@@ -40,12 +40,20 @@ export async function getGallery(slug: string): Promise<Gallery> {
 }
 
 /* ─── Contenido (videos) ─── */
+/** Contenido público. El youtubeId de videos socioOnly se emite SOLO a Socios (gate server-side;
+ *  antes el gate era solo client-side y cualquiera podía sacar el id del video "unlisted"). */
 export async function getContents(deviceId?: string): Promise<ContentItem[]> {
   const rows = await prisma.contentItem.findMany({ orderBy: { publishedAt: 'desc' } })
   const isSocio = deviceId
     ? (await prisma.membership.findUnique({ where: { deviceId }, select: { tier: true } }))?.tier === 'socio'
     : false
-  return gateSocioContents(rows.map(toContentItem), isSocio)
+  // rows.map((c) => ...) y NO rows.map(toContentItem): toContentItem toma un segundo parámetro
+  // withVideo, así que pasarla por referencia le entrega el ÍNDICE del array — el item 0 recibiría
+  // withVideo=0 (falsy) y perdería el youtubeId aunque el usuario tenga derecho a verlo.
+  return gateSocioContents(
+    rows.map((c) => toContentItem(c)),
+    isSocio,
+  )
 }
 
 /* ─── Sponsors ─── */

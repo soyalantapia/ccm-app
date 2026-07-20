@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowUpRight, CalendarDays, Check, ChevronLeft, Clock, Lock, MapPin } from 'lucide-react'
-import { ButtonLink, EmptyState, Eyebrow, Img, SectionTitle } from '../components/ui'
+import { ButtonLink, EmptyState, Eyebrow, Img, PagePending, SectionTitle } from '../components/ui'
 import { store, useStore } from '../data/store'
 import { useEvents } from '../data/queries'
 import type { EventBlock } from '../data/types'
@@ -52,6 +52,7 @@ export default function EventoFicha() {
   const { slug } = useParams<{ slug: string }>()
   const events = useEvents()
   const isSocio = useStore((s) => s.isSocio())
+  const hydrating = useStore((s) => s.isHydrating('events'))
   const event = events.find((e) => e.slug === slug)
 
   const eventId = event?.id
@@ -60,6 +61,7 @@ export default function EventoFicha() {
   }, [eventId])
 
   if (!event) {
+    if (hydrating) return <PagePending />
     return (
       <div className="mx-auto max-w-6xl px-5 py-16 md:py-24">
         <EmptyState

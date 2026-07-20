@@ -87,9 +87,13 @@ catalogRouter.get('/applications', requireDevice, async (req, res, next) => {
   }
 })
 
+// Endpoint PÚBLICO: acotar clave/valor y cantidad de campos (sin esto, data era un record
+// ilimitado → persistencia de payloads arbitrariamente grandes/numerosos).
 const applicationSchema = z.object({
-  convocatoriaId: z.string().min(1),
-  data: z.record(z.string(), z.string()),
+  convocatoriaId: z.string().min(1).max(80),
+  data: z
+    .record(z.string().max(80), z.string().max(2000))
+    .refine((d) => Object.keys(d).length <= 40, { message: 'Demasiados campos en la postulación' }),
 })
 
 /** POST /api/v1/applications — postularse (preinscripta). Público. */

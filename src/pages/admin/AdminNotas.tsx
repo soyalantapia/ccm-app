@@ -8,7 +8,7 @@ import { OpsNotaForm } from '../../features/admin/OpsNotaForm'
 import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
 
 export default function AdminNotas() {
-  const notas = useStore((s) => s.getNotas())
+  const notas = useStore((s) => s.getAdminNotas())
 
   const [form, setForm] = useState<{ open: boolean; nota?: Nota }>({ open: false })
   const [deleteTarget, setDeleteTarget] = useState<Nota | null>(null)
