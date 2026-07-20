@@ -5,8 +5,12 @@ import type {
   TextareaHTMLAttributes,
 } from 'react'
 
+// 16px en mobile, 15px de lg en adelante: iOS Safari hace zoom automático al enfocar
+// cualquier campo con font-size < 16px, y no vuelve al zoom original al salir. Como esta
+// constante es el estilo base de Input/Textarea/Select, el zoom afectaba TODOS los formularios
+// (inscripción, postulación, panel admin) en iPhone.
 export const inputClass =
-  'w-full rounded-sm border border-line bg-bg/50 px-3.5 py-3 text-[15px] text-ink placeholder:text-ink-soft/50 transition-colors focus:border-accent focus:outline-none'
+  'w-full rounded-sm border border-line bg-bg/50 px-3.5 py-3 text-[16px] lg:text-[15px] text-ink placeholder:text-ink-soft/50 transition-colors focus:border-accent focus:outline-none'
 
 interface FieldProps {
   label: ReactNode
