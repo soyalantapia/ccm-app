@@ -9,3 +9,6 @@ process.env.ADMIN_TOKEN ??= 'test-admin-token-abcdef'
 // del flujo OAuth (mpOAuthService) puede ejercitar el camino feliz.
 process.env.MP_CLIENT_ID ??= 'test-mp-client-id'
 process.env.MP_REDIRECT_URI ??= 'http://localhost:4000/api/v1/mp/callback'
+// Base pública del server (mpCheckoutService.baseUrl / adminAuth.publicBase): notification_url
+// y back_urls de MP se arman con esto, no recortando MP_REDIRECT_URI.
+process.env.PUBLIC_BASE_URL ??= 'http://localhost:4000'

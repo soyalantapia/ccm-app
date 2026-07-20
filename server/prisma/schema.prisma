@@ -623,6 +623,9 @@ model Payment {
   deviceId   String?
 
   mpPreferenceId String?
+  initPoint      String? // init_point de la preferencia — se guarda para poder reusarla si se
+  // pide el cobro de nuevo con un Payment `pending` existente, en vez de crear otra preferencia
+  // (eso es lo que evita el doble cobro: dos preferencias vivas para la misma orden).
   mpPaymentId    String?       @unique // idempotencia del webhook
   externalRef    String?
   amount         Int
