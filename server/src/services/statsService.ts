@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js'
+import type { AdminStats } from '@domain/types'
 
 /**
  * Métricas del Dashboard del organizador, calculadas sobre las TABLAS DE NEGOCIO.
@@ -25,44 +26,9 @@ const VENTANA_CIERRE_DIAS = 14
 /** Cuántas filas se muestran de cada lista accionable. */
 const TOP = 5
 
-export interface AdminStats {
-  generatedAt: string
-  kpis: {
-    registrados: number
-    inscripciones: number
-    socios: number
-    ingresoSocios: number
-    ordenesConfirmadas: number
-    postulaciones: number
-    descargas: number
-  }
-  postulacionesPendientes: {
-    total: number
-    masAntiguaDias: number | null
-    items: { id: string; convocatoriaTitulo: string; diasEsperando: number; ts: string }[]
-  }
-  plataTrabada: {
-    montoTotal: number
-    cantidad: number
-    porEstado: { status: string; cantidad: number; monto: number }[]
-  }
-  bloquesFlojos: {
-    items: {
-      id: string
-      titulo: string
-      eventoTitulo: string
-      dia: string
-      capacity: number
-      taken: number
-      faltan: number
-      ocupacion: number
-    }[]
-  }
-  convocatoriasPorCerrar: {
-    items: { id: string; slug: string; titulo: string; deadline: string; diasRestantes: number; postulaciones: number }[]
-  }
-  sponsors: { items: { sponsorId: string; nombre: string; nivel: string | null; descargas: number }[] }
-}
+// El shape vive en @domain/types (src/data/types.ts): una sola definición para el
+// servidor que la produce y el front que la consume, así no pueden divergir.
+export type { AdminStats }
 
 /** Días enteros transcurridos entre dos fechas (nunca negativo). */
 function diasDesde(desde: Date, hasta: Date): number {

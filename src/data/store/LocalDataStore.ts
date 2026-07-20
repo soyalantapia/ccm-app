@@ -1,6 +1,7 @@
 import type {
   AdCampaign,
   AnalyticsEvent,
+  AdminStats,
   Application,
   ApplicationStatus,
   CatalogProfile,
@@ -701,5 +702,20 @@ export class LocalDataStore implements DataStore {
 
   getAnalytics(): AnalyticsEvent[] {
     return [...seedAnalytics, ...getLocalAnalytics()].sort((a, b) => a.ts.localeCompare(b.ts))
+  }
+
+  /** Sin backend no hay métricas reales que mostrar. null → el Dashboard pinta su estado
+   *  vacío en vez de inventar números con el seed. */
+  getAdminStats(): AdminStats | null {
+    return null
+  }
+
+  refetchAdminStats(): void {
+    /* no-op: sin backend no hay nada que re-pedir */
+  }
+
+  /** No falló: es que no hay backend. Son cosas distintas y el Dashboard las muestra distinto. */
+  statsFailed(): boolean {
+    return false
   }
 }
