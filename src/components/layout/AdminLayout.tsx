@@ -43,7 +43,7 @@ const SECTIONS: NavItem[] = [
   { to: '/admin/eventos', label: 'Eventos', icon: CalendarDays, needs: 'events:write' },
   { to: '/admin/convocatorias', label: 'Convocatorias', icon: ClipboardList, needs: 'convocatorias:write' },
   { to: '/admin/postulaciones', label: 'Postulaciones', icon: Inbox, needs: 'applications:read' },
-  { to: '/admin/personas', label: 'Personas', icon: Users, needs: 'applications:read' },
+  { to: '/admin/personas', label: 'Usuarios', icon: Users, needs: 'people:read' },
   { to: '/admin/galerias', label: 'Galerías y sponsors', icon: Images, needs: 'content:write' },
   { to: '/admin/catalogo', label: 'Expositores', icon: Store, needs: 'catalog:write' },
   { to: '/admin/contenido', label: 'Contenido', icon: Film, needs: 'content:write' },
@@ -59,7 +59,7 @@ const SECTIONS: NavItem[] = [
    (FAB) + 1 tab + "Más" (sheet). */
 const NAV_LEFT = [
   { to: '/admin/eventos', label: 'Eventos', icon: CalendarDays },
-  { to: '/admin/personas', label: 'Personas', icon: Users },
+  { to: '/admin/personas', label: 'Usuarios', icon: Users },
 ]
 const NAV_CENTER = { to: '/admin', label: 'Panel', icon: LayoutDashboard, end: true }
 const NAV_RIGHT = [{ to: '/admin/galerias', label: 'Sponsors', icon: Images }]
