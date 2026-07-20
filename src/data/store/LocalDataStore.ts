@@ -726,4 +726,9 @@ export class LocalDataStore implements DataStore {
   statsFailed(): boolean {
     return false
   }
+
+  /** Esta es la capa de la DEMO: seed + localStorage, sin backend. */
+  hasBackend(): boolean {
+    return false
+  }
 }
