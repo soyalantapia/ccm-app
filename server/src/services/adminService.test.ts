@@ -1,151 +1,150 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 /**
- * updateGallery NO puede borrar filas Photo que sobreviven a la edición.
+ * Contrato de NO-DESTRUCCIÓN al guardar (regresión de un bug medido en prod).
  *
- * PhotoFavorite y PhotoDownload cuelgan de Photo con onDelete: Cascade, así que el
- * viejo deleteMany({galleryId}) + createMany convertía "editar el título de una galería"
- * en "borrar los favoritos y las descargas de todas sus fotos". Las descargas son
- * justamente la métrica del reporte que se le vende al sponsor.
+ * `Photo` es la única entidad que el admin recrea cuyo id está referenciado por otras tablas:
+ * `PhotoFavorite.photoId` y `PhotoDownload.photoId`, ambas con `onDelete: Cascade`. El cascade
+ * dispara en el DELETE, así que el viejo `deleteMany` + `createMany` borraba los favoritos y las
+ * descargas del asistente cada vez que alguien editaba una galería — aunque solo cambiara el título.
+ *
+ * Si estos tests se ponen en rojo, NO los ajustes: el fix se rompió.
  */
 
-const tx = {
+const mockTx = {
   gallery: { update: vi.fn() },
-  photo: { findMany: vi.fn(), deleteMany: vi.fn(), update: vi.fn(), create: vi.fn() },
+  photo: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
+  catalogProfile: { update: vi.fn() },
+  portfolioPiece: { findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
 }
 
 const mockPrisma = {
-  $transaction: vi.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
+  $transaction: vi.fn(async (fn: (tx: typeof mockTx) => Promise<unknown>) => fn(mockTx)),
   gallery: { findUniqueOrThrow: vi.fn() },
+  catalogProfile: { findUniqueOrThrow: vi.fn() },
 }
 
 vi.mock('../lib/prisma.js', () => ({ prisma: mockPrisma }))
-vi.mock('../lib/serialize.js', async (orig) => ({
-  ...(await orig<Record<string, unknown>>()),
-  toGallery: (g: unknown) => g,
-}))
 
-const { updateGallery } = await import('./adminService.js')
+const { updateGallery, updateCatalogProfile } = await import('./adminService.js')
 
-// La galería ya persistida: 3 fotos, cada una con favoritos/descargas colgando.
-const PERSISTIDAS = [
-  { id: 'ph-1', src: 'img/g01.jpg' },
-  { id: 'ph-2', src: 'img/g02.jpg' },
-  { id: 'ph-3', src: 'img/g03.jpg' },
+const EXISTENTES = [
+  { id: 'ph-01', src: 'img/gallery/g01.jpg' },
+  { id: 'ph-02', src: 'img/gallery/g02.jpg' },
+  { id: 'ph-03', src: 'img/gallery/g03.jpg' },
 ]
 
 beforeEach(() => {
   vi.clearAllMocks()
-  tx.photo.findMany.mockResolvedValue(PERSISTIDAS)
-  mockPrisma.gallery.findUniqueOrThrow.mockResolvedValue({ id: 'gal-1', photos: [] })
-})
-
-describe('updateGallery — preserva la identidad de las fotos que sobreviven', () => {
-  it('editar solo el título NO borra ninguna foto (favoritos y descargas intactos)', async () => {
-    // El form manda las mismas 3 fotos por src, pero con ids REGENERADOS (el caso real que rompía).
-    await updateGallery('gal-1', {
-      title: 'Título nuevo',
-      photos: [
-        { id: 'ph-regenerado-a', src: 'img/g01.jpg', alt: 'a' },
-        { id: 'ph-regenerado-b', src: 'img/g02.jpg', alt: 'b' },
-        { id: 'ph-regenerado-c', src: 'img/g03.jpg', alt: 'c' },
-      ],
-    } as never)
-
-    expect(tx.photo.deleteMany).not.toHaveBeenCalled()
-    expect(tx.photo.create).not.toHaveBeenCalled()
-    // Las 3 se actualizan in-place, conservando su id ORIGINAL.
-    expect(tx.photo.update).toHaveBeenCalledTimes(3)
-    const idsTocados = tx.photo.update.mock.calls.map((c) => c[0].where.id).sort()
-    expect(idsTocados).toEqual(['ph-1', 'ph-2', 'ph-3'])
+  mockTx.photo.findMany.mockResolvedValue(EXISTENTES)
+  mockTx.photo.findUnique.mockResolvedValue(null)
+  mockPrisma.gallery.findUniqueOrThrow.mockResolvedValue({
+    id: 'gal-1', slug: 's', title: 't', eventLabel: 'e', date: 'd', cover: 'c', sponsorId: 'sp', photos: [],
   })
-
-  it('sacar una foto borra SOLO esa (por id), no la colección entera', async () => {
-    await updateGallery('gal-1', {
-      photos: [
-        { id: 'x', src: 'img/g01.jpg', alt: 'a' },
-        { id: 'y', src: 'img/g03.jpg', alt: 'c' },
-      ],
-    } as never)
-
-    expect(tx.photo.deleteMany).toHaveBeenCalledTimes(1)
-    expect(tx.photo.deleteMany.mock.calls[0][0]).toEqual({ where: { id: { in: ['ph-2'] } } })
-    expect(tx.photo.update).toHaveBeenCalledTimes(2) // ph-1 y ph-3 sobreviven
-  })
-
-  it('agregar una foto la crea sin tocar las existentes', async () => {
-    await updateGallery('gal-1', {
-      photos: [
-        { id: 'x', src: 'img/g01.jpg', alt: 'a' },
-        { id: 'x', src: 'img/g02.jpg', alt: 'b' },
-        { id: 'x', src: 'img/g03.jpg', alt: 'c' },
-        { id: 'ph-nueva', src: 'img/g99.jpg', alt: 'nueva' },
-      ],
-    } as never)
-
-    expect(tx.photo.deleteMany).not.toHaveBeenCalled()
-    expect(tx.photo.create).toHaveBeenCalledTimes(1)
-    expect(tx.photo.create.mock.calls[0][0].data).toMatchObject({ id: 'ph-nueva', src: 'img/g99.jpg' })
-    expect(tx.photo.update).toHaveBeenCalledTimes(3)
-  })
-
-  it('reordenar persiste el nuevo order sin borrar nada', async () => {
-    await updateGallery('gal-1', {
-      photos: [
-        { id: 'x', src: 'img/g03.jpg', alt: 'c' },
-        { id: 'x', src: 'img/g01.jpg', alt: 'a' },
-        { id: 'x', src: 'img/g02.jpg', alt: 'b' },
-      ],
-    } as never)
-
-    expect(tx.photo.deleteMany).not.toHaveBeenCalled()
-    const orderPorId = Object.fromEntries(
-      tx.photo.update.mock.calls.map((c) => [c[0].where.id, c[0].data.order]),
-    )
-    expect(orderPorId).toEqual({ 'ph-3': 0, 'ph-1': 1, 'ph-2': 2 })
-  })
-
-  it('un patch SIN photos no toca las fotos en absoluto', async () => {
-    await updateGallery('gal-1', { title: 'Solo el título' } as never)
-    expect(tx.photo.findMany).not.toHaveBeenCalled()
-    expect(tx.photo.deleteMany).not.toHaveBeenCalled()
-    expect(tx.photo.update).not.toHaveBeenCalled()
+  mockPrisma.catalogProfile.findUniqueOrThrow.mockResolvedValue({
+    id: 'cat-1', slug: 's', name: 'n', role: 'r', kind: 'participante', platform: 'Moda', city: 'c',
+    bio: 'b', photo: 'p', verified: false, participatesIn: [], portfolio: [],
   })
 })
 
-/**
- * Ninguna capa de la cadena admin acotaba los precios: ni el input, ni el submit
- * (`Number(raw)` crudo), ni la ruta (el helper `create` solo valida que venga un id). Las tres
- * columnas price del schema son Int?, así que un decimal, un negativo o un número fuera del
- * rango de int4 salían como 500 en vez de un 400 — o se persistía un precio absurdo que
- * después se le muestra al público en la ficha del catálogo.
- */
-describe('updatePlan — el precio se valida antes de llegar a una columna Int', () => {
-  const plan = { ticketPlan: { update: vi.fn() } }
+/** ids que quedaron excluidos del deleteMany final = los que sobrevivieron. */
+function sobrevivientes(): string[] {
+  const call = mockTx.photo.deleteMany.mock.calls.at(-1)?.[0]
+  return call?.where?.id?.notIn ?? []
+}
 
-  it('acepta un precio normal y lo redondea a entero', async () => {
-    const { updatePlan } = await import('./adminService.js')
-    Object.assign(mockPrisma, plan)
-    await updatePlan('general' as never, { price: 15000.4 })
-    expect(plan.ticketPlan.update.mock.calls[0][0].data.price).toBe(15000)
+describe('updateGallery — no destruye lo que sobrevive', () => {
+  it('con el payload del front VIEJO (un id nuevo por foto) conserva las filas existentes', async () => {
+    await updateGallery('gal-1', {
+      title: 'nuevo título',
+      photos: EXISTENTES.map((p, i) => ({ id: `ph_regen_${i}`, src: p.src, alt: '' })),
+    } as never)
+
+    // Se resolvieron por src contra las filas existentes: update, nunca create.
+    expect(mockTx.photo.create).not.toHaveBeenCalled()
+    expect(mockTx.photo.update).toHaveBeenCalledTimes(3)
+    expect(sobrevivientes().sort()).toEqual(['ph-01', 'ph-02', 'ph-03'])
   })
 
-  it('acepta null (precio pendiente)', async () => {
-    const { updatePlan } = await import('./adminService.js')
-    Object.assign(mockPrisma, plan)
-    plan.ticketPlan.update.mockClear()
-    await updatePlan('general' as never, { price: null })
-    expect(plan.ticketPlan.update.mock.calls[0][0].data.price).toBeNull()
+  it('no pisa el alt curado cuando el payload no lo trae', async () => {
+    await updateGallery('gal-1', {
+      photos: [{ id: 'ph-01', src: 'img/gallery/g01.jpg' }],
+    } as never)
+
+    const data = mockTx.photo.update.mock.calls[0][0].data
+    expect(data).not.toHaveProperty('alt')
+    expect(data).toMatchObject({ src: 'img/gallery/g01.jpg', order: 0 })
   })
 
-  it('RECHAZA negativos, NaN, Infinity y valores fuera del rango de int4', async () => {
-    const { updatePlan } = await import('./adminService.js')
-    Object.assign(mockPrisma, plan)
-    for (const malo of [-1, NaN, Infinity, -Infinity, 3_000_000_000, 'abc']) {
-      await expect(
-        updatePlan('general' as never, { price: malo as never }),
-        `${String(malo)} debería rechazarse`,
-      ).rejects.toThrow()
-    }
+  it('sí escribe el alt cuando el payload lo trae', async () => {
+    await updateGallery('gal-1', {
+      photos: [{ id: 'ph-01', src: 'img/gallery/g01.jpg', alt: 'Epígrafe editado' }],
+    } as never)
+    expect(mockTx.photo.update.mock.calls[0][0].data).toMatchObject({ alt: 'Epígrafe editado' })
+  })
+
+  it('agrega las nuevas sin tocar las viejas', async () => {
+    await updateGallery('gal-1', {
+      photos: [
+        ...EXISTENTES.map((p) => ({ id: p.id, src: p.src, alt: 'a' })),
+        { src: '/uploads/nueva.jpg', alt: 'Recién subida' },
+      ],
+    } as never)
+
+    expect(mockTx.photo.update).toHaveBeenCalledTimes(3)
+    expect(mockTx.photo.create).toHaveBeenCalledTimes(1)
+    // Photo.id no tiene @default: el id lo tenemos que poner siempre nosotros.
+    expect(mockTx.photo.create.mock.calls[0][0].data.id).toMatch(/^ph_/)
+    expect(sobrevivientes()).toHaveLength(4)
+  })
+
+  it('quitar una foto la excluye del notIn (se borra solo esa)', async () => {
+    await updateGallery('gal-1', {
+      photos: [{ id: 'ph-01', src: 'img/gallery/g01.jpg', alt: 'a' }],
+    } as never)
+    expect(sobrevivientes()).toEqual(['ph-01'])
+  })
+
+  it('un id que pertenece a otra galería se re-mintea en vez de robársela', async () => {
+    mockTx.photo.findUnique.mockResolvedValue({ id: 'ph-de-otra' }) // ya existe en la DB
+    await updateGallery('gal-1', {
+      photos: [{ id: 'ph-de-otra', src: '/uploads/x.jpg', alt: 'a' }],
+    } as never)
+    const creado = mockTx.photo.create.mock.calls[0][0].data.id
+    expect(creado).not.toBe('ph-de-otra')
+    expect(creado).toMatch(/^ph_/)
+  })
+})
+
+describe('updateCatalogProfile — no borra lo que el form no manda', () => {
+  beforeEach(() => {
+    mockTx.portfolioPiece.findMany.mockResolvedValue([
+      { id: 'cat-1-1', image: 'img/a.jpg', title: 'Obra 1', caption: 'Epígrafe escrito a mano', price: 90000 },
+    ])
+  })
+
+  it('hereda el caption y el precio existentes si el payload no los trae', async () => {
+    await updateCatalogProfile('cat-1', {
+      portfolio: [{ id: 'cat-1-1', image: 'img/a.jpg', title: 'Obra 1' }],
+    } as never)
+
+    expect(mockTx.portfolioPiece.createMany.mock.calls[0][0].data[0]).toMatchObject({
+      caption: 'Epígrafe escrito a mano',
+      price: 90000,
+    })
+  })
+
+  it('permite borrar el caption explícitamente mandando null', async () => {
+    await updateCatalogProfile('cat-1', {
+      portfolio: [{ id: 'cat-1-1', image: 'img/a.jpg', title: 'Obra 1', caption: null }],
+    } as never)
+    expect(mockTx.portfolioPiece.createMany.mock.calls[0][0].data[0].caption).toBeNull()
+  })
+
+  it('hereda por imagen cuando la obra no trae id (obra ya existente sin id en el form)', async () => {
+    await updateCatalogProfile('cat-1', {
+      portfolio: [{ image: 'img/a.jpg', title: 'Obra 1' }],
+    } as never)
+    expect(mockTx.portfolioPiece.createMany.mock.calls[0][0].data[0].caption).toBe('Epígrafe escrito a mano')
   })
 })

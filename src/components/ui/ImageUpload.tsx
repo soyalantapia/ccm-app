@@ -12,12 +12,18 @@ import { useRef, useState } from 'react'
 import { toast } from './Toast'
 
 interface Props {
-  /** Se llama con la URL pública del archivo subido. */
+  /** Se llama con la URL pública del archivo subido. Con `multiple`, una vez POR ARCHIVO. */
   onUrl: (url: string) => void
   /** Clase extra para el botón. */
   className?: string
   /** Título del botón. Default: "Subir imagen" */
   label?: string
+  /** Permite elegir varios archivos de una (galerías, portfolios). */
+  multiple?: boolean
+  /** Cupo restante: si se eligen más, se recorta ANTES de subir y se avisa. */
+  max?: number
+  /** Avisa mientras hay subidas en vuelo (para bloquear el submit del form). */
+  onBusyChange?: (busy: boolean) => void
 }
 
 // SVG excluido a propósito: es ejecutable y se serviría desde el origen de la app (XSS).
@@ -33,14 +39,59 @@ function adminToken() {
   try { return sessionStorage.getItem('ccm:admin-token') ?? '' } catch { return '' }
 }
 
-export function ImageUpload({ onUrl, className = '', label = 'Subir imagen' }: Props) {
+export function ImageUpload({ onUrl, className = '', label = 'Subir imagen', multiple, max, onBusyChange }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
+  const [progreso, setProgreso] = useState({ hechas: 0, total: 0 })
 
-  async function handleFile(file: File) {
+  /** Sube un lote de a uno. Cada éxito llama onUrl al toque (el form ve avanzar las imágenes). */
+  async function handleFiles(files: File[]) {
+    let elegidos = files
+    if (max !== undefined && elegidos.length > max) {
+      elegidos = elegidos.slice(0, Math.max(0, max))
+      toast(
+        max === 0
+          ? 'No queda cupo para más imágenes. Quitá alguna primero.'
+          : `Solo entran ${max} más: se van a subir las primeras ${max}.`,
+        'info',
+      )
+      if (!elegidos.length) return
+    }
+
+    onBusyChange?.(true)
+    setProgreso({ hechas: 0, total: elegidos.length })
+    let fallaron = 0
+    for (const [i, file] of elegidos.entries()) {
+      const ok = await subirUno(file)
+      if (!ok) fallaron++
+      setProgreso({ hechas: i + 1, total: elegidos.length })
+    }
+    setProgreso({ hechas: 0, total: 0 })
+    onBusyChange?.(false)
+    if (elegidos.length > 1) {
+      const bien = elegidos.length - fallaron
+      toast(
+        fallaron === 0
+          ? `✓ Subieron las ${bien} imágenes`
+          : `Subieron ${bien} de ${elegidos.length}. Volvé a elegir las ${fallaron} que fallaron.`,
+        fallaron === 0 ? 'success' : 'info',
+      )
+    }
+  }
+
+  /** Devuelve true si la subida salió bien. */
+  async function subirUno(file: File): Promise<boolean> {
+    if (file.size > MAX_BYTES) {
+      toast(`"${file.name}" supera los 5 MB. Comprimila antes de subirla.`, 'info')
+      return false
+    }
+    return handleFile(file)
+  }
+
+  async function handleFile(file: File): Promise<boolean> {
     if (file.size > MAX_BYTES) {
       toast('La imagen supera los 5 MB. Comprimila antes de subirla.', 'info')
-      return
+      return false
     }
     setUploading(true)
     try {
@@ -57,13 +108,15 @@ export function ImageUpload({ onUrl, className = '', label = 'Subir imagen' }: P
         const msg: string = err?.error?.message ?? `No se pudo subir la imagen (${res.status})`
         // 503 = el server no tiene UPLOAD_DIR configurado: el organizador igual puede pegar la URL.
         toast(res.status === 503 ? 'El servidor todavía no tiene storage configurado — pegá la URL a mano.' : msg, 'info')
-        return
+        return false
       }
       const { url } = await res.json() as { url: string }
       onUrl(url)
-      toast('✓ Imagen subida')
+      if (!multiple) toast('✓ Imagen subida')
+      return true
     } catch {
       toast('No se pudo subir la imagen. Revisá la conexión e intentá de nuevo.', 'info')
+      return false
     } finally {
       setUploading(false)
       if (inputRef.current) inputRef.current.value = ''
@@ -77,8 +130,14 @@ export function ImageUpload({ onUrl, className = '', label = 'Subir imagen' }: P
         type="file"
         accept={ACCEPT}
         className="sr-only"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
-        aria-label="Seleccionar imagen para subir"
+        multiple={multiple}
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? [])
+          if (!files.length) return
+          if (multiple) void handleFiles(files)
+          else void handleFile(files[0])
+        }}
+        aria-label={multiple ? 'Seleccionar imágenes para subir' : 'Seleccionar imagen para subir'}
       />
       <button
         type="button"
@@ -96,7 +155,11 @@ export function ImageUpload({ onUrl, className = '', label = 'Subir imagen' }: P
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
         )}
-        {uploading ? 'Subiendo…' : label}
+        {uploading
+          ? progreso.total > 1
+            ? `Subiendo ${progreso.hechas + 1} de ${progreso.total}…`
+            : 'Subiendo…'
+          : label}
       </button>
     </>
   )

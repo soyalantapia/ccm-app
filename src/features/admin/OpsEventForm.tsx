@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Button, Field, Img, Input, Select, Sheet, Textarea, toast } from '../../components/ui'
+import { Button, Field, Img, Input, Select, Sheet, Textarea, toast, ImageUpload } from '../../components/ui'
 import { store } from '../../data/store'
 import type { EventItem, EventType } from '../../data/types'
 
@@ -163,10 +163,13 @@ export function OpsEventForm({ open, event, onClose }: Props) {
           <Field label="Tipo" required>
             <Select options={TYPE_OPTIONS} value={f.type} onChange={set('type')} />
           </Field>
-          <Field label="Portada" required hint="Elegí una del set o pegá la URL de tu imagen">
+          <Field label="Portada" required hint="Elegí una del set, subí la tuya o pegá una URL">
             <div className="grid gap-2">
               <Select options={COVER_OPTIONS} value={f.cover} onChange={set('cover')} />
-              <Input value={f.cover} onChange={set('cover')} placeholder="…o pegá una URL: https://…/portada.jpg" />
+              <div className="flex items-center gap-2">
+                <Input value={f.cover} onChange={set('cover')} placeholder="…o pegá una URL: https://…/portada.jpg" className="flex-1" />
+                <ImageUpload label="Subir" onUrl={(url) => setF((p) => ({ ...p, cover: url }))} />
+              </div>
             </div>
           </Field>
         </div>

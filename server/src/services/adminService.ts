@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { prisma } from '../lib/prisma.js'
 import { toEventItem, toEventBlock, toContentItem, toSponsor, toGallery, toCatalogProfile, toConvocatoria } from '../lib/serialize.js'
 import { conflict, badRequest } from '../lib/errors.js'
@@ -193,34 +194,65 @@ export async function createGallery(g: Gallery): Promise<Gallery> {
   if (g.photos?.length) await prisma.photo.createMany({ data: g.photos.map((p, i) => ({ id: p.id, galleryId: g.id, src: p.src, alt: p.alt, order: i })) })
   return readGallery(g.id)
 }
+/**
+ * ⚠️ NO VOLVER A `deleteMany` + `createMany` ACÁ. `Photo` es la única entidad que recreamos
+ * cuyo id está referenciado por otras tablas: `PhotoFavorite.photoId` y `PhotoDownload.photoId`,
+ * ambas con `onDelete: Cascade` (schema.prisma). El cascade dispara en el DELETE, así que borrar
+ * y recrear con el MISMO id igual se lleva puestos los favoritos y las descargas del asistente.
+ * Medido: editarle el título a una galería borraba todos sus favoritos y descargas.
+ *
+ * Invariante: ninguna fila que sobrevive al guardado pasa por un DELETE.
+ *   sobrevivientes → update · nuevas → create · y solo al final se borran las que realmente se sacaron.
+ */
 export async function updateGallery(id: string, patch: Partial<Gallery>): Promise<Gallery> {
   const data: Record<string, unknown> = {}
   for (const k of ['slug', 'title', 'eventLabel', 'date', 'cover', 'sponsorId'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   await prisma.$transaction(async (tx) => {
     await tx.gallery.update({ where: { id }, data })
-    if (patch.photos) {
-      // DIFF por src, NO deleteMany+createMany. PhotoFavorite y PhotoDownload cuelgan de Photo
-      // con onDelete: Cascade, así que borrar y recrear las filas destruía los favoritos y las
-      // descargas de los usuarios — y las descargas son la métrica del reporte al sponsor.
-      // Matcheamos por src (no por id) porque el form del admin regenera ids en cada submit:
-      // el src es la identidad estable real de una foto dentro de su galería.
-      const actuales = await tx.photo.findMany({ where: { galleryId: id }, select: { id: true, src: true } })
-      const idPorSrc = new Map(actuales.map((p) => [p.src, p.id]))
-      const srcsNuevos = new Set(patch.photos.map((p) => p.src))
+    if (!patch.photos) return
 
-      const aBorrar = actuales.filter((p) => !srcsNuevos.has(p.src)).map((p) => p.id)
-      if (aBorrar.length) await tx.photo.deleteMany({ where: { id: { in: aBorrar } } })
+    const existentes = await tx.photo.findMany({ where: { galleryId: id }, select: { id: true, src: true } })
+    const porId = new Map(existentes.map((p) => [p.id, p]))
+    // Fallback por src para clientes con el bundle viejo cacheado por el service worker: ese front
+    // manda un id nuevo por foto en cada guardado. Cada fila existente se consume UNA sola vez.
+    const librePorSrc = new Map<string, string[]>()
+    for (const p of existentes) {
+      if (!porId.has(p.id)) continue
+      const l = librePorSrc.get(p.src) ?? []
+      l.push(p.id)
+      librePorSrc.set(p.src, l)
+    }
 
-      for (const [i, p] of patch.photos.entries()) {
-        const existente = idPorSrc.get(p.src)
-        if (existente) {
-          // Sobrevive con su id → sus favoritos y descargas quedan intactos.
-          await tx.photo.update({ where: { id: existente }, data: { alt: p.alt, order: i } })
-        } else {
-          await tx.photo.create({ data: { id: p.id, galleryId: id, src: p.src, alt: p.alt, order: i } })
+    const sobreviven: string[] = []
+    const usados = new Set<string>()
+    for (const [i, p] of patch.photos.entries()) {
+      let real: string | undefined
+      if (p.id && porId.has(p.id) && !usados.has(p.id)) real = p.id
+      else {
+        const cola = librePorSrc.get(p.src)
+        while (cola?.length) {
+          const cand = cola.shift() as string
+          if (!usados.has(cand)) { real = cand; break }
         }
       }
+
+      if (real) {
+        usados.add(real)
+        sobreviven.push(real)
+        // `alt` solo se pisa si vino en el payload: en prod los 58 alt están escritos a mano.
+        const campos: Record<string, unknown> = { src: p.src, order: i }
+        if (p.alt !== undefined) campos.alt = p.alt
+        await tx.photo.update({ where: { id: real }, data: campos })
+      } else {
+        // Id nuevo. `Photo.id` no tiene @default, así que siempre lo ponemos nosotros; si el id que
+        // manda el cliente ya existe (podría ser de OTRA galería), lo re-minteamos para no robarla.
+        const propuesto = p.id && !(await tx.photo.findUnique({ where: { id: p.id }, select: { id: true } })) ? p.id : `ph_${randomUUID()}`
+        sobreviven.push(propuesto)
+        await tx.photo.create({ data: { id: propuesto, galleryId: id, src: p.src, alt: p.alt ?? '', order: i } })
+      }
     }
+
+    await tx.photo.deleteMany({ where: { galleryId: id, id: { notIn: sobreviven } } })
   })
   return readGallery(id)
 }
@@ -244,8 +276,34 @@ export async function updateCatalogProfile(id: string, patch: Partial<CatalogPro
   await prisma.$transaction(async (tx) => {
     await tx.catalogProfile.update({ where: { id }, data })
     if (patch.portfolio) {
+      // A diferencia de Photo, PortfolioPiece no está referenciada por nadie, así que recrearla es
+      // inocuo. Lo que NO es inocuo es `?? null`: el form de expositores no conoce `caption` y en
+      // prod hay 50 obras con epígrafe escrito a mano. Guardar un perfil los borraba a todos.
+      // Regla: campo que no viene en el payload = campo que no se toca (se hereda del existente).
+      const previas = await tx.portfolioPiece.findMany({ where: { profileId: id }, select: { id: true, image: true, caption: true, price: true, title: true } })
+      const porId = new Map(previas.map((p) => [p.id, p]))
+      const porImagen = new Map(previas.map((p) => [p.image, p]))
+      const hereda = (p: { id?: string; image: string }) => (p.id ? porId.get(p.id) : undefined) ?? porImagen.get(p.image)
+
       await tx.portfolioPiece.deleteMany({ where: { profileId: id } })
-      if (patch.portfolio.length) await tx.portfolioPiece.createMany({ data: patch.portfolio.map((p, i) => ({ id: p.id, profileId: id, image: p.image, title: p.title, caption: p.caption ?? null, price: precioValido(p.price, 'precio de la obra'), order: i })) })
+      if (patch.portfolio.length) {
+        await tx.portfolioPiece.createMany({
+          data: patch.portfolio.map((p, i) => {
+            const prev = hereda(p)
+            return {
+              id: p.id,
+              profileId: id,
+              image: p.image,
+              title: p.title,
+              caption: p.caption !== undefined ? p.caption : (prev?.caption ?? null),
+              // Hereda si no vino, pero si vino se valida: un precio fuera del rango de int4
+              // llegaba crudo a una columna Int? y salía como 500 en vez de un 400.
+              price: p.price !== undefined ? precioValido(p.price, 'precio de la obra') : (prev?.price ?? null),
+              order: i,
+            }
+          }),
+        })
+      }
     }
   })
   return readCatalog(id)

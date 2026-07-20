@@ -73,6 +73,43 @@ function publicUrl(filename: string): string {
   return `${prefix}/${filename}`
 }
 
+/**
+ * Achica la imagen ya guardada, en su lugar. Importa: estos archivos los sirve el PROPIO
+ * servidor desde el volumen, así que una foto de celular de 5 MB se le baja entera a cada
+ * visitante. Reduce el lado mayor a 2000 px y reencodea con calidad 82.
+ *
+ * Reglas para no romper nada:
+ *  - SVG y GIF quedan intactos (vectorial / animación).
+ *  - Se conserva el MISMO formato → la extensión y el MIME del archivo siguen siendo válidos.
+ *  - Solo se sobrescribe si el resultado pesa MENOS (reencodear algo ya optimizado lo agranda).
+ *  - `sharp` se importa de forma lazy y todo va dentro de try/catch: si el binario nativo no
+ *    está disponible en el runtime, la subida sigue funcionando con el archivo original.
+ */
+async function optimizeInPlace(file: string, mime: string): Promise<void> {
+  if (mime === 'image/svg+xml' || mime === 'image/gif') return
+  try {
+    const { default: sharp } = await import('sharp')
+    const input = fs.readFileSync(file)
+    const img = sharp(input, { failOn: 'none' }).rotate() // rotate() aplica el EXIF (fotos de celular)
+    const meta = await img.metadata()
+    const w = meta.width ?? 0
+    const h = meta.height ?? 0
+    if (w > 2000 || h > 2000) {
+      if (w >= h) img.resize({ width: 2000, withoutEnlargement: true })
+      else img.resize({ height: 2000, withoutEnlargement: true })
+    }
+    const out =
+      mime === 'image/png'
+        ? await img.png({ quality: 82 }).toBuffer()
+        : mime === 'image/webp'
+          ? await img.webp({ quality: 82 }).toBuffer()
+          : await img.jpeg({ quality: 82, mozjpeg: true }).toBuffer()
+    if (out.length < input.length) fs.writeFileSync(file, out)
+  } catch {
+    // sharp ausente o imagen que no se pudo procesar: se queda el original, sin romper la subida.
+  }
+}
+
 /** Procesa un multipart POST y guarda el campo "file". Devuelve { url }. */
 export async function handleUpload(req: IncomingMessage): Promise<{ url: string }> {
   if (!env.UPLOAD_DIR) {
@@ -136,6 +173,8 @@ export async function handleUpload(req: IncomingMessage): Promise<{ url: string 
     fs.copyFileSync(raw.filepath, dest)
     fs.unlinkSync(raw.filepath)
   }
+
+  await optimizeInPlace(dest, mime)
 
   return { url: publicUrl(filename) }
 }

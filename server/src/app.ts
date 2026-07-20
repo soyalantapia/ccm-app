@@ -20,6 +20,14 @@ import { adminRouter } from './routes/admin.js'
 import { deviceContext } from './middlewares/device.js'
 import { errorHandler, notFoundHandler } from './middlewares/error.js'
 
+/**
+ * Extensiones que identifican a un ARCHIVO (no a una ruta del router de la SPA).
+ * Es una lista cerrada a propósito: un slug con punto (`/p/j.lopez`) no puede confundirse
+ * con un archivo y terminar en 404.
+ */
+const PARECE_ARCHIVO =
+  /\.(jpe?g|png|webp|gif|svg|avif|ico|bmp|js|mjs|css|map|json|txt|xml|woff2?|ttf|otf|eot|mp4|webm|mp3|pdf|zip)$/i
+
 /** Arma la app Express. Todo cuelga de /api/v1 (canon 1). */
 export function createApp() {
   const app = express()
@@ -92,17 +100,17 @@ export function createApp() {
   if (env.FRONT_DIST) {
     const dist = env.FRONT_DIST
     app.use(express.static(dist, { index: false }))
-    // El fallback es para RUTAS del router, no para archivos. Antes cualquier path sin /api/
-    // devolvía 200 + HTML, así que un asset inexistente (una imagen borrada, un chunk viejo
-    // tras un deploy) era indistinguible de una ruta válida: el navegador recibía HTML donde
-    // esperaba binario, y el Service Worker lo cacheaba con CacheFirst — el 200 mentiroso
-    // quedaba pegado. Un path que parece archivo (tiene extensión) y no existe → 404 honesto.
-    // Lista explícita en vez de "tiene un punto": los slugs pasan por slugify (solo a-z0-9-),
-    // pero si alguna vez entrara uno sin slugificar, un punto en el nombre no debe dar 404.
-    const EXT_DE_ASSET =
-      /\.(js|mjs|css|map|json|webmanifest|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|eot|mp4|webm|mov|mp3|pdf|txt|xml)$/i
-    app.get(/^\/(?!api\/).*/, (req, res, next) => {
-      if (EXT_DE_ASSET.test(req.path)) return next() // → notFoundHandler (404 honesto)
+    app.get(/^\/(?!api\/).*/, (req, res) => {
+      // Un archivo que no existe tiene que decir 404. Antes caía acá y devolvía el index con
+      // HTTP 200, así que el navegador se bajaba el HTML entero por cada imagen rota y —peor—
+      // el service worker lo guardaba bajo la URL de la imagen (CacheFirst, 30 días) y después
+      // lo servía desde caché sin volver a preguntar: la imagen seguía rota aunque el equipo
+      // subiera la correcta. Las rutas del router de la SPA no tienen extensión, así que no
+      // entran en este guard.
+      if (PARECE_ARCHIVO.test(req.path)) {
+        res.status(404).type('text/plain').send('No encontrado')
+        return
+      }
       res.sendFile(join(dist, 'index.html'))
     })
   }

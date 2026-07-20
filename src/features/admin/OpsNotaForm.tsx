@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Button, Field, Input, Select, Sheet, Textarea } from '../../components/ui'
+import { Button, Field, Input, Select, Sheet, Textarea, ImageUpload } from '../../components/ui'
 import { store } from '../../data/store'
 import { asset } from '../../lib/assets'
 import type { Nota } from '../../data/types'
@@ -106,8 +106,11 @@ export function OpsNotaForm({ open, nota, onClose }: Props) {
           <Textarea value={f.body} onChange={set('body')} rows={8} placeholder="El cuerpo de la nota…  Podés usar **negrita**." required />
         </Field>
 
-        <Field label="Imagen de portada (URL)" hint="Opcional">
-          <Input value={f.cover} onChange={set('cover')} placeholder="https://…/portada.jpg o img/gallery/g03.jpg" />
+        <Field label="Imagen de portada (URL)" hint="Opcional — subila desde tu compu o pegá la URL">
+          <div className="flex items-center gap-2">
+            <Input value={f.cover} onChange={set('cover')} placeholder="https://…/portada.jpg o img/gallery/g03.jpg" className="flex-1" />
+            <ImageUpload label="Subir" onUrl={(url) => setF((p) => ({ ...p, cover: url }))} />
+          </div>
         </Field>
         {f.cover.trim() && (
           <img src={asset(f.cover.trim())} alt="Vista previa"
