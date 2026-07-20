@@ -54,6 +54,17 @@ interface BufferedEvent {
  * fases. La interfaz sigue SÍNCRONA: el caché local da las lecturas al instante y el
  * bus mantiene la reactividad; el backend recibe escrituras en segundo plano. Si no
  * hay VITE_API_URL, ni se instancia esta clase (index.ts cae a LocalDataStore).
+ *
+ * INVARIANTE — una ESCRITURA nunca delega en super.
+ * Si esta clase existe, hay backend, y el backend es la fuente de verdad. Los métodos de
+ * LocalDataStore escriben en un overlay de localStorage SIN emitir ninguna request, pero
+ * devuelven un objeto válido: la UI toastea "✓ guardado" y el dato no existe para nadie más.
+ * Es el peor falso éxito posible — el organizador cree que cargó algo y lo perdió.
+ * Por eso las escrituras hacen `this.X = this.X ?? []` (operan sobre la lista vacía y SÍ pegan
+ * al backend) en vez de `if (!this.X) return super.X(...)`. El caché es de LECTURA: que esté
+ * vacío significa "todavía no hidraté", nunca "no hay backend".
+ * Las LECTURAS sí pueden caer a super (`this.X ?? super.getX()`): ahí el seed es un placeholder
+ * razonable mientras hidrata, y no se pierde nada.
  */
 export class RemoteDataStore extends LocalDataStore {
   private readonly api: ApiClient
@@ -123,11 +134,13 @@ export class RemoteDataStore extends LocalDataStore {
       this.hydrateDeviceContent()
       this.hydrateMembership()
       this.hydrateApplications() // device ("Mis postulaciones")
-      // Si ya hay sesión de organizador (token en sessionStorage al recargar), hidratar también
-      // el caché admin — el panel /admin/postulaciones lo necesita sin re-loguear por el gate.
+      // Si ya hay sesión de organizador (token en sessionStorage al recargar), hidratar TODOS los
+      // cachés admin — no un subconjunto. refetchAdminScoped() es la MISMA lista que corre el
+      // AdminGate al loguear; el bootstrap y el post-login no pueden divergir. Antes acá se
+      // hidrataban solo applications+analytics, así que al RECARGAR el panel (el gate se saltea
+      // con sessionStorage 'ccm:admin') adminNotas/adminBanners/adminBenefits quedaban undefined.
       if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ccm:admin-token')) {
-        this.hydrateAdminApplications()
-        this.hydrateAnalytics() // reporte a sponsors con datos reales sin re-loguear
+        this.refetchAdminScoped()
       }
       this.hydrateBenefits()
       // Re-fetch de /contents YA CON el device token: el backend gatea el youtubeId de los videos
@@ -516,7 +529,7 @@ export class RemoteDataStore extends LocalDataStore {
     return this.adminNotas ?? super.getAdminNotas()
   }
   override createNota(input: NewNota): Nota {
-    if (!this.adminNotas) return super.createNota(input)
+    this.adminNotas = this.adminNotas ?? [] // nunca caer al camino local: seria un falso exito
     const taken = new Set(this.adminNotas.map((n) => n.slug))
     const base = input.slug || slugify(input.title)
     let slug = base
@@ -529,14 +542,14 @@ export class RemoteDataStore extends LocalDataStore {
     return nota
   }
   override updateNota(id: string, patch: Partial<Nota>): void {
-    if (!this.adminNotas) return super.updateNota(id, patch)
+    this.adminNotas = this.adminNotas ?? [] // nunca caer al camino local: seria un falso exito
     this.adminNotas = this.adminNotas.map((n) => (n.id === id ? { ...n, ...patch } : n))
     this.track('admin_nota_updated', { notaId: id })
     bus.emit('notas')
     this.api.patch(`/admin/notas/${id}`, patch).then(() => this.refetchNotas()).catch(() => this.refetchNotas())
   }
   override deleteNota(id: string): void {
-    if (!this.adminNotas) return super.deleteNota(id)
+    this.adminNotas = this.adminNotas ?? [] // nunca caer al camino local: seria un falso exito
     const prev = this.adminNotas
     this.adminNotas = this.adminNotas.filter((n) => n.id !== id)
     this.track('admin_nota_deleted', { notaId: id })
@@ -560,7 +573,7 @@ export class RemoteDataStore extends LocalDataStore {
     return this.adminBanners ?? super.getAdminBanners()
   }
   override createBanner(input: NewBanner): Banner {
-    if (!this.adminBanners) return super.createBanner(input)
+    this.adminBanners = this.adminBanners ?? [] // nunca caer al camino local: seria un falso exito
     const banner: Banner = { ...input, id: newId('bnr') }
     this.adminBanners = [...this.adminBanners, banner].sort((a, b) => a.order - b.order)
     this.track('admin_banner_created', { bannerId: banner.id, slot: banner.slot })
@@ -569,14 +582,14 @@ export class RemoteDataStore extends LocalDataStore {
     return banner
   }
   override updateBanner(id: string, patch: Partial<Banner>): void {
-    if (!this.adminBanners) return super.updateBanner(id, patch)
+    this.adminBanners = this.adminBanners ?? [] // nunca caer al camino local: seria un falso exito
     this.adminBanners = this.adminBanners.map((b) => (b.id === id ? { ...b, ...patch } : b)).sort((a, b) => a.order - b.order)
     this.track('admin_banner_updated', { bannerId: id })
     bus.emit('banners')
     this.api.patch(`/admin/banners/${id}`, patch).then(() => this.refetchBanners()).catch(() => this.refetchBanners())
   }
   override deleteBanner(id: string): void {
-    if (!this.adminBanners) return super.deleteBanner(id)
+    this.adminBanners = this.adminBanners ?? [] // nunca caer al camino local: seria un falso exito
     const prev = this.adminBanners
     this.adminBanners = this.adminBanners.filter((b) => b.id !== id)
     this.track('admin_banner_deleted', { bannerId: id })
@@ -625,7 +638,7 @@ export class RemoteDataStore extends LocalDataStore {
     return super.getConvocatoria(slug)
   }
   override createConvocatoria(input: NewConvocatoria): Convocatoria {
-    if (!this.convocatoriasList) return super.createConvocatoria(input)
+    this.convocatoriasList = this.convocatoriasList ?? [] // nunca caer al camino local: seria un falso exito
     const taken = new Set(this.convocatoriasList.map((c) => c.slug))
     const base = input.slug || slugify(input.title)
     let slug = base
@@ -638,14 +651,14 @@ export class RemoteDataStore extends LocalDataStore {
     return cv
   }
   override updateConvocatoria(id: string, patch: Partial<Convocatoria>): void {
-    if (!this.convocatoriasList) return super.updateConvocatoria(id, patch)
+    this.convocatoriasList = this.convocatoriasList ?? [] // nunca caer al camino local: seria un falso exito
     this.convocatoriasList = this.convocatoriasList.map((c) => (c.id === id ? { ...c, ...patch } : c))
     this.track('admin_convocatoria_updated', { convocatoriaId: id })
     bus.emit('convocatorias')
     this.api.patch(`/admin/convocatorias/${id}`, patch).then(() => this.hydrateConvocatorias()).catch(() => this.hydrateConvocatorias())
   }
   override deleteConvocatoria(id: string): void {
-    if (!this.convocatoriasList) return super.deleteConvocatoria(id)
+    this.convocatoriasList = this.convocatoriasList ?? [] // nunca caer al camino local: seria un falso exito
     const prev = this.convocatoriasList
     this.convocatoriasList = this.convocatoriasList.filter((c) => c.id !== id)
     this.track('admin_convocatoria_deleted', { convocatoriaId: id })
@@ -727,7 +740,7 @@ export class RemoteDataStore extends LocalDataStore {
     return this.adminBenefits ?? super.getAdminBenefits()
   }
   override createBenefit(input: NewBenefit): Benefit {
-    if (!this.adminBenefits) return super.createBenefit(input)
+    this.adminBenefits = this.adminBenefits ?? [] // nunca caer al camino local: seria un falso exito
     const benefit: Benefit = { ...input, id: newId('ben') }
     this.adminBenefits = [...this.adminBenefits, benefit].sort((a, b) => a.order - b.order)
     this.track('admin_benefit_created', { benefitId: benefit.id, category: benefit.category })
@@ -736,14 +749,14 @@ export class RemoteDataStore extends LocalDataStore {
     return benefit
   }
   override updateBenefit(id: string, patch: Partial<Benefit>): void {
-    if (!this.adminBenefits) return super.updateBenefit(id, patch)
+    this.adminBenefits = this.adminBenefits ?? [] // nunca caer al camino local: seria un falso exito
     this.adminBenefits = this.adminBenefits.map((b) => (b.id === id ? { ...b, ...patch } : b)).sort((a, b) => a.order - b.order)
     this.track('admin_benefit_updated', { benefitId: id })
     bus.emit('benefits')
     this.api.patch(`/admin/benefits/${id}`, patch).then(() => this.refetchBenefits()).catch(() => this.refetchBenefits())
   }
   override deleteBenefit(id: string): void {
-    if (!this.adminBenefits) return super.deleteBenefit(id)
+    this.adminBenefits = this.adminBenefits ?? [] // nunca caer al camino local: seria un falso exito
     const prev = this.adminBenefits
     this.adminBenefits = this.adminBenefits.filter((b) => b.id !== id)
     this.track('admin_benefit_deleted', { benefitId: id })
@@ -785,7 +798,7 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override createSponsor(input: NewSponsor): Sponsor {
-    if (!this.sponsors) return super.createSponsor(input)
+    this.sponsors = this.sponsors ?? [] // nunca caer al camino local: seria un falso exito
     const sponsor: Sponsor = { ...input, id: newId('sp') }
     this.sponsors = [...this.sponsors, sponsor]
     this.track('admin_sponsor_created', { sponsorId: sponsor.id, level: sponsor.level })
@@ -794,14 +807,14 @@ export class RemoteDataStore extends LocalDataStore {
     return sponsor
   }
   override updateSponsor(id: string, patch: Partial<Sponsor>): void {
-    if (!this.sponsors) return super.updateSponsor(id, patch)
+    this.sponsors = this.sponsors ?? [] // nunca caer al camino local: seria un falso exito
     this.sponsors = this.sponsors.map((s) => (s.id === id ? { ...s, ...patch } : s))
     this.track('admin_sponsor_updated', { sponsorId: id })
     bus.emit('sponsors')
     this.api.patch(`/admin/sponsors/${id}`, patch).then(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors')).catch(() => this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors'))
   }
   override deleteSponsor(id: string): void {
-    if (!this.sponsors) return super.deleteSponsor(id)
+    this.sponsors = this.sponsors ?? [] // nunca caer al camino local: seria un falso exito
     const prev = this.sponsors
     this.sponsors = this.sponsors.filter((s) => s.id !== id)
     this.track('admin_sponsor_deleted', { sponsorId: id })
@@ -810,7 +823,7 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override createGallery(input: NewGallery): Gallery {
-    if (!this.galleries) return super.createGallery(input)
+    this.galleries = this.galleries ?? [] // nunca caer al camino local: seria un falso exito
     // Dedup de slug (como notas/convocatorias): sin esto, dos galerías con el mismo título
     // chocan con el @unique del server → 409 → el ítem optimista desaparece en silencio.
     const gtaken = new Set(this.galleries.map((g) => g.slug))
@@ -824,14 +837,14 @@ export class RemoteDataStore extends LocalDataStore {
     return gallery
   }
   override updateGallery(id: string, patch: Partial<Gallery>): void {
-    if (!this.galleries) return super.updateGallery(id, patch)
+    this.galleries = this.galleries ?? [] // nunca caer al camino local: seria un falso exito
     this.galleries = this.galleries.map((g) => (g.id === id ? { ...g, ...patch } : g))
     this.track('admin_gallery_updated', { galleryId: id })
     bus.emit('galleries')
     this.api.patch(`/admin/galleries/${id}`, patch).then(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries')).catch(() => this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries'))
   }
   override deleteGallery(id: string): void {
-    if (!this.galleries) return super.deleteGallery(id)
+    this.galleries = this.galleries ?? [] // nunca caer al camino local: seria un falso exito
     const prev = this.galleries
     this.galleries = this.galleries.filter((g) => g.id !== id)
     this.track('admin_gallery_deleted', { galleryId: id })
@@ -840,7 +853,7 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override createCatalogProfile(input: NewCatalogProfile): CatalogProfile {
-    if (!this.catalog) return super.createCatalogProfile(input)
+    this.catalog = this.catalog ?? [] // nunca caer al camino local: seria un falso exito
     // Dedup de slug: dos expositores con el mismo nombre chocan con el @unique → 409 → el ítem
     // desaparece del panel sin aviso. Espeja el dedup de notas/convocatorias.
     const ctaken = new Set(this.catalog.map((c) => c.slug))
@@ -854,14 +867,14 @@ export class RemoteDataStore extends LocalDataStore {
     return profile
   }
   override updateCatalogProfile(id: string, patch: Partial<CatalogProfile>): void {
-    if (!this.catalog) return super.updateCatalogProfile(id, patch)
+    this.catalog = this.catalog ?? [] // nunca caer al camino local: seria un falso exito
     this.catalog = this.catalog.map((c) => (c.id === id ? { ...c, ...patch } : c))
     this.track('admin_catalog_updated', { profileId: id })
     bus.emit('catalog')
     this.api.patch(`/admin/catalog/${id}`, patch).then(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog')).catch(() => this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog'))
   }
   override deleteCatalogProfile(id: string): void {
-    if (!this.catalog) return super.deleteCatalogProfile(id)
+    this.catalog = this.catalog ?? [] // nunca caer al camino local: seria un falso exito
     const prev = this.catalog
     this.catalog = this.catalog.filter((c) => c.id !== id)
     this.track('admin_catalog_deleted', { profileId: id })
@@ -870,7 +883,7 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override updatePlan(id: PlanId, patch: { price?: number | null; mpLink?: string }): void {
-    if (!this.plans) return super.updatePlan(id, patch)
+    this.plans = this.plans ?? [] // nunca caer al camino local: seria un falso exito
     this.plans = this.plans.map((p) => (p.id === id ? { ...p, ...patch } : p))
     bus.emit('plans')
     this.api.patch(`/admin/plans/${id}`, patch).then(() => this.refetch('/plans', (v: TicketPlan[]) => (this.plans = v), 'plans')).catch(() => this.refetch('/plans', (v: TicketPlan[]) => (this.plans = v), 'plans'))
@@ -945,7 +958,7 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override createEvent(input: NewEvent): EventItem {
-    if (!this.events) return super.createEvent(input)
+    this.events = this.events ?? [] // nunca caer al camino local: seria un falso exito
     const event: EventItem = { ...input, id: newId('ev'), slug: input.slug || this.uniqueSlug(slugify(input.title)) }
     this.events = [...this.events, event]
     this.track('admin_event_created', { eventId: event.id, type: event.type })
@@ -954,14 +967,14 @@ export class RemoteDataStore extends LocalDataStore {
     return event
   }
   override updateEvent(id: string, patch: Partial<EventItem>): void {
-    if (!this.events) return super.updateEvent(id, patch)
+    this.events = this.events ?? [] // nunca caer al camino local: seria un falso exito
     this.events = this.events.map((e) => (e.id === id ? { ...e, ...patch } : e))
     this.track('admin_event_updated', { eventId: id })
     bus.emit('events')
     this.api.patch(`/admin/events/${id}`, patch).then(() => this.hydrateEvents()).catch(() => this.hydrateEvents())
   }
   override deleteEvent(id: string): void {
-    if (!this.events) return super.deleteEvent(id)
+    this.events = this.events ?? [] // nunca caer al camino local: seria un falso exito
     const prev = this.events
     this.events = this.events.filter((e) => e.id !== id)
     this.blocksByEvent.delete(id)
@@ -974,7 +987,7 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override createBlock(input: NewBlock): EventBlock {
-    if (!this.events) return super.createBlock(input)
+    this.events = this.events ?? [] // nunca caer al camino local: seria un falso exito
     const block: EventBlock = { ...input, id: newId('blk') }
     this.blocksByEvent.set(block.eventId, [...(this.blocksByEvent.get(block.eventId) ?? []), block])
     this.blocksById.set(block.id, block)
@@ -984,7 +997,7 @@ export class RemoteDataStore extends LocalDataStore {
     return block
   }
   override updateBlock(id: string, patch: Partial<EventBlock>): void {
-    if (!this.events) return super.updateBlock(id, patch)
+    this.events = this.events ?? [] // nunca caer al camino local: seria un falso exito
     const cur = this.blocksById.get(id)
     if (cur) {
       const next = { ...cur, ...patch }
@@ -996,7 +1009,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.api.patch(`/admin/blocks/${id}`, patch).then(() => this.hydrateEvents()).catch(() => this.hydrateEvents())
   }
   override deleteBlock(id: string): void {
-    if (!this.events) return super.deleteBlock(id)
+    this.events = this.events ?? [] // nunca caer al camino local: seria un falso exito
     const cur = this.blocksById.get(id)
     this.blocksById.delete(id)
     if (cur) this.blocksByEvent.set(cur.eventId, (this.blocksByEvent.get(cur.eventId) ?? []).filter((b) => b.id !== id))
@@ -1006,7 +1019,7 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override createContent(input: NewContent): ContentItem {
-    if (!this.contents) return super.createContent(input)
+    this.contents = this.contents ?? [] // nunca caer al camino local: seria un falso exito
     const content: ContentItem = { ...input, id: newId('vid') }
     this.contents = [content, ...this.contents]
     this.track('admin_content_created', { contentId: content.id })
@@ -1015,14 +1028,14 @@ export class RemoteDataStore extends LocalDataStore {
     return content
   }
   override updateContent(id: string, patch: Partial<ContentItem>): void {
-    if (!this.contents) return super.updateContent(id, patch)
+    this.contents = this.contents ?? [] // nunca caer al camino local: seria un falso exito
     this.contents = this.contents.map((c) => (c.id === id ? { ...c, ...patch } : c))
     this.track('admin_content_updated', { contentId: id })
     bus.emit('contents')
     this.api.patch(`/admin/contents/${id}`, patch).then(() => this.refetchContents()).catch(() => this.refetchContents())
   }
   override deleteContent(id: string): void {
-    if (!this.contents) return super.deleteContent(id)
+    this.contents = this.contents ?? [] // nunca caer al camino local: seria un falso exito
     this.contents = this.contents.filter((c) => c.id !== id)
     this.track('admin_content_deleted', { contentId: id })
     bus.emit('contents')
