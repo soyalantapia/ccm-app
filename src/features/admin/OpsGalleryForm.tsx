@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Check } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 import { Button, Field, Img, Input, Select, Sheet, toast, ImageUpload } from '../../components/ui'
 import { store } from '../../data/store'
 import { newId } from '../../lib/storage'
@@ -17,13 +17,21 @@ const COVER_OPTIONS: { value: string; label: string }[] = PHOTO_POOL.slice(0, 8)
   label: `Foto ${i + 1}`,
 }))
 
+/**
+ * Foto en edición. Lleva el `id` REAL de la foto y su `alt` tal como está guardado.
+ * Antes el form guardaba solo la URL: al guardar regeneraba id y alt de todas, lo que
+ * borraba los favoritos/descargas del asistente (cascade sobre Photo) y pisaba los
+ * epígrafes escritos a mano. La identidad de una foto es su id, nunca su URL.
+ */
+type PhotoForm = { id?: string; src: string; alt: string }
+
 type Form = {
   title: string
   eventLabel: string
   date: string
   cover: string
   sponsorId: string
-  photos: string[]
+  photos: PhotoForm[]
 }
 
 function fromGallery(g: Gallery): Form {
@@ -33,7 +41,7 @@ function fromGallery(g: Gallery): Form {
     date: g.date,
     cover: g.cover,
     sponsorId: g.sponsorId,
-    photos: g.photos.map((p) => p.src),
+    photos: g.photos.map((p) => ({ id: p.id, src: p.src, alt: p.alt })),
   }
 }
 
@@ -62,6 +70,8 @@ export function OpsGalleryForm({ open, gallery, onClose }: Props) {
 
   const [f, setF] = useState<Form>(empty)
   const [error, setError] = useState('')
+  const [verPool, setVerPool] = useState(false)
+  const [subiendo, setSubiendo] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -74,12 +84,21 @@ export function OpsGalleryForm({ open, gallery, onClose }: Props) {
   const set = (k: keyof Form) => (e: { target: { value: string } }) =>
     setF((prev) => ({ ...prev, [k]: e.target.value }))
 
+  const quitarFoto = (i: number) =>
+    setF((prev) => {
+      const foto = prev.photos[i]
+      if (foto?.id && !confirm('Esta foto ya está publicada. Si la quitás, también se pierden los favoritos y las descargas que tenga. ¿La sacamos?')) {
+        return prev
+      }
+      return { ...prev, photos: prev.photos.filter((_, j) => j !== i) }
+    })
+
   const togglePhoto = (src: string) =>
     setF((prev) => ({
       ...prev,
-      photos: prev.photos.includes(src)
-        ? prev.photos.filter((p) => p !== src)
-        : [...prev.photos, src],
+      photos: prev.photos.some((p) => p.src === src)
+        ? prev.photos.filter((p) => p.src !== src)
+        : [...prev.photos, { src, alt: '' }],
     }))
 
   const submit = (e: FormEvent) => {
@@ -88,15 +107,20 @@ export function OpsGalleryForm({ open, gallery, onClose }: Props) {
       setError('Completá los campos obligatorios.')
       return
     }
+    if (subiendo) {
+      setError('Esperá a que terminen de subir las fotos.')
+      return
+    }
     if (f.photos.length === 0) {
       setError('Elegí al menos una foto para la galería.')
       return
     }
     const title = f.title.trim()
-    const photos: Photo[] = f.photos.map((src, i) => ({
-      id: newId('ph'),
-      src,
-      alt: `${title} · foto ${i + 1}`,
+    // Conservamos id y alt de las que ya existían; solo las nuevas estrenan id y epígrafe genérico.
+    const photos: Photo[] = f.photos.map((p, i) => ({
+      id: p.id ?? newId('ph'),
+      src: p.src,
+      alt: p.alt || `${title} · foto ${i + 1}`,
     }))
     const data = {
       title,
@@ -166,30 +190,83 @@ export function OpsGalleryForm({ open, gallery, onClose }: Props) {
           />
         )}
 
-        <Field label={`Fotos de la galería · ${f.photos.length} elegidas`} required>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {PHOTO_POOL.map((src, i) => {
-              const on = f.photos.includes(src)
-              return (
-                <button
-                  key={src}
-                  type="button"
-                  onClick={() => togglePhoto(src)}
-                  aria-pressed={on}
-                  className={`relative overflow-hidden rounded-sm transition ${
-                    on ? 'ring-2 ring-accent ring-offset-2 ring-offset-surface' : 'ring-1 ring-line'
-                  }`}
-                >
-                  <Img src={src} alt={`Foto ${i + 1}`} ratio="1/1" />
-                  {on && (
-                    <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-accent text-accent-ink">
-                      <Check className="size-3.5" strokeWidth={2.5} aria-hidden />
-                    </span>
-                  )}
-                </button>
-              )
-            })}
+        {/* La grilla es LA SELECCIÓN, no el catálogo de demo: antes mostraba solo el pool, así que
+            toda foto que no estuviera ahí quedaba invisible y no se podía sacar (en prod las 4
+            galerías tenían fotos así). El set de demo pasó a ser un accesorio colapsable. */}
+        <Field
+          label={`Fotos de la galería · ${f.photos.length}`}
+          required
+          hint="Estas son las fotos que ve el público, en este orden."
+        >
+          {f.photos.length === 0 ? (
+            <p className="rounded-sm border border-dashed border-line px-3 py-6 text-center text-xs text-ink-soft">
+              Todavía no hay fotos. Subí las del evento con el botón de abajo.
+            </p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {f.photos.map((p, i) => (
+                <div key={p.id ?? `nueva-${i}-${p.src}`} className="group relative overflow-hidden rounded-sm ring-1 ring-line">
+                  <Img src={p.src} alt={p.alt || `Foto ${i + 1}`} ratio="1/1" />
+                  <button
+                    type="button"
+                    onClick={() => quitarFoto(i)}
+                    aria-label={`Quitar foto ${i + 1}`}
+                    title="Quitar de la galería"
+                    className="absolute right-1 top-1 flex size-6 items-center justify-center rounded-full bg-night/80 text-white opacity-0 transition-opacity focus:opacity-100 group-hover:opacity-100"
+                  >
+                    <X className="size-3.5" strokeWidth={2.5} aria-hidden />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <ImageUpload
+              label="Subir fotos"
+              multiple
+              onBusyChange={setSubiendo}
+              onUrl={(url) => setF((prev) => ({ ...prev, photos: [...prev.photos, { src: url, alt: '' }] }))}
+            />
+            <button
+              type="button"
+              onClick={() => setVerPool((v) => !v)}
+              className="text-xs text-ink-soft underline decoration-dotted underline-offset-2 hover:text-ink"
+            >
+              {verPool ? 'Ocultar el set de demo' : 'o agregar del set de demo'}
+            </button>
           </div>
+
+          {verPool && (
+            <div className="mt-2.5 rounded-sm border border-line p-2.5">
+              <p className="mb-2 text-[11px] text-ink-soft">
+                Set de demostración — <strong>no son fotos del evento</strong>.
+              </p>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {PHOTO_POOL.map((src, i) => {
+                  const on = f.photos.some((p) => p.src === src)
+                  return (
+                    <button
+                      key={src}
+                      type="button"
+                      onClick={() => togglePhoto(src)}
+                      aria-pressed={on}
+                      className={`relative overflow-hidden rounded-sm transition ${
+                        on ? 'ring-2 ring-accent ring-offset-2 ring-offset-surface' : 'ring-1 ring-line'
+                      }`}
+                    >
+                      <Img src={src} alt={`Foto ${i + 1}`} ratio="1/1" />
+                      {on && (
+                        <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-accent text-accent-ink">
+                          <Check className="size-3.5" strokeWidth={2.5} aria-hidden />
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </Field>
 
         {error && <p className="text-xs text-danger">{error}</p>}

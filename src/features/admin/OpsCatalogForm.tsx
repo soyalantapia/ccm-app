@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Check } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 import { Button, Field, Img, Input, Select, Sheet, Textarea, toast, ImageUpload } from '../../components/ui'
 import { store } from '../../data/store'
 import { newId } from '../../lib/storage'
@@ -28,8 +28,13 @@ const PORTFOLIO_POOL: string[] = Array.from(
   (_, i) => `img/gallery/g${String(i + 1).padStart(2, '0')}.jpg`,
 )
 
-/** Pieza del portfolio en edición: imagen + título + precio (string para el input). */
-type PieceForm = { image: string; title: string; price: string }
+/**
+ * Pieza del portfolio en edición: imagen + título + precio (string para el input).
+ * Lleva también `id` y `caption` aunque el form no los edite: si no viajan de ida y vuelta,
+ * el guardado los borra. En prod hay 50 obras con epígrafe escrito a mano que se veían en la
+ * ficha pública y desaparecían al tocar "Guardar cambios".
+ */
+type PieceForm = { id?: string; image: string; title: string; caption?: string; price: string }
 
 type Kind = 'participante' | 'expositor'
 /** Cupo de imágenes de portfolio por tipo (feedback Gastón: participante 4, expositor 2). */
@@ -81,7 +86,7 @@ function fromProfile(p: CatalogProfile): Form {
     whatsapp: p.whatsapp ?? '',
     verified: p.verified,
     participatesIn: p.participatesIn.join(', '),
-    portfolio: p.portfolio.map((pf) => ({ image: pf.image, title: pf.title, price: pf.price != null ? String(pf.price) : '' })),
+    portfolio: p.portfolio.map((pf) => ({ id: pf.id, image: pf.image, title: pf.title, caption: pf.caption, price: pf.price != null ? String(pf.price) : '' })),
   }
 }
 
@@ -96,6 +101,8 @@ interface Props {
 export function OpsCatalogForm({ open, profile, onClose }: Props) {
   const [f, setF] = useState<Form>(empty)
   const [error, setError] = useState('')
+  const [verPool, setVerPool] = useState(false)
+  const [subiendo, setSubiendo] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -107,6 +114,9 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
   const set = (k: keyof Form) => (e: { target: { value: string } }) =>
     setF((prev) => ({ ...prev, [k]: e.target.value }))
 
+  const quitarObra = (i: number) =>
+    setF((prev) => ({ ...prev, portfolio: prev.portfolio.filter((_, j) => j !== i) }))
+
   const togglePortfolio = (image: string) =>
     setF((prev) => {
       if (prev.portfolio.some((p) => p.image === image)) {
@@ -116,7 +126,7 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
       return { ...prev, portfolio: [...prev.portfolio, { image, title: '', price: '' }] }
     })
 
-  const setPiece = (image: string, key: 'title' | 'price') => (e: { target: { value: string } }) =>
+  const setPiece = (image: string, key: 'title' | 'price' | 'caption') => (e: { target: { value: string } }) =>
     setF((prev) => ({
       ...prev,
       portfolio: prev.portfolio.map((p) => (p.image === image ? { ...p, [key]: e.target.value } : p)),
@@ -128,14 +138,21 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
       setError('Completá los campos obligatorios.')
       return
     }
+    if (subiendo) {
+      setError('Esperá a que terminen de subir las imágenes.')
+      return
+    }
     const participatesIn = f.participatesIn
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
+    // Conservamos id y caption de las obras que ya existían: el form no edita el epígrafe,
+    // y si no lo devolvemos tal cual, el guardado lo borra.
     const portfolio: PortfolioPiece[] = f.portfolio.map((p, i) => ({
-      id: newId('pf'),
+      id: p.id ?? newId('pf'),
       image: p.image,
       title: p.title.trim() || `Obra ${i + 1}`,
+      ...(p.caption !== undefined ? { caption: p.caption } : {}),
       price: p.price.trim() ? Number(p.price) : undefined,
     }))
     const data = {
@@ -261,9 +278,40 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
 
         <Field
           label={`Portfolio · ${f.portfolio.length}/${IMG_CAP[f.kind]} imágenes`}
-          hint={`Elegí hasta ${IMG_CAP[f.kind]} obras (${f.kind}). Cambiá el tipo arriba para el otro cupo.`}
+          hint={`Hasta ${IMG_CAP[f.kind]} obras (${f.kind}). Cambiá el tipo arriba para el otro cupo.`}
         >
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <ImageUpload
+              label="Subir obras"
+              multiple
+              max={Math.max(0, IMG_CAP[f.kind] - f.portfolio.length)}
+              onBusyChange={setSubiendo}
+              onUrl={(url) =>
+                setF((prev) =>
+                  prev.portfolio.length >= IMG_CAP[prev.kind]
+                    ? prev
+                    : { ...prev, portfolio: [...prev.portfolio, { image: url, title: '', price: '' }] },
+                )
+              }
+            />
+            <button
+              type="button"
+              onClick={() => setVerPool((v) => !v)}
+              className="text-xs text-ink-soft underline decoration-dotted underline-offset-2 hover:text-ink"
+            >
+              {verPool ? 'Ocultar el set de demo' : 'o elegir del set de demo'}
+            </button>
+          </div>
+        </Field>
+
+        {/* Set de demo, colapsado: antes esta grilla era LA vista del portfolio, así que las obras
+            reales (que no están en el pool) quedaban invisibles — 20 de 23 perfiles en prod. */}
+        {verPool && (
+          <div className="rounded-sm border border-line p-2.5">
+            <p className="mb-2 text-[11px] text-ink-soft">
+              Set de demostración — <strong>no son obras del participante</strong>.
+            </p>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
             {PORTFOLIO_POOL.map((image, i) => {
               const on = f.portfolio.some((p) => p.image === image)
               return (
@@ -285,21 +333,30 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
                 </button>
               )
             })}
+            </div>
           </div>
-        </Field>
+        )}
 
-        {f.portfolio.length > 0 && (
+        {/* Esta lista es LA selección de obras: acá se ven TODAS (subidas o del set), se editan
+            y se quitan. Antes las obras reales no aparecían en la grilla y no había forma de sacarlas. */}
+        {f.portfolio.length > 0 ? (
           <div className="space-y-2.5 rounded-md border border-line bg-surface p-3">
-            <p className="eyebrow text-[10px] text-ink-soft">Título y precio por obra (el precio es opcional)</p>
-            {f.portfolio.map((p) => (
-              <div key={p.image} className="flex items-center gap-2.5">
+            <p className="eyebrow text-[10px] text-ink-soft">Las obras de esta ficha (el precio es opcional)</p>
+            {f.portfolio.map((p, i) => (
+              <div key={p.id ?? `nueva-${i}-${p.image}`} className="flex items-center gap-2.5">
                 <Img src={p.image} alt="" ratio="1/1" className="w-12 shrink-0 rounded-sm" />
-                <Input
-                  value={p.title}
-                  onChange={setPiece(p.image, 'title')}
-                  placeholder="Título de la obra"
-                  className="flex-1"
-                />
+                <div className="flex flex-1 flex-col gap-2">
+                  <Input
+                    value={p.title}
+                    onChange={setPiece(p.image, 'title')}
+                    placeholder="Título de la obra"
+                  />
+                  <Input
+                    value={p.caption ?? ''}
+                    onChange={setPiece(p.image, 'caption')}
+                    placeholder="Epígrafe (se ve en la ficha pública)"
+                  />
+                </div>
                 <Input
                   type="number"
                   value={p.price}
@@ -307,9 +364,22 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
                   placeholder="Precio $"
                   className="w-28 shrink-0"
                 />
+                <button
+                  type="button"
+                  onClick={() => quitarObra(i)}
+                  aria-label={`Quitar obra ${i + 1}`}
+                  title="Quitar del portfolio"
+                  className="shrink-0 rounded-sm border border-line px-2.5 py-2.5 text-danger transition-colors hover:bg-danger/10"
+                >
+                  <X className="size-3.5" strokeWidth={2.5} aria-hidden />
+                </button>
               </div>
             ))}
           </div>
+        ) : (
+          <p className="rounded-sm border border-dashed border-line px-3 py-5 text-center text-xs text-ink-soft">
+            Todavía no hay obras cargadas. Subilas con el botón de arriba.
+          </p>
         )}
 
         {error && <p className="text-xs text-danger">{error}</p>}
