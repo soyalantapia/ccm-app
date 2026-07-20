@@ -4,7 +4,7 @@
  * Uso:
  *   <ImageUpload onUrl={(url) => setF(p => ({ ...p, banner: url }))} />
  *
- * Al seleccionar un archivo local (jpeg/png/webp/gif/svg, ≤5 MB), hace POST
+ * Al seleccionar un archivo local (jpeg/png/webp/gif, ≤5 MB), hace POST
  * /admin/upload con FormData y, al recibir { url }, llama onUrl(url).
  * Si UPLOAD_DIR no está configurado en el server, muestra un aviso claro.
  */
@@ -26,7 +26,8 @@ interface Props {
   onBusyChange?: (busy: boolean) => void
 }
 
-const ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,image/svg+xml'
+// SVG excluido a propósito: es ejecutable y se serviría desde el origen de la app (XSS).
+const ACCEPT = 'image/jpeg,image/png,image/webp,image/gif'
 const MAX_BYTES = 5 * 1024 * 1024
 
 function apiBase() {

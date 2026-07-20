@@ -62,14 +62,21 @@ export function SponsorCarousel({ className }: { className?: string }) {
 
   if (n === 0) return null
 
+  // La pausa del autoplay colgaba SOLO de onMouseEnter/onMouseLeave, y en un celular no hay
+  // hover: el carrusel nunca se pausaba, así que el sponsor que estabas leyendo cambiaba solo
+  // a los 5 s. Al tocarlo se pausa, y se reanuda unos segundos después de soltar.
   const onTouchStart = (e: React.TouchEvent) => {
     touchX.current = e.touches[0].clientX
+    setPaused(true)
   }
   const onTouchEnd = (e: React.TouchEvent) => {
-    if (touchX.current === null) return
-    const dx = e.changedTouches[0].clientX - touchX.current
-    if (Math.abs(dx) > 40) go(i + (dx < 0 ? 1 : -1))
-    touchX.current = null
+    if (touchX.current !== null) {
+      const dx = e.changedTouches[0].clientX - touchX.current
+      if (Math.abs(dx) > 40) go(i + (dx < 0 ? 1 : -1))
+      touchX.current = null
+    }
+    // Margen para leer el sponsor antes de que vuelva a rotar solo.
+    window.setTimeout(() => setPaused(false), 8000)
   }
 
   return (
@@ -138,6 +145,9 @@ export function SponsorCarousel({ className }: { className?: string }) {
       {/* Dots */}
       {n > 1 && (
         <div className="mt-3 flex items-center justify-center gap-2">
+          {/* El área táctil (24px, mínimo de WCAG 2.5.8) está separada del pixel pintado: la
+              barrita de 6px se ve igual, pero antes ERA el hit target y en un celular fallar
+              el toque significaba abrir el sponsor equivocado. */}
           {sponsors.map((sp, idx) => (
             <button
               key={sp.id}
@@ -145,10 +155,15 @@ export function SponsorCarousel({ className }: { className?: string }) {
               onClick={() => go(idx)}
               aria-label={`Ver sponsor ${idx + 1} de ${n}`}
               aria-current={idx === i}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                idx === i ? 'w-6 bg-accent' : 'w-1.5 bg-ink/20 hover:bg-ink/40'
-              }`}
-            />
+              className="flex h-6 min-w-6 items-center justify-center"
+            >
+              <span
+                aria-hidden
+                className={`h-1.5 rounded-full transition-all duration-300 ${
+                  idx === i ? 'w-6 bg-accent' : 'w-1.5 bg-ink/20 hover:bg-ink/40'
+                }`}
+              />
+            </button>
           ))}
         </div>
       )}

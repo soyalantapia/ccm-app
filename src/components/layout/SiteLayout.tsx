@@ -6,6 +6,7 @@ import { registerFree } from '../../lib/actions'
 import { useStore } from '../../data/store'
 import { IDS } from '../../data/ids'
 import { config } from '../../config'
+import { bloquearScroll } from '../../lib/useFocusTrap'
 
 // Foco (tesis Gastón: simple, de nicho): la app SON las 5 pestañas. PRIMARY =
 // las que compiten por atención (top-nav en desktop; bottom-nav en mobile). El
@@ -89,10 +90,8 @@ function Header() {
   useEffect(() => setMenuOpen(false), [location.pathname])
 
   useEffect(() => {
-    document.body.style.overflow = menuOpen ? 'hidden' : ''
-    return () => {
-      document.body.style.overflow = ''
-    }
+    if (!menuOpen) return
+    return bloquearScroll() // conteo compartido: un diálogo encima no desbloquea a este
   }, [menuOpen])
 
   return (
@@ -188,6 +187,9 @@ function BottomNav() {
   // Barra oscura #181410 (mockups): 72px, borde superior tenue, ítem activo con
   // subrayado dorado 2px arriba; QR central elevado (-18px) siempre dorado con glow.
   return (
+    // lg y no md: el nav del header recién aparece en lg (1024). Con el corte en md (768)
+    // quedaba una franja de 768-1023px SIN ningún control de navegación — ni la barra
+    // inferior ni el menú de arriba. El corte del layout público es UNO solo: lg.
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-ink pb-[env(safe-area-inset-bottom)] lg:hidden">
       <div className="grid h-[64px] grid-cols-5">
         {BOTTOM_NAV.map((item) => {

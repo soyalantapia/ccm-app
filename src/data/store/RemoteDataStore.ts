@@ -1,4 +1,4 @@
-import { LocalDataStore } from './LocalDataStore'
+import { LocalDataStore, K } from './LocalDataStore'
 import type {
   BlockAvailability,
   PhotoDownload,
@@ -12,7 +12,7 @@ import type {
   HydratableResource,
 } from './DataStore'
 import { slugify } from './overlay'
-import { newId } from '../../lib/storage'
+import { newId, writeJSON } from '../../lib/storage'
 import { createApi, type ApiClient } from '../../lib/api'
 import { bus } from '../../lib/bus'
 import { hydrateFromRemote, getDeviceToken, setDeviceCredentials } from '../../lib/identity'
@@ -213,6 +213,11 @@ export class RemoteDataStore extends LocalDataStore {
         // la ventana de hidratación, no pisarlos con la lista del server (el .then los reconcilia).
         const inflight = (this.regs ?? []).filter((r) => r.id.startsWith('tmp_'))
         this.regs = [...regs, ...inflight]
+        // Write-through: el caché de este store es memoria pura y se hidrata una sola vez. Si el
+        // próximo arranque no tiene red, la lectura cae al fallback de LocalDataStore, que lee
+        // esta misma clave — sin espejarla, devuelve [] y el asistente ve "todavía no tenés tu QR"
+        // estando inscripto. Guardamos el último snapshot real del server.
+        writeJSON(K.registrations, regs)
         bus.emit('registrations')
       })
       .catch(() => {})
@@ -597,8 +602,10 @@ export class RemoteDataStore extends LocalDataStore {
 
   /** Contenido del DEVICE (requireDevice): favoritos y descargas. Corre tras tener el token. */
   private hydrateDeviceContent(): void {
-    this.api.get<string[]>('/favorites').then((f) => { this.favorites = f; bus.emit('favorites') }).catch(() => {})
-    this.api.get<PhotoDownload[]>('/downloads').then((d) => { this.downloads = d; bus.emit('downloads') }).catch(() => {})
+    // writeJSON: mismo write-through que hydrateRegistrations — sin espejar, un arranque sin red
+    // muestra los favoritos y las descargas vacíos (ver el comentario allá).
+    this.api.get<string[]>('/favorites').then((f) => { this.favorites = f; writeJSON(K.favorites, f); bus.emit('favorites') }).catch(() => {})
+    this.api.get<PhotoDownload[]>('/downloads').then((d) => { this.downloads = d; writeJSON(K.downloads, d); bus.emit('downloads') }).catch(() => {})
   }
 
   /* ─── Resto Fase G: sponsors / planes / convocatorias / postulaciones ─── */
@@ -710,7 +717,9 @@ export class RemoteDataStore extends LocalDataStore {
   /* ─── Membresía (Fase D parcial): persiste server-side, antes solo en localStorage ─── */
 
   private hydrateMembership(): void {
-    this.api.get<Membership>('/memberships/me').then((m) => { this.membership = m; bus.emit('membership') }).catch(() => {})
+    // writeJSON: sin el espejo, un socio que arranca sin red vuelve a ser 'free' y pierde el
+    // acceso al contenido que pagó hasta que la hidratación funcione.
+    this.api.get<Membership>('/memberships/me').then((m) => { this.membership = m; writeJSON(K.membership, m); bus.emit('membership') }).catch(() => {})
   }
 
   override getMembership(): Membership {
@@ -729,6 +738,7 @@ export class RemoteDataStore extends LocalDataStore {
       .post<Membership>('/memberships', { paid })
       .then((server) => {
         this.membership = server
+        writeJSON(K.membership, server) // write-through: la membresía recién pagada sobrevive a un arranque sin red
         bus.emit('membership')
         this.refetchContents() // ahora socio → re-fetch para desenmascarar el youtubeId de contenido socioOnly
       })
@@ -736,6 +746,9 @@ export class RemoteDataStore extends LocalDataStore {
         // Si el server no registró la membresía, revertir el estado optimista y AVISAR — si no,
         // isSocio() queda true y desbloquea contenido socioOnly cross-app hasta el próximo reload.
         this.membership = prev
+        // El espejo también se revierte: si no, el snapshot local queda diciendo 'socio' y el
+        // próximo arranque sin red desbloquea contenido que el server nunca confirmó.
+        writeJSON(K.membership, prev ?? { tier: 'free', since: '', paid: 0 })
         bus.emit('membership')
         bus.emit('membership:rejected')
       })

@@ -113,3 +113,57 @@ describe('RemoteDataStore — las LECTURAS sí pueden caer al seed', () => {
     expect(Array.isArray(s.getNotas())).toBe(true)
   })
 })
+
+/**
+ * Write-through de lo device-scoped (P1, ronda 4).
+ *
+ * El estado hidratado vivía SOLO en memoria y ninguna respuesta del server se persistía,
+ * mientras que el fallback `?? super.getX()` lee claves de localStorage que en modo remoto
+ * nunca se escribían. Resultado: un arranque en el que falle la hidratación deja al usuario
+ * viendo "Todavía no tenés tu QR" aunque esté inscripto, y a un socio como no-socio.
+ * Con write-through, el fallback pasa a ser el último snapshot conocido del server.
+ */
+describe('RemoteDataStore — write-through de lo device-scoped', () => {
+  /** fetch que responde OK con `body` en las rutas que matcheen, y falla el resto. */
+  function fetchQueResuelve(porRuta: Record<string, unknown>) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: { method?: string }) => {
+        calls.push({ method: init?.method ?? 'GET', url: String(url) })
+        const hit = Object.entries(porRuta).find(([ruta]) => String(url).endsWith(ruta))
+        if (!hit) return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) })
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(hit[1]) })
+      }),
+    )
+  }
+
+  it('persiste las inscripciones que vienen del server', async () => {
+    const regs = [{ id: 'reg_1', eventId: 'ev_1', status: 'confirmada', ts: '2026-01-01' }]
+    fetchQueResuelve({ '/devices': { deviceId: 'd1', token: 't1' }, '/registrations': regs })
+    new RemoteDataStore('https://api.test')
+    await vi.waitFor(() => expect(store['ccm:registrations']).toBeDefined())
+    expect(JSON.parse(store['ccm:registrations'])).toEqual(regs)
+  })
+
+  it('persiste la membresía que viene del server', async () => {
+    const m = { tier: 'socio', since: '2026-01-01', paid: 15000 }
+    fetchQueResuelve({ '/devices': { deviceId: 'd1', token: 't1' }, '/memberships/me': m })
+    new RemoteDataStore('https://api.test')
+    await vi.waitFor(() => expect(store['ccm:membership']).toBeDefined())
+    expect(JSON.parse(store['ccm:membership'])).toEqual(m)
+  })
+
+  it('persiste favoritos y descargas', async () => {
+    fetchQueResuelve({
+      '/devices': { deviceId: 'd1', token: 't1' },
+      '/favorites': ['ph-1', 'ph-2'],
+      '/downloads': [{ photoId: 'ph-1', galleryId: 'g1', sponsorId: 's1', ts: '2026-01-01' }],
+    })
+    new RemoteDataStore('https://api.test')
+    await vi.waitFor(() => {
+      expect(store['ccm:favorites']).toBeDefined()
+      expect(store['ccm:downloads']).toBeDefined()
+    })
+    expect(JSON.parse(store['ccm:favorites'])).toEqual(['ph-1', 'ph-2'])
+  })
+})

@@ -28,6 +28,13 @@ const PORTFOLIO_POOL: string[] = Array.from(
   (_, i) => `img/gallery/g${String(i + 1).padStart(2, '0')}.jpg`,
 )
 
+/** Precio saneado: entero no negativo y acotado; cualquier otra cosa se descarta. */
+function precioValido(raw: string): number | undefined {
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 0 || n > 100_000_000) return undefined
+  return Math.round(n)
+}
+
 /**
  * Pieza del portfolio en edición: imagen + título + precio (string para el input).
  * Lleva también `id` y `caption` aunque el form no los edite: si no viajan de ida y vuelta,
@@ -153,7 +160,8 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
       image: p.image,
       title: p.title.trim() || `Obra ${i + 1}`,
       ...(p.caption !== undefined ? { caption: p.caption } : {}),
-      price: p.price.trim() ? Number(p.price) : undefined,
+      // Number() crudo aceptaba negativos, NaN e Infinity y ninguna capa lo acotaba después.
+      price: p.price.trim() ? precioValido(p.price) : undefined,
     }))
     const data = {
       name: f.name.trim(),
@@ -365,6 +373,9 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
                 </div>
                 <Input
                   type="number"
+                  min={0}
+                  max={100000000}
+                  step={1}
                   value={p.price}
                   onChange={setPiece(p.image, 'price')}
                   placeholder="Precio $"

@@ -23,6 +23,7 @@ import {
 import type { AnalyticsEvent, PlanId, ProfileFieldKey } from '../../data/types'
 import type { DataStore } from '../../data/store'
 import { PROFILE_FIELD_LABELS, formatMoney } from './coreFormat'
+import { csvCell } from '../../lib/csv'
 
 function str(value: unknown): string | undefined {
   return typeof value === 'string' && value ? value : undefined
@@ -134,10 +135,6 @@ export function describeAnalyticsEvent(
 }
 
 /* ─── Export CSV (PRD §10.1) ───────────────────────────────────────── */
-
-function csvCell(value: string): string {
-  return /[",\n;]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
-}
 
 /** Genera el CSV de analytics en memoria y dispara la descarga (blob). */
 export function downloadAnalyticsCsv(events: AnalyticsEvent[]): void {

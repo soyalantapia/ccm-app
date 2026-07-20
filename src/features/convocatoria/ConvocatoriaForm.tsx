@@ -77,9 +77,17 @@ export function ConvocatoriaForm({ convocatoria, onSubmitted }: ConvocatoriaForm
       )
     }
     if (field.type === 'select') {
+      // Degradación defensiva: un select sin opciones es un control con dominio de valores
+      // vacío, y si además es requerido el postulante queda trabado sin poder enviar y sin
+      // entender por qué. El editor del panel ya no deja crear uno así, pero puede haber
+      // convocatorias viejas cargadas: ahí lo servimos como texto libre en vez de trabar.
+      const opciones = field.options ?? []
+      if (opciones.length === 0) {
+        return <Input type="text" {...common} onChange={(e) => setValue(field.key, e.target.value)} />
+      }
       return (
         <Select
-          options={(field.options ?? []).map((o) => ({ value: o, label: o }))}
+          options={opciones.map((o) => ({ value: o, label: o }))}
           {...common}
           placeholder="Elegí una opción"
           className={values[field.key] ? '' : 'text-ink-soft/50'}

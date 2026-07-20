@@ -59,7 +59,10 @@ import { seedBenefits } from '../seed/benefits'
 import { seedBanners } from '../seed/banners'
 import { seedNotas } from '../seed/notas'
 
-const K = {
+/** Claves de localStorage. Exportadas porque RemoteDataStore hace write-through sobre las
+ *  device-scoped: así el fallback `?? super.getX()` devuelve el último snapshot real del
+ *  server en vez del seed de demo o una lista vacía cuando la hidratación falla. */
+export const K = {
   registrations: 'registrations',
   orders: 'orders',
   favorites: 'favorites',

@@ -32,6 +32,11 @@ type Form = {
   address: string
   description: string
   cover: string
+  // Flags de visibilidad: sin estos en el Form, nunca entraban al patch y la whitelist
+  // `if (k in patch)` del backend jamás los veía → quedaban congelados en el default del
+  // create. El organizador no podía archivar un evento ni marcarlo exclusivo de Socios.
+  past: boolean
+  socioOnly: boolean
 }
 
 const empty: Form = {
@@ -44,6 +49,8 @@ const empty: Form = {
   venue: '',
   address: '',
   description: '',
+  past: false,
+  socioOnly: false,
   cover: COVER_OPTIONS[0].value,
 }
 
@@ -59,6 +66,8 @@ function fromEvent(e: EventItem): Form {
     address: e.address,
     description: e.description,
     cover: e.cover,
+    past: e.past ?? false,
+    socioOnly: e.socioOnly ?? false,
   }
 }
 
@@ -86,14 +95,20 @@ export function OpsEventForm({ open, event, onClose }: Props) {
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    const required: (keyof Form)[] = ['title', 'dateLabel', 'startDate', 'venue', 'address', 'description', 'cover']
+    const required = ['title', 'dateLabel', 'startDate', 'venue', 'address', 'description', 'cover'] as const
     if (required.some((k) => !f[k].trim())) {
       setError('Completá los campos obligatorios.')
       return
     }
-    const mapsUrl = event?.mapsUrl
-      ? event.mapsUrl
-      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${f.venue} ${f.address}`)}`
+    // El link de mapa se recalcula cuando cambia la SEDE. Antes la condición era
+    // `event?.mapsUrl ? conservarlo : generarlo`, usando "existe" como proxy de "lo cargó el
+    // organizador a mano" — pero el form nunca expuso mapsUrl y el create siempre lo genera,
+    // así que en edición el proxy era siempre verdadero: mover un evento de sede dejaba el
+    // mapa apuntando a la dirección vieja para siempre.
+    const auto = (venue: string, address: string) =>
+      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${venue.trim()} ${address.trim()}`)}`
+    const sedeCambio = !event || f.venue.trim() !== event.venue || f.address.trim() !== event.address
+    const mapsUrl = sedeCambio ? auto(f.venue, f.address) : event.mapsUrl
     const data = {
       type: f.type,
       title: f.title.trim(),
@@ -106,12 +121,16 @@ export function OpsEventForm({ open, event, onClose }: Props) {
       mapsUrl,
       description: f.description.trim(),
       cover: f.cover,
+      // Booleanos SIEMPRE explícitos (no `|| undefined`): destildar un flag tiene que llegar
+      // al backend como false, no desaparecer del patch.
+      past: f.past,
+      socioOnly: f.socioOnly,
     }
     if (event) {
       store.updateEvent(event.id, data)
       toast('✓ Evento actualizado')
     } else {
-      store.createEvent({ ...data, sponsorIds: [], past: false })
+      store.createEvent({ ...data, sponsorIds: [] })
       toast('✓ Evento creado · ya aparece en la app')
     }
     onClose()
@@ -185,6 +204,30 @@ export function OpsEventForm({ open, event, onClose }: Props) {
             required
           />
         </Field>
+
+        <div className="space-y-2.5 rounded-md border border-line bg-surface p-3">
+          <p className="eyebrow text-[10px] text-ink-soft">Visibilidad</p>
+          <label className="flex cursor-pointer items-center gap-2.5">
+            <input
+              type="checkbox"
+              checked={f.socioOnly}
+              onChange={(e) => setF((prev) => ({ ...prev, socioOnly: e.target.checked }))}
+              className="size-4 accent-accent"
+            />
+            <span className="text-[15px] text-ink">Exclusivo para Socios CCM</span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-2.5">
+            <input
+              type="checkbox"
+              checked={f.past}
+              onChange={(e) => setF((prev) => ({ ...prev, past: e.target.checked }))}
+              className="size-4 accent-accent"
+            />
+            <span className="text-[15px] text-ink">
+              Evento finalizado <span className="text-ink-soft">— se archiva y no admite inscripciones</span>
+            </span>
+          </label>
+        </div>
 
         {error && <p className="text-xs text-danger">{error}</p>}
 
