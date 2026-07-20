@@ -166,8 +166,27 @@ export async function updateGallery(id: string, patch: Partial<Gallery>): Promis
   await prisma.$transaction(async (tx) => {
     await tx.gallery.update({ where: { id }, data })
     if (patch.photos) {
-      await tx.photo.deleteMany({ where: { galleryId: id } })
-      if (patch.photos.length) await tx.photo.createMany({ data: patch.photos.map((p, i) => ({ id: p.id, galleryId: id, src: p.src, alt: p.alt, order: i })) })
+      // DIFF por src, NO deleteMany+createMany. PhotoFavorite y PhotoDownload cuelgan de Photo
+      // con onDelete: Cascade, así que borrar y recrear las filas destruía los favoritos y las
+      // descargas de los usuarios — y las descargas son la métrica del reporte al sponsor.
+      // Matcheamos por src (no por id) porque el form del admin regenera ids en cada submit:
+      // el src es la identidad estable real de una foto dentro de su galería.
+      const actuales = await tx.photo.findMany({ where: { galleryId: id }, select: { id: true, src: true } })
+      const idPorSrc = new Map(actuales.map((p) => [p.src, p.id]))
+      const srcsNuevos = new Set(patch.photos.map((p) => p.src))
+
+      const aBorrar = actuales.filter((p) => !srcsNuevos.has(p.src)).map((p) => p.id)
+      if (aBorrar.length) await tx.photo.deleteMany({ where: { id: { in: aBorrar } } })
+
+      for (const [i, p] of patch.photos.entries()) {
+        const existente = idPorSrc.get(p.src)
+        if (existente) {
+          // Sobrevive con su id → sus favoritos y descargas quedan intactos.
+          await tx.photo.update({ where: { id: existente }, data: { alt: p.alt, order: i } })
+        } else {
+          await tx.photo.create({ data: { id: p.id, galleryId: id, src: p.src, alt: p.alt, order: i } })
+        }
+      }
     }
   })
   return readGallery(id)

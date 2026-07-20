@@ -24,6 +24,8 @@ type Form = {
   cover: string
   sponsorId: string
   photos: string[]
+  /** src → {id, alt} de las fotos ya persistidas, para no regenerarles identidad al editar. */
+  existentes: Map<string, { id: string; alt: string }>
 }
 
 function fromGallery(g: Gallery): Form {
@@ -34,6 +36,10 @@ function fromGallery(g: Gallery): Form {
     cover: g.cover,
     sponsorId: g.sponsorId,
     photos: g.photos.map((p) => p.src),
+    // Identidad + alt curado de las fotos que YA existen, indexados por src (la identidad
+    // estable de una foto en su galería). Sin esto el submit regeneraba un id nuevo para cada
+    // foto y pisaba el alt, y el backend trataba la edición como "reemplazar la colección".
+    existentes: new Map(g.photos.map((p) => [p.src, { id: p.id, alt: p.alt }])),
   }
 }
 
@@ -58,6 +64,7 @@ export function OpsGalleryForm({ open, gallery, onClose }: Props) {
     cover: COVER_OPTIONS[0].value,
     sponsorId: sponsorOptions[0]?.value ?? '',
     photos: [],
+    existentes: new Map(),
   }
 
   const [f, setF] = useState<Form>(empty)
@@ -93,11 +100,15 @@ export function OpsGalleryForm({ open, gallery, onClose }: Props) {
       return
     }
     const title = f.title.trim()
-    const photos: Photo[] = f.photos.map((src, i) => ({
-      id: newId('ph'),
-      src,
-      alt: `${title} · foto ${i + 1}`,
-    }))
+    // Una foto que ya existía conserva su id y su alt: regenerarlos convertía cualquier edición
+    // (cambiar el título de la galería) en un borrado y alta de las filas Photo, y PhotoFavorite
+    // y PhotoDownload cuelgan de Photo en cascada → se perdían favoritos y descargas de usuarios.
+    const photos: Photo[] = f.photos.map((src, i) => {
+      const previa = f.existentes.get(src)
+      return previa
+        ? { id: previa.id, src, alt: previa.alt }
+        : { id: newId('ph'), src, alt: `${title} · foto ${i + 1}` }
+    })
     const data = {
       title,
       eventLabel: f.eventLabel.trim(),
