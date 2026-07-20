@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react'
-import { Button, Field, Input, Select, Sheet, Textarea, toast } from '../../components/ui'
+import { Button, Field, Img, Input, Select, Sheet, Textarea, toast } from '../../components/ui'
 import { store } from '../../data/store'
 import { slugify } from '../../data/store/overlay'
 import type { Convocatoria, ConvocatoriaField } from '../../data/types'
@@ -284,7 +284,14 @@ export function OpsConvocatoriaForm({ open, convocatoria, onClose }: Props) {
                     <Input value={l.rubro} onChange={(e) => setLogo(i, { rubro: e.target.value })} placeholder="Rubro (ej: Universidades)" />
                   </div>
                   <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <Input value={l.logoUrl} onChange={(e) => setLogo(i, { logoUrl: e.target.value })} placeholder="URL del logo: https://…/logo.png" />
+                    <div className="flex items-center gap-2">
+                      {l.logoUrl.trim() && (
+                        <div className="size-10 shrink-0 overflow-hidden rounded-sm border border-line bg-surface">
+                          <Img src={l.logoUrl.trim()} alt="" ratio="1/1" className="w-full" imgClassName="object-contain" />
+                        </div>
+                      )}
+                      <Input value={l.logoUrl} onChange={(e) => setLogo(i, { logoUrl: e.target.value })} placeholder="URL del logo: https://…/logo.png" className="flex-1" />
+                    </div>
                     <div className="flex items-center gap-1.5">
                       <Input value={l.url} onChange={(e) => setLogo(i, { url: e.target.value })} placeholder="Link (opcional)" className="flex-1" />
                       <button type="button" onClick={() => removeLogo(i)} aria-label="Quitar logo"
