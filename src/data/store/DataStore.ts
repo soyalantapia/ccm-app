@@ -107,11 +107,13 @@ export interface DataStore {
   register(eventId: string, blockId?: string): Registration | null
   cancelRegistration(registrationId: string): void
 
-  /* Planes y órdenes.
-   * ⚠️ Los PLANES tienen backend (RemoteDataStore: GET /plans, PATCH /admin/plans/:id).
-   * Las ÓRDENES (createOrder/markOrderRedirected/setOrderStatus/getOrders) NO tienen ruta backend
-   * todavía (Fase C, bloqueada por checkout MP): en modo Remote caen a LocalDataStore → viven solo
-   * en el localStorage del comprador, NO persisten en prod. No asumir paridad Local/Remote acá. */
+  /* Planes y órdenes. Ambos con backend real:
+   *  - planes: GET /plans, PATCH /admin/plans/:id
+   *  - órdenes: GET/POST /orders (device), PATCH /orders/:id/redirected, y para el panel
+   *    GET /admin/orders + PATCH /admin/orders/:id.
+   * El TOTAL lo calcula el server con el precio vigente (no se confía en el cliente). La
+   * confirmación del pago es MANUAL desde el panel; la conciliación automática por webhook de
+   * Mercado Pago es una fase aparte y no cambia este modelo. */
   getPlans(): TicketPlan[]
   getPlan(id: PlanId): TicketPlan | undefined
   updatePlan(id: PlanId, patch: { price?: number | null; mpLink?: string }): void
@@ -119,6 +121,8 @@ export interface DataStore {
   markOrderRedirected(orderId: string): void
   setOrderStatus(orderId: string, status: OrderStatus): void
   getOrders(): TicketOrder[]
+  /** TODAS las órdenes (panel del organizador). En demo = las mismas que getOrders(). */
+  getAdminOrders(): TicketOrder[]
 
   /* Catálogo */
   getCatalog(): CatalogProfile[]

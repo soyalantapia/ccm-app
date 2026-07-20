@@ -2,6 +2,8 @@ import type {
   Device,
   ProfileField,
   AnalyticsEvent,
+  TicketOrder,
+  AdCampaign,
   Event,
   EventBlock,
   Registration,
@@ -40,6 +42,8 @@ import type {
   Banner as DomainBanner,
   BannerDestination,
   Nota as DomainNota,
+  TicketOrder as DomainTicketOrder,
+  AdCampaign as DomainAdCampaign,
 } from '@domain/types'
 
 // PhotoDownload del front vive en DataStore.ts (no en types.ts) y ese archivo no
@@ -346,5 +350,34 @@ export function toAnalyticsEvent(
     deviceId: row.device?.publicId,
     payload: (row.payload as Record<string, unknown> | null) ?? undefined,
     seed: row.seed,
+  }
+}
+
+/** Fila TicketOrder → orden del dominio. El total viene congelado de la compra. */
+export function toTicketOrder(o: TicketOrder): DomainTicketOrder {
+  return {
+    id: o.id,
+    planId: o.planId as DomainTicketOrder['planId'],
+    ts: o.ts.toISOString(),
+    status: o.status,
+    qty: o.qty,
+    total: o.total,
+    ...(o.buyerName ? { buyerName: o.buyerName } : {}),
+    ...(o.buyerEmail ? { buyerEmail: o.buyerEmail } : {}),
+  }
+}
+
+/** Fila AdCampaign → campaña del dominio (publicidad autogestionada). */
+export function toAdCampaign(c: AdCampaign): DomainAdCampaign {
+  return {
+    id: c.id,
+    slot: c.slot,
+    brand: c.brand,
+    headline: c.headline,
+    hours: c.hours,
+    total: c.total,
+    ts: c.ts.toISOString(),
+    ...(c.cta ? { cta: c.cta } : {}),
+    ...(c.tagline ? { tagline: c.tagline } : {}),
   }
 }

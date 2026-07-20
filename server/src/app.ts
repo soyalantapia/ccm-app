@@ -16,6 +16,7 @@ import { eventsRouter } from './routes/events.js'
 import { registrationsRouter } from './routes/registrations.js'
 import { catalogRouter } from './routes/catalog.js'
 import { photosRouter } from './routes/photos.js'
+import { ordersRouter } from './routes/orders.js'
 import { adminRouter } from './routes/admin.js'
 import { adminAuthRouter } from './routes/adminAuth.js'
 import { adminTeamRouter } from './routes/adminTeam.js'
@@ -96,8 +97,10 @@ export function createApp() {
   v1.use(catalogRouter) // Fase E: /catalog, /galleries, /contents
   v1.use(photosRouter) // Fase E: /favorites, /downloads
   v1.use(adminTeamRouter) // Gestión del equipo: /admin/team* (sólo OWNER)
+  v1.use(ordersRouter) // Órdenes de entradas + campañas de publicidad (antes solo localStorage)
   v1.use(adminRouter) // Fase G: CRUD admin de events|blocks|contents|sponsors|galleries|catalog|notas|banners|benefits|applications|plans
-  // Pendiente real: /orders (Fase C, bloqueada por checkout MP) y CRUD admin de memberships.
+  // Pendiente real: la conciliación automática de pagos por webhook de MP (hoy el organizador
+  // confirma las órdenes a mano desde el panel) y el CRUD admin de memberships.
   // (sponsors/galleries/catalog/applications CRUD YA están: los sirven catalogRouter + adminRouter.)
   app.use('/api/v1', v1)
 

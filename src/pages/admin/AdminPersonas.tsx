@@ -23,7 +23,7 @@ export default function AdminPersonas() {
   const profile = useStore((s) => s.getProfile())
   const registrations = useStore((s) => s.getRegistrations())
   const downloads = useStore((s) => s.getDownloads())
-  const orders = useStore((s) => s.getOrders())
+  const orders = useStore((s) => s.getAdminOrders())
   const applications = useStore((s) => s.getApplications())
   const analytics = useStore((s) => s.getAnalytics())
 
