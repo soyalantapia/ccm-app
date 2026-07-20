@@ -26,12 +26,18 @@ export interface MpPayment {
   transaction_amount?: number
 }
 
-/** fetch con timeout: si a los TIMEOUT_MS no hubo respuesta, aborta y tira el mismo ApiError de siempre. */
-async function fetchConTimeout(url: string, init: RequestInit): Promise<Response> {
+/**
+ * Corre `op` (conexión + headers + lectura del cuerpo, todo junto) bajo un único timeout de
+ * TIMEOUT_MS: si no terminó para entonces abortamos y tiramos el mismo ApiError de siempre.
+ * El timer se limpia recién en el `finally`, después de que `op` terminó de leer el cuerpo —
+ * si lo limpiáramos apenas resuelve el `fetch()` inicial (como pasaba antes), un cuerpo que
+ * nunca llega quedaría sin nada que lo aborte: MP manda los headers y se cuelga transmitiendo.
+ */
+async function conTimeout<T>(op: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
   try {
-    return await fetch(url, { ...init, signal: controller.signal })
+    return await op(controller.signal)
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
       throw new ApiError(502, 'MP_API_ERROR', 'Mercado Pago no respondió a tiempo')
@@ -43,19 +49,22 @@ async function fetchConTimeout(url: string, init: RequestInit): Promise<Response
 }
 
 async function post<T>(path: string, body: unknown, token?: string): Promise<T> {
-  const res = await fetchConTimeout(`${AUTH_BASE}${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(body),
+  return conTimeout(async (signal) => {
+    const res = await fetch(`${AUTH_BASE}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+      signal,
+    })
+    if (!res.ok) {
+      const detalle = await res.text().catch(() => '')
+      throw new ApiError(502, 'MP_API_ERROR', `Mercado Pago respondió ${res.status}`, detalle.slice(0, 400))
+    }
+    return (await res.json()) as T
   })
-  if (!res.ok) {
-    const detalle = await res.text().catch(() => '')
-    throw new ApiError(502, 'MP_API_ERROR', `Mercado Pago respondió ${res.status}`, detalle.slice(0, 400))
-  }
-  return (await res.json()) as T
 }
 
 /** Canjea el código de autorización por tokens (fin del flujo OAuth). */
@@ -89,9 +98,12 @@ export function createPreference(
 
 /** Consulta el estado REAL de un pago. Nunca se le cree al cuerpo del webhook. */
 export async function getPayment(accessToken: string, paymentId: string): Promise<MpPayment> {
-  const res = await fetchConTimeout(`${AUTH_BASE}/v1/payments/${paymentId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+  return conTimeout(async (signal) => {
+    const res = await fetch(`${AUTH_BASE}/v1/payments/${paymentId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal,
+    })
+    if (!res.ok) throw new ApiError(502, 'MP_API_ERROR', `Mercado Pago respondió ${res.status} al consultar el pago`)
+    return (await res.json()) as MpPayment
   })
-  if (!res.ok) throw new ApiError(502, 'MP_API_ERROR', `Mercado Pago respondió ${res.status} al consultar el pago`)
-  return (await res.json()) as MpPayment
 }
