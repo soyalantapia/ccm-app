@@ -1,4 +1,4 @@
-import { LocalDataStore } from './LocalDataStore'
+import { LocalDataStore, K } from './LocalDataStore'
 import type {
   BlockAvailability,
   PhotoDownload,
@@ -12,7 +12,7 @@ import type {
   HydratableResource,
 } from './DataStore'
 import { slugify } from './overlay'
-import { newId } from '../../lib/storage'
+import { newId, writeJSON } from '../../lib/storage'
 import { createApi, type ApiClient } from '../../lib/api'
 import { bus } from '../../lib/bus'
 import { hydrateFromRemote, getDeviceToken, setDeviceCredentials } from '../../lib/identity'
@@ -218,6 +218,7 @@ export class RemoteDataStore extends LocalDataStore {
         // la ventana de hidratación, no pisarlos con la lista del server (el .then los reconcilia).
         const inflight = (this.regs ?? []).filter((r) => r.id.startsWith('tmp_'))
         this.regs = [...regs, ...inflight]
+        writeJSON(K.registrations, regs) // write-through: el fallback pasa a ser el último snapshot real
         bus.emit('registrations')
       })
       .catch(() => {})
@@ -599,8 +600,10 @@ export class RemoteDataStore extends LocalDataStore {
 
   /** Contenido del DEVICE (requireDevice): favoritos y descargas. Corre tras tener el token. */
   private hydrateDeviceContent(): void {
-    this.api.get<string[]>('/favorites').then((f) => { this.favorites = f; bus.emit('favorites') }).catch(() => {})
-    this.api.get<PhotoDownload[]>('/downloads').then((d) => { this.downloads = d; bus.emit('downloads') }).catch(() => {})
+    // write-through a localStorage: si un arranque futuro no logra hidratar, el fallback
+    // `?? super.getX()` devuelve este snapshot en vez de una lista vacía.
+    this.api.get<string[]>('/favorites').then((f) => { this.favorites = f; writeJSON(K.favorites, f); bus.emit('favorites') }).catch(() => {})
+    this.api.get<PhotoDownload[]>('/downloads').then((d) => { this.downloads = d; writeJSON(K.downloads, d); bus.emit('downloads') }).catch(() => {})
   }
 
   /* ─── Resto Fase G: sponsors / planes / convocatorias / postulaciones ─── */
@@ -689,7 +692,7 @@ export class RemoteDataStore extends LocalDataStore {
   /* ─── Membresía (Fase D parcial): persiste server-side, antes solo en localStorage ─── */
 
   private hydrateMembership(): void {
-    this.api.get<Membership>('/memberships/me').then((m) => { this.membership = m; bus.emit('membership') }).catch(() => {})
+    this.api.get<Membership>('/memberships/me').then((m) => { this.membership = m; writeJSON(K.membership, m); bus.emit('membership') }).catch(() => {})
   }
 
   override getMembership(): Membership {
@@ -708,13 +711,17 @@ export class RemoteDataStore extends LocalDataStore {
       .post<Membership>('/memberships', { paid })
       .then((server) => {
         this.membership = server
+        writeJSON(K.membership, server) // write-through: sobrevive a un arranque sin red
         bus.emit('membership')
         this.refetchContents() // ahora socio → re-fetch para desenmascarar el youtubeId de contenido socioOnly
       })
       .catch(() => {
         // Si el server no registró la membresía, revertir el estado optimista y AVISAR — si no,
         // isSocio() queda true y desbloquea contenido socioOnly cross-app hasta el próximo reload.
+        // La reversión va TAMBIÉN a localStorage: si no, el snapshot persistido seguiría
+        // diciendo "socio" y el próximo arranque sin red lo daría por bueno.
         this.membership = prev
+        writeJSON(K.membership, prev ?? { tier: 'free', since: '', paid: 0 })
         bus.emit('membership')
         bus.emit('membership:rejected')
       })
