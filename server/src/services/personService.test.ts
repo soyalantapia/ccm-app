@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { prisma } from '../lib/prisma.js'
 import { linkPerson } from './personService.js'
+import { saveFields } from './deviceService.js'
 
 /** `prisma.person` es un Proxy (no un objeto plano): el descriptor que `vi.spyOn` logra leer
  *  para "guardar y restaurar más tarde" con `spy.mockRestore()` viene incompleto (sin getter ni
@@ -175,7 +176,7 @@ describe('linkPerson', () => {
     // prueba) se usa el findMany real contra la base.
     const findManyReal = prisma.person.findMany.bind(prisma.person)
     let llamadas = 0
-    const spy = vi.spyOn(prisma.person, 'findMany').mockImplementation((...args) => {
+    vi.spyOn(prisma.person, 'findMany').mockImplementation((...args) => {
       llamadas++
       if (llamadas <= 2) return Promise.resolve([])
       return findManyReal(...(args as Parameters<typeof findManyReal>))
@@ -189,7 +190,34 @@ describe('linkPerson', () => {
       expect(a).toBe(b)
       expect(await prisma.person.count()).toBe(1)
     } finally {
-      spy.mockRestore()
+      // `spy.mockRestore()` NO alcanza acá (ver comentario de `restaurarFindMany` al principio
+      // del archivo): dejaba `findMany` roto para todo lo que corriera después en la suite.
+      restaurarFindMany(findManyReal)
     }
+  })
+})
+
+describe('enganche automático', () => {
+  // El `beforeEach` de arriba (describe 'linkPerson') NO alcanza a este describe hermano
+  // (así funciona Vitest: cada describe ve solo los hooks de sus ancestros). Sin esta limpieza
+  // propia, personas de una corrida anterior contaminan la siguiente.
+  beforeEach(async () => {
+    await prisma.person.deleteMany()
+  })
+
+  it('guardar el email de un dispositivo lo enlaza a una Persona', async () => {
+    const device = await prisma.device.create({ data: { publicId: `dev-${Date.now()}` } })
+    await saveFields(device.id, { email: 'Nueva@X.com' }, 'test')
+    const actualizado = await prisma.device.findUniqueOrThrow({ where: { id: device.id } })
+    expect(actualizado.personId).toBeTruthy()
+    const p = await prisma.person.findUniqueOrThrow({ where: { id: actualizado.personId! } })
+    expect(p.email).toBe('nueva@x.com')   // normalizado
+  })
+
+  it('un dato que no es clave de identidad no crea Persona', async () => {
+    const device = await prisma.device.create({ data: { publicId: `dev2-${Date.now()}` } })
+    await saveFields(device.id, { city: 'Córdoba' }, 'test')
+    const actualizado = await prisma.device.findUniqueOrThrow({ where: { id: device.id } })
+    expect(actualizado.personId).toBeNull()
   })
 })

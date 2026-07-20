@@ -3,6 +3,8 @@ import { prisma } from '../lib/prisma.js'
 import { toApplication } from '../lib/serialize.js'
 import { notFound, conflict, badRequest } from '../lib/errors.js'
 import type { Application } from '@domain/types'
+import { keysFromApplicationData } from '../domain/personIdentity.js'
+import { linkPerson } from './personService.js'
 
 /** Postulación pública (preinscripta). El equipo CCM decide después (admin). */
 export async function submitApplication(
@@ -40,6 +42,16 @@ export async function submitApplication(
   const row = await prisma.application.create({
     data: { id: `app_${randomUUID()}`, convocatoriaId, deviceId: deviceId ?? null, status: 'preinscripta', data, fromSeed: false },
   })
+
+  // Las postulaciones traen su PII en el JSON y muchas veces no tienen dispositivo:
+  // son la principal fuente de personas del CRM.
+  try {
+    const personId = await linkPerson(keysFromApplicationData(row.data))
+    if (personId) await prisma.application.update({ where: { id: row.id }, data: { personId } })
+  } catch (err) {
+    console.error('[personas] no se pudo enganchar la postulación', row.id, err)
+  }
+
   return toApplication(row)
 }
 
