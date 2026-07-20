@@ -18,11 +18,25 @@ export function normalizeEmail(v: string | null | undefined): string | null {
   return s
 }
 
-/** Solo dígitos. Devuelve null fuera del rango de largo de un documento (7 a 11). */
+/**
+ * Un DNI argentino tiene 7 u 8 dígitos, nunca más. Ese rango angosto es a propósito: un CUIT/CUIL
+ * tiene 11 dígitos y trae el DNI incrustado en el medio (20-38456120-4 → DNI 38456120), así que si
+ * lo tratáramos como un documento más, la misma persona quedaría con dos claves distintas —una por
+ * DNI, otra por CUIT— y el CRM la duplicaría. Por eso, ante 11 dígitos, primero probamos si es un
+ * CUIT válido (prefijo de persona física o jurídica conocido) y extraemos el DNI de adentro para
+ * unificarla con quien cargó directamente el DNI. Si no matchea un prefijo válido, lo rechazamos:
+ * son justo el largo donde se cuelan teléfonos tipeados por error en el campo equivocado.
+ */
 export function normalizeDni(v: string | null | undefined): string | null {
   if (typeof v !== 'string') return null
-  const digits = v.replace(/\D/g, '')
-  if (digits.length < 7 || digits.length > 11) return null
+  let digits = v.replace(/\D/g, '')
+  if (digits.length === 11) {
+    const cuitPrefixes = ['20', '23', '24', '27', '30', '33', '34']
+    if (!cuitPrefixes.includes(digits.slice(0, 2))) return null
+    digits = digits.slice(2, 10)
+  }
+  digits = digits.replace(/^0+/, '')
+  if (digits.length !== 7 && digits.length !== 8) return null
   return digits
 }
 

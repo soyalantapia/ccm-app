@@ -22,6 +22,23 @@ describe('normalizeDni', () => {
     expect(normalizeDni('1234567890123')).toBeNull() // muy largo
     expect(normalizeDni(null)).toBeNull()
   })
+  it('extrae el DNI de adentro de un CUIT/CUIL válido', () => {
+    expect(normalizeDni('20-38456120-4')).toBe('38456120')
+  })
+  it('el DNI y su CUIT correspondiente normalizan a la misma clave (evita duplicar persona)', () => {
+    expect(normalizeDni('38456120')).toBe(normalizeDni('20-38456120-4'))
+  })
+  it('saca los ceros a la izquierda', () => {
+    expect(normalizeDni('07234567')).toBe('7234567')
+    expect(normalizeDni('7234567')).toBe('7234567')
+    expect(normalizeDni('07234567')).toBe(normalizeDni('7234567'))
+  })
+  it('descarta un teléfono de 10 dígitos tipeado por error en el campo DNI', () => {
+    expect(normalizeDni('1123456789')).toBeNull()
+  })
+  it('descarta un número de 11 dígitos con prefijo de CUIT inválido', () => {
+    expect(normalizeDni('12345678901')).toBeNull()
+  })
 })
 
 describe('keysFromApplicationData', () => {
