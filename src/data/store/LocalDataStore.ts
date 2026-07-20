@@ -334,6 +334,11 @@ export class LocalDataStore implements DataStore {
     return readJSON<TicketOrder[]>(K.orders, [])
   }
 
+  /** En demo no hay separación device/organizador: las órdenes del navegador son todas. */
+  getAdminOrders(): TicketOrder[] {
+    return this.getOrders()
+  }
+
   /* ─── Catálogo ─── */
 
   getCatalog(): CatalogProfile[] {

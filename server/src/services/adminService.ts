@@ -157,8 +157,12 @@ function creativeRows(sponsorId: string, creatives: Sponsor['creatives']) {
   return creatives.map((c, i) => ({ sponsorId, slot: c.slot, headline: c.headline, sub: c.sub ?? null, cta: c.cta ?? null, order: i }))
 }
 export async function createSponsor(s: Sponsor): Promise<Sponsor> {
-  await prisma.sponsor.create({ data: { id: s.id, name: s.name, industry: s.industry, level: s.level, exclusive: s.exclusive, tagline: s.tagline, banner: s.banner ?? null } })
-  if (s.creatives?.length) await prisma.sponsorCreative.createMany({ data: creativeRows(s.id, s.creatives) })
+  // En una transacción: si fallaba el alta de las creatividades, el sponsor quedaba escrito
+  // SIN sus avisos (escritura parcial) y el organizador veía un error con la marca ya creada.
+  await prisma.$transaction(async (tx) => {
+    await tx.sponsor.create({ data: { id: s.id, name: s.name, industry: s.industry, level: s.level, exclusive: s.exclusive, tagline: s.tagline, banner: s.banner ?? null } })
+    if (s.creatives?.length) await tx.sponsorCreative.createMany({ data: creativeRows(s.id, s.creatives) })
+  })
   return readSponsor(s.id)
 }
 export async function updateSponsor(id: string, patch: Partial<Sponsor>): Promise<Sponsor> {

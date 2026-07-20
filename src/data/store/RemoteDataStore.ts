@@ -9,6 +9,7 @@ import type {
   NewGallery,
   NewCatalogProfile,
   NewConvocatoria,
+  NewCampaign,
   HydratableResource,
 } from './DataStore'
 import { slugify } from './overlay'
@@ -41,6 +42,10 @@ import type {
   ApplicationStatus,
   AnalyticsEvent,
   AdminStats,
+  TicketOrder,
+  AdCampaign,
+  OrderStatus,
+  AdSlot,
 } from '../types'
 
 interface BufferedEvent {
@@ -72,6 +77,10 @@ export class RemoteDataStore extends LocalDataStore {
   /** Negative cache: ms timestamp del último fallo por blockId. Re-intenta después de 30s. */
   private availFailed = new Map<string, number>()
   /** Cache de batch availability por eventId (GET /events/:id/blocks-availability). */
+  /** Cuándo se trajo cada cupo (ms). Sirve para vencerlo: ver blockAvailability. */
+  private availFetchedAt = new Map<string, number>()
+  /** El cupo se considera fresco 20s; pasado eso se revalida en segundo plano. */
+  private static readonly AVAIL_TTL_MS = 20_000
   private availBatchInflight = new Set<string>()
   private availBatchFailed = new Map<string, number>()
   private tmpSeq = 0
@@ -122,6 +131,7 @@ export class RemoteDataStore extends LocalDataStore {
     // Hidratación PÚBLICA: arranca ya (no necesita identidad).
     this.hydrateEvents()
     this.hydratePublicContent()
+    this.hydrateCampaigns() // públicas: ocupan espacios publicitarios en toda la app
     // Hidratación del DEVICE: primero asegura el token firmado (POST /devices si falta),
     // recién después pide /me, /registrations, /favorites, /downloads (requireDevice).
     void this.ensureDeviceToken().then(() => {
@@ -130,6 +140,7 @@ export class RemoteDataStore extends LocalDataStore {
       this.hydrateDeviceContent()
       this.hydrateMembership()
       this.hydrateApplications() // device ("Mis postulaciones")
+      this.hydrateOrders() // device ("Mis entradas")
       // Si ya hay sesión de organizador (token guardado al recargar), hidratar TODOS los cachés
       // admin. `refetchAdminScoped()` es el mismo método que corre al loguearse, así que recargar
       // la página deja el panel en el mismo estado que recién logueado.
@@ -232,6 +243,8 @@ export class RemoteDataStore extends LocalDataStore {
   /** Cupo de TODOS los bloques de un evento en 1 request (vs N).
    *  Llamado desde blockAvailability cuando conocemos el eventId.
    *  Negative cache: si el endpoint 404ea o falla, espera 30s antes de reintentar. */
+  /** Trae el cupo de todos los bloques del evento. Deduplica sola (availBatchInflight) y respeta
+   *  el backoff de errores, así que es segura de llamar tanto en el primer render como al revalidar. */
   private fetchEventAvailability(eventId: string): void {
     if (this.availBatchInflight.has(eventId)) return
     const failed = this.availBatchFailed.get(eventId)
@@ -240,7 +253,8 @@ export class RemoteDataStore extends LocalDataStore {
     this.api
       .get<{ blocks: (BlockAvailability & { id: string })[]; generals: number }>(`/events/${eventId}/blocks-availability`)
       .then((r) => {
-        for (const b of r.blocks) this.availCache.set(b.id, b)
+        const ahora = Date.now()
+        for (const b of r.blocks) { this.availCache.set(b.id, b); this.availFetchedAt.set(b.id, ahora) }
         this.generalCounts.set(eventId, r.generals)
         this.availBatchInflight.delete(eventId)
         this.availBatchFailed.delete(eventId)
@@ -266,6 +280,7 @@ export class RemoteDataStore extends LocalDataStore {
       .get<BlockAvailability>(`/blocks/${blockId}/availability`)
       .then((av) => {
         this.availCache.set(blockId, av)
+        this.availFetchedAt.set(blockId, Date.now())
         this.availInflight.delete(blockId)
         this.availFailed.delete(blockId)
         bus.emit('availability')
@@ -299,10 +314,23 @@ export class RemoteDataStore extends LocalDataStore {
   }
   override blockAvailability(blockId: string): BlockAvailability {
     const cached = this.availCache.get(blockId)
-    if (cached) return cached
     // Batch preferido: si conocemos el eventId usamos /events/:id/blocks-availability (1 req/evento).
     // Fallback: fetch individual (deploy incremental / bloque desconocido aún).
     const block = this.blocksById.get(blockId)
+
+    if (cached) {
+      // El cupo lo mueven OTRAS personas, así que un caché sin vencimiento congelaba el número:
+      // la pantalla decía "quedan 3 lugares" indefinidamente aunque el bloque ya estuviera lleno,
+      // y solo se actualizaba si ESTE usuario se inscribía o cancelaba. Servimos lo que tenemos
+      // (respuesta instantánea) y disparamos la actualización en segundo plano si está vencido.
+      const edad = Date.now() - (this.availFetchedAt.get(blockId) ?? 0)
+      if (edad > RemoteDataStore.AVAIL_TTL_MS) {
+        if (block) this.fetchEventAvailability(block.eventId)
+        else this.refreshAvailability(blockId)
+      }
+      return cached
+    }
+
     if (block) {
       this.fetchEventAvailability(block.eventId)
     } else {
@@ -501,6 +529,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.hydrateAdminApplications() // lista COMPLETA en un caché aparte (no pisa las del device)
     this.hydrateConvocatorias() // lista completa para gestionarlas (antes solo venían del seed)
     this.hydrateAdminContents() // youtubeId sin enmascarar para el panel
+    this.hydrateAdminOrders() // todas las órdenes, no solo las del navegador del organizador
     this.hydrateAnalytics() // analítica REAL — antes Dashboard/SponsorReport leían el seed fabricado (P1)
   }
 
@@ -995,6 +1024,125 @@ export class RemoteDataStore extends LocalDataStore {
     )
   }
 
+  /* ─── Órdenes de entradas y campañas de publicidad ─────────────────────────────────
+   * Las tablas existían desde el diseño pero no tenían rutas: el front las guardaba SOLO en
+   * localStorage, así que cada comprador veía sus propias órdenes y el panel mostraba las del
+   * navegador donde estuviera abierto. Ahora van a la base como el resto.
+   *
+   * El TOTAL no viaja en el POST: lo calcula el server con el precio vigente del plan (si no,
+   * bastaba editar el request para comprar una VIP a cualquier precio). Por eso la orden que
+   * devuelve el backend reemplaza a la optimista. */
+  private orders?: TicketOrder[] // del device (Mis entradas)
+  private adminOrders?: TicketOrder[] // todas (panel)
+  private campaigns?: AdCampaign[]
+
+  private hydrateOrders(): void {
+    this.api.get<TicketOrder[]>('/orders').then((o) => { this.orders = o; bus.emit('orders') }).catch(() => {})
+  }
+  private hydrateAdminOrders(): void {
+    this.api.get<TicketOrder[]>('/admin/orders').then((o) => { this.adminOrders = o; bus.emit('orders') }).catch(() => {})
+  }
+  private hydrateCampaigns(): void {
+    this.api.get<AdCampaign[]>('/campaigns').then((c) => { this.campaigns = c; bus.emit('campaigns') }).catch(() => {})
+  }
+  /** Tras una escritura: la orden afecta la vista del comprador Y la del organizador. */
+  private refetchOrders(): void {
+    this.hydrateOrders()
+    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ccm:admin-token')) this.hydrateAdminOrders()
+  }
+
+  override getOrders(): TicketOrder[] {
+    return this.orders ?? super.getOrders()
+  }
+  override getAdminOrders(): TicketOrder[] {
+    return this.adminOrders ?? this.orders ?? super.getAdminOrders()
+  }
+
+  override createOrder(planId: PlanId, qty = 1): TicketOrder {
+    // El optimista usa el precio local para no dejar la UI en blanco; el server manda y la
+    // re-hidratación lo corrige si el precio cambió mientras tanto.
+    const plan = this.getPlan(planId)
+    const unit = (plan?.price ?? 0) + (plan?.serviceCharge ?? 0)
+    const profile = this.getProfile()
+    const order: TicketOrder = {
+      id: newId('ord'),
+      planId,
+      ts: new Date().toISOString(),
+      status: 'iniciada',
+      qty,
+      total: unit * qty,
+      ...(profile.fields.email?.value ? { buyerEmail: profile.fields.email.value } : {}),
+    }
+    if (this.orders) this.orders = [order, ...this.orders]
+    this.track('ticket_order_created', { planId, orderId: order.id, qty, total: order.total })
+    bus.emit('orders')
+    this.api
+      .post('/orders', {
+        id: order.id,
+        planId,
+        qty,
+        ...(order.buyerEmail ? { buyerEmail: order.buyerEmail } : {}),
+      })
+      .then(() => this.refetchOrders())
+      .catch(() => {
+        // La compra no llegó al backend: sacamos la orden fantasma y avisamos, en vez de
+        // dejar al comprador creyendo que tiene una entrada reservada.
+        if (this.orders) this.orders = this.orders.filter((o) => o.id !== order.id)
+        bus.emit('orders')
+        bus.emit('order:rejected')
+      })
+    return order
+  }
+
+  override markOrderRedirected(orderId: string): void {
+    if (this.orders) this.orders = this.orders.map((o) => (o.id === orderId ? { ...o, status: 'redirigida_mp' } : o))
+    this.track('ticket_order_redirected_mp', { orderId })
+    bus.emit('orders')
+    this.api.patch(`/orders/${orderId}/redirected`, {}).then(() => this.refetchOrders()).catch(() => this.refetchOrders())
+  }
+
+  /** Confirmar/cancelar es del ORGANIZADOR (ruta admin). */
+  override setOrderStatus(orderId: string, status: OrderStatus): void {
+    const prev = this.adminOrders
+    if (this.adminOrders) this.adminOrders = this.adminOrders.map((o) => (o.id === orderId ? { ...o, status } : o))
+    if (status === 'confirmada') this.track('ticket_order_confirmed', { orderId })
+    bus.emit('orders')
+    this.adminWrite(
+      this.api.patch(`/admin/orders/${orderId}`, { status }),
+      () => this.refetchOrders(),
+      () => { if (prev) this.adminOrders = prev; bus.emit('orders'); this.hydrateAdminOrders() },
+    )
+  }
+
+  override getCampaigns(): AdCampaign[] {
+    return this.campaigns ?? super.getCampaigns()
+  }
+  override getActiveCampaign(slot: AdSlot): AdCampaign | undefined {
+    if (!this.campaigns) return super.getActiveCampaign(slot)
+    const forSlot = this.campaigns.filter((c) => c.slot === slot)
+    return forSlot.length ? forSlot[forSlot.length - 1] : undefined
+  }
+  override createCampaign(input: NewCampaign): AdCampaign {
+    const campaign: AdCampaign = { ...input, id: newId('camp'), ts: new Date().toISOString() }
+    if (this.campaigns) this.campaigns = [...this.campaigns, campaign]
+    this.track('ad_campaign_purchased', {
+      campaignId: campaign.id,
+      slot: campaign.slot,
+      hours: campaign.hours,
+      total: campaign.total,
+    })
+    bus.emit('campaigns')
+    this.api
+      .post('/campaigns', campaign)
+      .then(() => this.hydrateCampaigns())
+      .catch(() => {
+        if (this.campaigns) this.campaigns = this.campaigns.filter((c) => c.id !== campaign.id)
+        bus.emit('campaigns')
+        bus.emit('order:rejected')
+      })
+    return campaign
+  }
+
   override getCatalog(): CatalogProfile[] {
     return this.catalog ?? super.getCatalog()
   }
@@ -1129,7 +1277,11 @@ export class RemoteDataStore extends LocalDataStore {
     this.adminWrite(this.api.patch(`/admin/blocks/${id}`, patch), () => this.hydrateEvents())
   }
   override deleteBlock(id: string): void {
+    // Si el mapa no está hidratado, `cur` viene undefined y el bloque del seed seguiría visible
+    // tras "borrarlo". No pasa nada grave (el onOk re-hidrata y lo corrige), pero pedimos la
+    // re-hidratación explícitamente para que la lista no quede mintiendo en el ínterin.
     const cur = this.blocksById.get(id)
+    if (!cur) this.hydrateEvents()
     this.blocksById.delete(id)
     if (cur) this.blocksByEvent.set(cur.eventId, (this.blocksByEvent.get(cur.eventId) ?? []).filter((b) => b.id !== id))
     this.track('admin_block_deleted', { blockId: id })
