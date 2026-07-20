@@ -486,6 +486,11 @@ export class LocalDataStore implements DataStore {
       .sort((a, b) => a.order - b.order || b.publishedAt.localeCompare(a.publishedAt))
   }
 
+  /** En modo demo no hay gate de socio: la lista de contenidos ya viene completa. */
+  getAdminContents(): ContentItem[] {
+    return this.getContents()
+  }
+
   getAdminNotas(): Nota[] {
     return mergeOverlay(seedNotas, K.notasOverlay).sort(
       (a, b) => a.order - b.order || b.publishedAt.localeCompare(a.publishedAt),

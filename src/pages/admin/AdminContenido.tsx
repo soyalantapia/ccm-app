@@ -8,7 +8,9 @@ import { OpsContentForm } from '../../features/admin/OpsContentForm'
 import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
 
 export default function AdminContenido() {
-  const contents = useStore((s) => s.getContents())
+  // Lista SIN el gate de socio: si no, los videos solo-socios llegan con el youtubeId vacío
+  // y el formulario no deja guardarlos.
+  const contents = useStore((s) => s.getAdminContents())
   const sponsors = useStore((s) => s.getSponsors())
 
   const [form, setForm] = useState<{ open: boolean; content?: ContentItem }>({ open: false })

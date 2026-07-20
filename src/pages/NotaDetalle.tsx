@@ -1,9 +1,8 @@
 import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { AdBanner, Badge, ButtonLink, EmptyState, Eyebrow, Img, PagePending, YouTubeEmbed } from '../components/ui'
+import { AdBanner, Badge, ButtonLink, EmptyState, Eyebrow, Img, PagePending, RichText, YouTubeEmbed } from '../components/ui'
 import { store, useStore } from '../data/store'
-import { renderInline } from '../lib/richText'
 
 function fmtDate(iso: string) {
   try {
@@ -73,11 +72,7 @@ export default function NotaDetalle() {
         )
       )}
 
-      <div className="mt-8 space-y-4 text-[17px] leading-relaxed text-ink">
-        {nota.body.split('\n').filter((p) => p.trim()).map((p, i) => (
-          <p key={i}>{renderInline(p)}</p>
-        ))}
-      </div>
+      <RichText body={nota.body} className="mt-8" />
 
       {/* Cierre editorial — solo desktop: la nota terminaba en seco contra el footer */}
       <div className="mt-12 hidden border-t border-ink/10 pt-8 lg:flex lg:items-center lg:justify-between">
