@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma.js'
-import { toCatalogProfile, toGallery, toContentItem, toSponsor, toConvocatoria } from '../lib/serialize.js'
+import { toCatalogProfile, toGallery, toContentItem, toSponsor, toConvocatoria, gateSocioContents } from '../lib/serialize.js'
 import { notFound } from '../lib/errors.js'
 import type { CatalogProfile, Gallery, ContentItem, Sponsor, TicketPlan, Convocatoria } from '@domain/types'
 
@@ -47,7 +47,13 @@ export async function getContents(deviceId?: string): Promise<ContentItem[]> {
   const isSocio = deviceId
     ? (await prisma.membership.findUnique({ where: { deviceId }, select: { tier: true } }))?.tier === 'socio'
     : false
-  return rows.map((c) => toContentItem(c, !c.socioOnly || isSocio))
+  // rows.map((c) => ...) y NO rows.map(toContentItem): toContentItem toma un segundo parámetro
+  // withVideo, así que pasarla por referencia le entrega el ÍNDICE del array — el item 0 recibiría
+  // withVideo=0 (falsy) y perdería el youtubeId aunque el usuario tenga derecho a verlo.
+  return gateSocioContents(
+    rows.map((c) => toContentItem(c)),
+    isSocio,
+  )
 }
 
 /* ─── Sponsors ─── */

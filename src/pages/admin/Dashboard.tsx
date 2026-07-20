@@ -79,7 +79,7 @@ export default function Dashboard() {
       <CorePageHeader
         title="Dashboard"
         live
-        lead="Demo local · sincronización en la nube en Fase 1"
+        lead="Métricas en vivo, calculadas sobre la actividad real registrada en el backend"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <LiveSimulator />

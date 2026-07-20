@@ -4,6 +4,7 @@ import { requireAdmin } from '../middlewares/admin.js'
 import * as admin from '../services/adminService.js'
 import * as applicationService from '../services/applicationService.js'
 import * as catalogService from '../services/catalogService.js'
+import { handleUpload } from '../services/uploadService.js'
 import type { EventItem, EventBlock, ContentItem, Sponsor, Gallery, CatalogProfile, PlanId, Convocatoria } from '@domain/types'
 
 export const adminRouter = Router()
@@ -131,6 +132,18 @@ adminRouter.patch('/admin/plans/:id', async (req, res, next) => {
   try {
     await admin.updatePlan(req.params.id as PlanId, req.body)
     res.status(204).end()
+  } catch (err) {
+    next(err)
+  }
+})
+
+/* ─── Upload de archivos (Volume Railway) ─── */
+// POST /admin/upload  Content-Type: multipart/form-data  campo: "file" (imagen ≤5 MB)
+// Devuelve { url } que el front pega en el campo de imagen.
+adminRouter.post('/admin/upload', async (req, res, next) => {
+  try {
+    const result = await handleUpload(req)
+    res.status(201).json(result)
   } catch (err) {
     next(err)
   }

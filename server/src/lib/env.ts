@@ -43,13 +43,21 @@ const schema = z.object({
   MP_ACCESS_TOKEN: z.string().optional(),
   MP_WEBHOOK_SECRET: z.string().optional(),
 
-  // Object storage (fase E)
+  // Object storage (fase E — S3-compatible, Cloudflare R2, etc.)
   STORAGE_ENDPOINT: z.string().optional(),
   STORAGE_REGION: z.string().default('auto'),
   STORAGE_BUCKET: z.string().optional(),
   STORAGE_ACCESS_KEY_ID: z.string().optional(),
   STORAGE_SECRET_ACCESS_KEY: z.string().optional(),
   STORAGE_PUBLIC_URL: z.string().optional(),
+
+  // Uploads locales (Volume Railway). Si está seteado, POST /admin/upload guarda aquí.
+  // UPLOAD_DIR:        path absoluto al volumen montado (ej. /app/uploads).
+  // UPLOAD_URL_PREFIX: prefijo con que el server expone los archivos (ej. /uploads).
+  //                    En Railway, el servicio ya tiene RAILWAY_PUBLIC_DOMAIN → la URL
+  //                    final queda https://<domain><UPLOAD_URL_PREFIX>/<filename>.
+  UPLOAD_DIR: z.string().optional(),
+  UPLOAD_URL_PREFIX: z.string().default('/uploads'),
 })
 
 const parsed = schema.safeParse(process.env)

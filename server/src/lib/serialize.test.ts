@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { toSponsor, toContentItem } from './serialize'
+import { toSponsor, toContentItem, gateSocioContents } from './serialize'
+import type { ContentItem } from '@domain/types'
 
 /** Sponsor Prisma mínimo para el mapeo (los campos que toSponsor lee). */
 function baseSponsor(overrides: Record<string, unknown> = {}) {
@@ -50,6 +51,8 @@ describe('toSponsor — regresión P1#1 (serialización de banner)', () => {
   })
 })
 
+// El gate de contenido premium tiene DOS capas y testeamos las dos: toContentItem(withVideo)
+// blanquea al serializar, y gateSocioContents lo vuelve a aplicar sobre la lista ya serializada.
 function baseContent(overrides: Record<string, unknown> = {}) {
   return {
     id: 'ct-1', type: 'video', title: 'Masterclass', description: 'd', youtubeId: 'SECRET-ID',
@@ -67,5 +70,26 @@ describe('toContentItem — gate socioOnly server-side (blanquea youtubeId)', ()
   })
   it('por default (sin flag) emite el id — contenido público', () => {
     expect(toContentItem(baseContent() as never).youtubeId).toBe('SECRET-ID')
+  })
+})
+
+describe('gateSocioContents — gate server-side de contenido premium', () => {
+  const premium: ContentItem = { id: 'v1', type: 'video', title: 'Backstage', description: '', youtubeId: 'SECRET_ID', publishedAt: '2026-01-01', socioOnly: true }
+  const libre: ContentItem = { id: 'v2', type: 'video', title: 'Trailer', description: '', youtubeId: 'PUBLIC_ID', publishedAt: '2026-01-01', socioOnly: false }
+
+  it('a un NO socio le vacía el youtubeId de los videos socioOnly (no filtra el asset)', () => {
+    const [p, l] = gateSocioContents([premium, libre], false)
+    expect(p.youtubeId).toBe('')
+    expect(p.socioOnly).toBe(true) // el item sigue apareciendo (portada + candado)
+    expect(l.youtubeId).toBe('PUBLIC_ID') // el libre no se toca
+  })
+
+  it('a un SOCIO le deja el youtubeId intacto', () => {
+    const [p] = gateSocioContents([premium, libre], true)
+    expect(p.youtubeId).toBe('SECRET_ID')
+  })
+
+  it('nunca toca el youtubeId de items NO socioOnly', () => {
+    expect(gateSocioContents([libre], false)[0].youtubeId).toBe('PUBLIC_ID')
   })
 })

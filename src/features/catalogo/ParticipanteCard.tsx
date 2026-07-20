@@ -11,7 +11,12 @@ export function ParticipanteCard({ profile }: { profile: CatalogProfile }) {
   return (
     <div className="overflow-hidden rounded-[14px] bg-white shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
       <div className="relative">
-        <Img src={profile.photo} alt={profile.name} ratio="16/10" />
+        <Img
+          src={profile.photo}
+          alt={profile.name}
+          ratio="16/10"
+          imgClassName={profile.photo.endsWith('.svg') ? 'object-contain' : undefined}
+        />
         {profile.verified && (
           <span
             title="Verificado CCM"

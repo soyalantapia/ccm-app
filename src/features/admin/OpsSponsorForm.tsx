@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Button, Field, Input, Select, Sheet, Textarea, toast } from '../../components/ui'
+import { Button, Field, Img, ImageUpload, Input, Select, Sheet, Textarea, toast } from '../../components/ui'
 import { store } from '../../data/store'
 import { newId } from '../../lib/storage'
 import type { AdSlot, Sponsor, SponsorCreative } from '../../data/types'
@@ -189,11 +189,23 @@ export function OpsSponsorForm({ open, sponsor, onClose }: Props) {
           label="Banner (URL)"
           hint="Arte horizontal 3:1 para el carrusel. Opcional — sin él se muestra un lockup de marca."
         >
-          <Input
-            value={f.banner}
-            onChange={set('banner')}
-            placeholder="https://… o img/sponsors/marca.svg"
-          />
+          <div className="flex items-center gap-2">
+            <Input
+              value={f.banner}
+              onChange={set('banner')}
+              placeholder="https://… o img/sponsors/marca.svg"
+              className="flex-1"
+            />
+            <ImageUpload
+              label="Subir"
+              onUrl={(url) => setF((p) => ({ ...p, banner: url }))}
+            />
+          </div>
+          {f.banner.trim() && (
+            <div className="mt-2.5 overflow-hidden rounded-sm border border-line">
+              <Img src={f.banner.trim()} alt="" ratio="3/1" className="w-full" />
+            </div>
+          )}
         </Field>
 
         <div className="space-y-3 border-t border-line pt-4">

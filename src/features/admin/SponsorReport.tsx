@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Download, Printer, X } from 'lucide-react'
 import { Button } from '../../components/ui'
 import { config } from '../../config'
-import { store } from '../../data/store'
+import { store, useDataVersion } from '../../data/store'
 import { useFocusTrap } from '../../lib/useFocusTrap'
 import type { AdSlot, Sponsor } from '../../data/types'
 import { ctr, formatDate } from './opsFormat'
@@ -35,6 +35,7 @@ interface ReportMetrics {
 
 /** Calcula las métricas reales del sponsor desde el log de analytics (PRD §13). */
 function useSponsorMetrics(sponsorId: string): ReportMetrics {
+  const v = useDataVersion() // recomputar si el analytics del backend hidrata mientras el reporte está abierto
   return useMemo(() => {
     const analytics = store.getAnalytics()
     const galleries = store.getGalleries()
@@ -74,7 +75,7 @@ function useSponsorMetrics(sponsorId: string): ReportMetrics {
     const galleryTitles = galleries.filter((g) => g.sponsorId === sponsorId).map((g) => g.title)
 
     return { impressions, clicks, reach: reachDevices.size, downloads, slots, galleryTitles }
-  }, [sponsorId])
+  }, [sponsorId, v])
 }
 
 /** Período del evento principal, p. ej. "19 y 20 de septiembre de 2026". */

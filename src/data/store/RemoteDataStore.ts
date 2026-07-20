@@ -125,8 +125,15 @@ export class RemoteDataStore extends LocalDataStore {
       this.hydrateApplications() // device ("Mis postulaciones")
       // Si ya hay sesión de organizador (token en sessionStorage al recargar), hidratar también
       // el caché admin — el panel /admin/postulaciones lo necesita sin re-loguear por el gate.
-      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ccm:admin-token')) this.hydrateAdminApplications()
+      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ccm:admin-token')) {
+        this.hydrateAdminApplications()
+        this.hydrateAnalytics() // reporte a sponsors con datos reales sin re-loguear
+      }
       this.hydrateBenefits()
+      // Re-fetch de /contents YA CON el device token: el backend gatea el youtubeId de los videos
+      // socioOnly según la membresía. El fetch público inicial pudo ir sin token (device nuevo) →
+      // socios verían su contenido enmascarado hasta este re-fetch.
+      this.refetchContents()
     })
     if (typeof window !== 'undefined') {
       const flush = () => this.flush()
@@ -474,10 +481,11 @@ export class RemoteDataStore extends LocalDataStore {
     this.hydrateAdminNotas()
     this.hydrateAdminApplications() // lista COMPLETA en un caché aparte (no pisa las del device)
     this.hydrateConvocatorias() // lista completa para gestionarlas (antes solo venían del seed)
-    this.hydrateAnalytics() // analítica REAL del backend — antes Dashboard/SponsorReport leían el seed (P1)
+    this.hydrateAnalytics() // analítica REAL — antes Dashboard/SponsorReport leían el seed fabricado (P1)
   }
-  /** Analítica real cross-device (admin-scoped). El backend NO siembra analytics; una vez hidratado
-   *  dejamos de servir el seed fabricado (P1). */
+
+  /** Analítica real cross-device (admin-scoped). Una vez hidratada, getAnalytics deja de servir el
+   *  seed (~6400 eventos fabricados) → el reporte a sponsors muestra números reales. */
   private hydrateAnalytics(): void {
     this.api.get<AnalyticsEvent[]>('/admin/analytics').then((a) => { this.analytics = a; bus.emit('analytics') }).catch(() => {})
   }
@@ -685,9 +693,11 @@ export class RemoteDataStore extends LocalDataStore {
     bus.emit('membership')
     this.api
       .post<Membership>('/memberships', { paid })
-      // refetchContents: el youtubeId de videos socioOnly se sirve server-side según membresía (#8),
-      // re-fetch para desbloquearlos sin recargar.
-      .then((server) => { this.membership = server; bus.emit('membership'); this.refetchContents() })
+      .then((server) => {
+        this.membership = server
+        bus.emit('membership')
+        this.refetchContents() // ahora socio → re-fetch para desenmascarar el youtubeId de contenido socioOnly
+      })
       .catch(() => {
         // Si el server no registró la membresía, revertir el estado optimista y AVISAR — si no,
         // isSocio() queda true y desbloquea contenido socioOnly cross-app hasta el próximo reload.
@@ -893,12 +903,16 @@ export class RemoteDataStore extends LocalDataStore {
       super.toggleFavorite(photoId)
       return
     }
+    // Revertir el optimista si el server rechaza (antes el catch era vacío → corazón "lleno"
+    // que el server nunca guardó y desaparece al re-hidratar; espeja el patrón de register()).
+    const prev = this.favorites
+    const revert = () => { this.favorites = prev; bus.emit('favorites') }
     if (this.favorites.includes(photoId)) {
       this.favorites = this.favorites.filter((p) => p !== photoId)
-      this.api.del(`/favorites/${photoId}`).catch(() => {})
+      this.api.del(`/favorites/${photoId}`).catch(revert)
     } else {
       this.favorites = [...this.favorites, photoId]
-      this.api.put(`/favorites/${photoId}`).catch(() => {})
+      this.api.put(`/favorites/${photoId}`).catch(revert)
     }
     bus.emit('favorites')
   }
@@ -908,11 +922,14 @@ export class RemoteDataStore extends LocalDataStore {
       super.recordDownload(photoId, galleryId)
       return
     }
+    const prev = this.downloads
     const sponsorId = this.galleries?.find((g) => g.id === galleryId)?.sponsorId ?? ''
     this.downloads = [{ photoId, galleryId, sponsorId, ts: new Date().toISOString() }, ...this.downloads]
     this.track('photo_download', { photoId, galleryId, sponsorId }) // → local + analytics backend
     bus.emit('downloads')
-    this.api.post('/downloads', { photoId, galleryId }).catch(() => {})
+    // Revertir la fila de "Mis descargas" si el POST falla (no persistió); la descarga del
+    // archivo ya ocurrió aparte, esto solo corrige el registro visible.
+    this.api.post('/downloads', { photoId, galleryId }).catch(() => { this.downloads = prev; bus.emit('downloads') })
   }
 
   /* ─── Fase G: CRUD del organizador (auth Bearer en /admin/*) ─── */
