@@ -8,6 +8,7 @@ import { useEvents, useRegistrations } from '../data/queries'
 import { IDS } from '../data/ids'
 import { EventCard } from '../features/eventos/EventCard'
 import { formatMoney } from '../features/tickets/format'
+import { vipDesde } from '../features/tickets/vipDesde'
 import { estaPorVenir } from '../lib/eventDate'
 import { EVENT_TYPE_ORDER, EVENT_TYPE_TABS } from '../features/eventos/eventMeta'
 import {
@@ -25,9 +26,8 @@ export default function Eventos() {
   const events = useEvents()
   const registrations = useRegistrations()
   const isSocio = useStore((s) => s.isSocio())
-  const vipFrom = useStore(
-    (s) => s.getPlans().find((p) => p.kind === 'vip' && p.price !== null)?.price ?? null,
-  )
+  // El más barato de los VIP, no el primero de la lista (ver features/tickets/vipDesde).
+  const vipFrom = useStore((s) => vipDesde(s.getPlans()))
   const [filter, setFilter] = useState('todos')
 
   const sponsors = useStore((s) => s.getSponsors())

@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Check, Lock, QrCode, Sparkles, Star } from 'lucide-react'
+import { ArrowRight, Check, Lock, MessageCircle, QrCode, Sparkles, Star } from 'lucide-react'
 import { Badge, Button, ButtonLink, QR, SectionTitle } from '../components/ui'
 import { store, useStore } from '../data/store'
+import { config } from '../config'
 import { formatMoney } from '../features/tickets/format'
 import { FREE_PLAN, SOCIO_PLAN, SOCIO_PRICE } from '../features/membresia/plans'
 import { estaPorVenir } from '../lib/eventDate'
+import { mpLinkValido } from '../lib/mpLink'
+
+/** Link de cobro real de la membresía; null mientras no haya uno configurado. */
+const mpLink = mpLinkValido(import.meta.env.VITE_MP_LINK_MEMBRESIA)
 
 type Step = 'plans' | 'pay' | 'done'
 
@@ -233,19 +238,52 @@ export default function Membresia() {
           </div>
 
           <div className="flex flex-col items-center rounded-md border border-line bg-surface p-6 text-center">
-            <div className="eyebrow flex items-center gap-1.5 text-[10px] text-ink-soft">
-              <QrCode size={13} className="text-accent-strong" /> Pagá con Mercado Pago
-            </div>
-            <div className="mt-4 rounded-md border border-line bg-bg p-3">
-              <QR
-                value={`https://www.mercadopago.com.ar/checkout/ccm?tipo=membresia&plan=socio&monto=${SOCIO_PRICE}`}
-                size={184}
-              />
-            </div>
-            <p className="mt-4 text-xs leading-relaxed text-ink-soft">
-              Escaneá el QR desde tu app de Mercado Pago y aboná{' '}
-              <strong className="text-ink">{formatMoney(SOCIO_PRICE)}</strong>.
-            </p>
+            {mpLink ? (
+              <>
+                <div className="eyebrow flex items-center gap-1.5 text-[10px] text-ink-soft">
+                  <QrCode size={13} className="text-accent-strong" /> Pagá con Mercado Pago
+                </div>
+                <div className="mt-4 rounded-md border border-line bg-bg p-3">
+                  <QR value={mpLink} size={184} />
+                </div>
+                <p className="mt-4 text-xs leading-relaxed text-ink-soft">
+                  Escaneá el QR desde tu app de Mercado Pago y aboná{' '}
+                  <strong className="text-ink">{formatMoney(SOCIO_PRICE)}</strong>.
+                </p>
+                <ButtonLink
+                  href={mpLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="outline"
+                  size="md"
+                  className="mt-4 w-full"
+                >
+                  Abrir el pago en Mercado Pago
+                </ButtonLink>
+              </>
+            ) : (
+              /* Sin link de cobro real NO mostramos QR: el que había apuntaba a una URL
+                 inventada de Mercado Pago y devolvía "La página que buscás ya no existe".
+                 Mejor decir la verdad que simular un pago que no se puede completar. */
+              <>
+                <div className="eyebrow flex items-center gap-1.5 text-[10px] text-ink-soft">
+                  <MessageCircle size={13} className="text-accent-strong" /> El pago lo coordinamos con vos
+                </div>
+                <p className="mt-4 text-sm leading-relaxed text-ink-soft">
+                  Todavía no tenemos el pago online publicado. Escribinos por Instagram a{' '}
+                  <a
+                    href={config.instagramUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-ink underline decoration-accent underline-offset-4 transition-colors hover:text-accent"
+                  >
+                    {config.instagramHandle}
+                  </a>{' '}
+                  y el equipo de CCM te pasa cómo abonar los{' '}
+                  <strong className="text-ink">{formatMoney(SOCIO_PRICE)}</strong> de la membresía.
+                </p>
+              </>
+            )}
             <Button size="lg" className="mt-5 w-full" onClick={pay}>
               <Check size={16} strokeWidth={2} /> Ya pagué · activar membresía
             </Button>

@@ -96,6 +96,24 @@ npm run dev          # Vite dev server → http://localhost:5173/ccm-app/
 - **Sin `VITE_API_URL`** → modo demo offline (`LocalDataStore`: seed + localStorage). El fallback nunca se rompe.
 - **Con `VITE_API_URL`** (en un `.env` de la raíz) → pega a un backend real (`RemoteDataStore`). Ej: `VITE_API_URL=http://localhost:4000` (tu server local) o el dominio de Railway.
 
+#### Links de pago de Mercado Pago (Membresía y Publicidad)
+
+| Variable | Qué habilita |
+| --- | --- |
+| `VITE_MP_LINK_MEMBRESIA` | Link de cobro real de la membresía Socio CCM en `/membresia`. |
+| `VITE_MP_LINK_PUBLICIDAD` | Link de cobro real de los espacios publicitarios en `/publicidad`. |
+
+Ambas son **opcionales** y se leen en build-time. Si están seteadas con un link de cobro real de
+Mercado Pago (`https://mpago.la/…` o `https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=…`),
+esas pantallas muestran el **QR + el botón "Abrir el pago en Mercado Pago"**. Si no están —o si el
+valor no es un link de MP válido— muestran un mensaje para **coordinar el pago con el equipo por
+Instagram**, sin QR.
+
+Antes había un QR hardcodeado a `mercadopago.com.ar/checkout/ccm?…`, una URL **que no existe**: MP
+responde "La página que buscás ya no existe" y el que escaneaba no podía pagar creyendo que sí. La
+validación vive en [`src/lib/mpLink.ts`](src/lib/mpLink.ts) (rechaza la home pelada, `/checkout/ccm`,
+dominios ajenos y todo lo que no sea `https`).
+
 ### Backend
 ```bash
 cd server

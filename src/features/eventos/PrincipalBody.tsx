@@ -4,6 +4,7 @@ import { store, useStore } from '../../data/store'
 import type { EventBlock, EventItem } from '../../data/types'
 import { TicketSelector } from '../tickets/TicketSelector'
 import { formatMoney } from '../tickets/format'
+import { vipDesde } from '../tickets/vipDesde'
 import { BlockRow } from './BlockRow'
 import { blockSortKey, dayLabel } from './eventMeta'
 
@@ -37,9 +38,8 @@ const EXPERIENCIAS = [
  * la agenda por bloques y el director general.
  */
 export function PrincipalBody({ event }: { event: EventItem }) {
-  const vipFrom = useStore(
-    (s) => s.getPlans().find((p) => p.kind === 'vip' && p.price !== null)?.price ?? null,
-  )
+  // El más barato de los VIP, no el primero de la lista (ver features/tickets/vipDesde).
+  const vipFrom = useStore((s) => vipDesde(s.getPlans()))
 
   const sortedBlocks = [...store.getBlocks(event.id)].sort((a, b) =>
     blockSortKey(a).localeCompare(blockSortKey(b)),

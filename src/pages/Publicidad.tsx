@@ -1,11 +1,16 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, ArrowUpRight, Check, QrCode } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Check, MessageCircle, QrCode } from 'lucide-react'
 import { Badge, Button, ButtonLink, Field, Input, QR, SectionTitle } from '../components/ui'
 import { store } from '../data/store'
+import { config } from '../config'
 import type { AdCampaign, AdSlot } from '../data/types'
 import { formatMoney } from '../features/tickets/format'
 import { AD_SLOTS, DURATIONS, priceFor, reachFor, slotMeta } from '../features/publicidad/adPricing'
+import { mpLinkValido } from '../lib/mpLink'
+
+/** Link de cobro real de los espacios publicitarios; null mientras no haya uno configurado. */
+const mpLink = mpLinkValido(import.meta.env.VITE_MP_LINK_PUBLICIDAD)
 
 /** Vista previa del aviso tal como se verá en el slot elegido. */
 function AdPreview({ slot, brand, headline, cta, tagline }: { slot: AdSlot; brand: string; headline: string; cta: string; tagline: string }) {
@@ -292,18 +297,50 @@ export default function Publicidad() {
           </div>
 
           <div className="flex flex-col items-center rounded-md border border-line bg-surface p-6 text-center">
-            <div className="eyebrow flex items-center gap-1.5 text-[10px] text-ink-soft">
-              <QrCode size={13} className="text-accent-strong" /> Pagá con Mercado Pago
-            </div>
-            <div className="mt-4 rounded-md border border-line bg-bg p-3">
-              <QR
-                value={`https://www.mercadopago.com.ar/checkout/ccm?slot=${slot}&hs=${hours}&monto=${total}&marca=${encodeURIComponent(brand)}`}
-                size={184}
-              />
-            </div>
-            <p className="mt-4 text-xs leading-relaxed text-ink-soft">
-              Escaneá el QR desde tu app de Mercado Pago y aboná <strong className="text-ink">{formatMoney(total)}</strong>.
-            </p>
+            {mpLink ? (
+              <>
+                <div className="eyebrow flex items-center gap-1.5 text-[10px] text-ink-soft">
+                  <QrCode size={13} className="text-accent-strong" /> Pagá con Mercado Pago
+                </div>
+                <div className="mt-4 rounded-md border border-line bg-bg p-3">
+                  <QR value={mpLink} size={184} />
+                </div>
+                <p className="mt-4 text-xs leading-relaxed text-ink-soft">
+                  Escaneá el QR desde tu app de Mercado Pago y aboná <strong className="text-ink">{formatMoney(total)}</strong>.
+                </p>
+                <ButtonLink
+                  href={mpLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="outline"
+                  size="md"
+                  className="mt-4 w-full"
+                >
+                  Abrir el pago en Mercado Pago
+                </ButtonLink>
+              </>
+            ) : (
+              /* Sin link de cobro real NO mostramos QR: el que había apuntaba a una URL
+                 inventada de Mercado Pago y devolvía "La página que buscás ya no existe". */
+              <>
+                <div className="eyebrow flex items-center gap-1.5 text-[10px] text-ink-soft">
+                  <MessageCircle size={13} className="text-accent-strong" /> El pago lo coordinamos con vos
+                </div>
+                <p className="mt-4 text-sm leading-relaxed text-ink-soft">
+                  Todavía no tenemos el pago online publicado. Escribinos por Instagram a{' '}
+                  <a
+                    href={config.instagramUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-ink underline decoration-accent underline-offset-4 transition-colors hover:text-accent"
+                  >
+                    {config.instagramHandle}
+                  </a>{' '}
+                  y el equipo de CCM te pasa cómo abonar los{' '}
+                  <strong className="text-ink">{formatMoney(total)}</strong> de tu espacio.
+                </p>
+              </>
+            )}
             <Button size="lg" className="mt-5 w-full" onClick={pay}>
               <Check size={16} strokeWidth={2} /> Ya pagué · activar aviso
             </Button>

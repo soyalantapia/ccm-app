@@ -2,6 +2,7 @@ import { ButtonLink, Img, SectionTitle } from '../../components/ui'
 import { useStore } from '../../data/store'
 import { IDS } from '../../data/ids'
 import { formatMoney } from '../tickets/format'
+import { vipDesde } from '../tickets/vipDesde'
 
 const GALAS = [
   {
@@ -22,9 +23,8 @@ const GALAS = [
 
 /** Experiencias de gala (PRD §6.1.5) — dark block azul noche. */
 export function GalasSection() {
-  const vipFrom = useStore(
-    (s) => s.getPlans().find((p) => p.kind === 'vip' && p.price !== null)?.price ?? null,
-  )
+  // El más barato de los VIP, no el primero de la lista (ver features/tickets/vipDesde).
+  const vipFrom = useStore((s) => vipDesde(s.getPlans()))
   return (
     <section className="bg-night text-night-ink">
       <div className="mx-auto max-w-6xl px-5 py-16 md:py-24">
