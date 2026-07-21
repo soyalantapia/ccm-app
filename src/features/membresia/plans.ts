@@ -21,8 +21,8 @@ export interface MembershipPlanDef {
   benefits: MembershipBenefit[]
 }
 
-/** Precio de la membresía Socio CCM (editable; demo). */
-export const SOCIO_PRICE = 9900
+export { SOCIO_PRICE } from '../../lib/pricing'
+import { SOCIO_PRICE } from '../../lib/pricing'
 
 export const FREE_PLAN: MembershipPlanDef = {
   tier: 'free',

@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { Button, Card, Eyebrow, SectionTitle, Sheet, toast } from '../../components/ui'
 import { IS_REMOTE } from '../../data/store'
 import { removeKey } from '../../lib/storage'
+import { can } from '../../data/adminSession'
 import { OpsThemeEditor } from '../../features/admin/OpsThemeEditor'
 import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
+import { OpsMpConnection } from '../../features/admin/OpsMpConnection'
 
 const STORAGE_PREFIX = 'ccm:'
 
@@ -33,6 +35,16 @@ export default function AdminConfiguracion() {
       <section className="mt-10">
         <OpsThemeEditor />
       </section>
+
+      {/* ─── Cobros con Mercado Pago ───
+          Solo la ve quien puede conectar/desconectar: mostrarla a alguien sin team:manage
+          sería ofrecerle un botón que el backend le va a rechazar con 403 igual. Esconderla
+          es cosmética (la seguridad real la aplica el server), pero mostrarla de más confunde. */}
+      {can('team:manage') && (
+        <section className="mt-14 border-t border-line pt-10">
+          <OpsMpConnection />
+        </section>
+      )}
 
       {/* ─── Acceso ─── */}
       <section className="mt-14 border-t border-line pt-10">

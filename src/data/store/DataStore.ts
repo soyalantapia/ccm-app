@@ -19,6 +19,7 @@ import type {
   Sponsor,
   AdSlot,
   SponsorCreative,
+  MpStatus,
   TicketOrder,
   TicketPlan,
   Benefit,
@@ -59,6 +60,12 @@ export type NewContent = Omit<ContentItem, 'id'>
 export type NewCampaign = Omit<AdCampaign, 'id' | 'ts'>
 /** Alta de convocatoria desde el admin (el store genera id + slug). */
 export type NewConvocatoria = Omit<Convocatoria, 'id' | 'slug'> & { slug?: string }
+
+/** Una línea del carrito de pago. El monto NO viaja: lo calcula el server. */
+export interface CheckoutItem {
+  kind: 'ticket_order' | 'membership' | 'ad_campaign'
+  resourceId: string
+}
 
 /** Recursos hidratados en bloque desde el backend (para isHydrating → páginas :slug). */
 export type HydratableResource = 'events' | 'catalog' | 'galleries' | 'notas'
@@ -118,6 +125,15 @@ export interface DataStore {
   getPlan(id: PlanId): TicketPlan | undefined
   updatePlan(id: PlanId, patch: { price?: number | null; mpLink?: string }): void
   createOrder(planId: PlanId, qty?: number): TicketOrder
+  /**
+   * Igual que `createOrder` para N planes, pero ESPERA a que el backend las haya creado de verdad.
+   *
+   * `createOrder` es fire-and-forget (manda el POST y devuelve la orden optimista al instante):
+   * eso está bien para pintar la UI, pero no para encadenar un checkout. Si el cobro sale antes
+   * de que las órdenes existan en el server, éste responde RESOURCE_NOT_FOUND y el comprador cae
+   * al link manual — cobrando de menos. Con N órdenes basta que UNA llegue tarde.
+   */
+  createOrders(sel: { planId: PlanId; qty: number }[]): Promise<TicketOrder[]>
   markOrderRedirected(orderId: string): void
   setOrderStatus(orderId: string, status: OrderStatus): void
   getOrders(): TicketOrder[]
@@ -239,4 +255,24 @@ export interface DataStore {
    * organizador, para que el panel vea borradores/ocultos/códigos sin recargar. No-op local.
    */
   refetchAdminScoped(): void
+
+  /* Cobros con Mercado Pago (panel del organizador). */
+  getMpStatus(): MpStatus | undefined
+  connectMp(): Promise<string>
+  disconnectMp(): Promise<void>
+
+  /**
+   * Cobros con Mercado Pago (comprador). Pide el link de pago REAL para un CARRITO de recursos
+   * (varias órdenes = UNA sola preferencia de MP, cobrando el total). El monto lo calcula el
+   * server con el precio vigente y nunca viaja en el pedido; vuelve en `amount` para que el
+   * llamador pueda verificar que coincide con lo que le mostró al comprador ANTES de redirigir.
+   *
+   * Devuelve null si Mercado Pago no está conectado (503) o si el checkout no se pudo generar.
+   *
+   * ⚠️ Puede TIRAR un ApiError con code `COBRO_SOLAPADO`: alguna de esas órdenes ya está adentro
+   * de otro pago en curso. Eso NO se resuelve solo (a diferencia de `CHECKOUT_EN_CURSO`, que se
+   * reintenta acá adentro), así que el llamador tiene que decidir qué hacer — `err.details` trae
+   * el `initPoint` de ese pago para ofrecer "retomar el pago en curso".
+   */
+  startCheckout(items: CheckoutItem[]): Promise<{ initPoint: string; amount: number } | null>
 }

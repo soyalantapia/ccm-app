@@ -1,6 +1,7 @@
 import { LocalDataStore, K } from './LocalDataStore'
 import type {
   BlockAvailability,
+  CheckoutItem,
   PhotoDownload,
   NewEvent,
   NewBlock,
@@ -42,6 +43,7 @@ import type {
   ApplicationStatus,
   AnalyticsEvent,
   AdminStats,
+  MpStatus,
   TicketOrder,
   AdCampaign,
   OrderStatus,
@@ -125,6 +127,9 @@ export class RemoteDataStore extends LocalDataStore {
   private convocatorias = new Map<string, Convocatoria>()
   private convoInflight = new Set<string>()
   private convocatoriasList?: Convocatoria[] // lista admin (GET /admin/convocatorias)
+  // Estado de la conexión con Mercado Pago (panel del organizador). Sin fallback al seed: no
+  // conectado es el default seguro mientras no se sepa qué contesta el backend.
+  private mpStatus?: MpStatus
 
   constructor(apiBase: string) {
     super()
@@ -533,6 +538,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.hydrateAdminEvents() // el panel ve también lo que todavía no se publicó
     this.hydrateAdminOrders() // todas las órdenes, no solo las del navegador del organizador
     this.hydrateAnalytics() // analítica REAL — antes Dashboard/SponsorReport leían el seed fabricado (P1)
+    this.hydrateMpStatus() // conexión con Mercado Pago (Tarea 6)
   }
 
   /** Analítica real cross-device (admin-scoped). Una vez hidratada, getAnalytics deja de servir el
@@ -1118,13 +1124,13 @@ export class RemoteDataStore extends LocalDataStore {
     return this.adminOrders ?? this.orders ?? super.getAdminOrders()
   }
 
-  override createOrder(planId: PlanId, qty = 1): TicketOrder {
-    // El optimista usa el precio local para no dejar la UI en blanco; el server manda y la
-    // re-hidratación lo corrige si el precio cambió mientras tanto.
+  /** La orden optimista: el precio local es solo para no dejar la UI en blanco; el server manda
+   *  y la re-hidratación lo corrige si el precio cambió mientras tanto. */
+  private construirOrden(planId: PlanId, qty: number): TicketOrder {
     const plan = this.getPlan(planId)
     const unit = (plan?.price ?? 0) + (plan?.serviceCharge ?? 0)
     const profile = this.getProfile()
-    const order: TicketOrder = {
+    return {
       id: newId('ord'),
       planId,
       ts: new Date().toISOString(),
@@ -1133,25 +1139,58 @@ export class RemoteDataStore extends LocalDataStore {
       total: unit * qty,
       ...(profile.fields.email?.value ? { buyerEmail: profile.fields.email.value } : {}),
     }
+  }
+
+  /**
+   * Pinta la orden optimista y manda el POST. Devuelve la promesa del POST: quien llama decide
+   * si la espera (`createOrders`, porque después va a pedir un cobro por esa orden) o no
+   * (`createOrder`, donde lo que importa es que la UI responda ya).
+   */
+  private enviarOrden(order: TicketOrder): Promise<void> {
     if (this.orders) this.orders = [order, ...this.orders]
-    this.track('ticket_order_created', { planId, orderId: order.id, qty, total: order.total })
+    this.track('ticket_order_created', { planId: order.planId, orderId: order.id, qty: order.qty, total: order.total })
     bus.emit('orders')
-    this.api
+    return this.api
       .post('/orders', {
         id: order.id,
-        planId,
-        qty,
+        planId: order.planId,
+        qty: order.qty,
         ...(order.buyerEmail ? { buyerEmail: order.buyerEmail } : {}),
       })
-      .then(() => this.refetchOrders())
-      .catch(() => {
+      .then(() => undefined)
+      .catch((err) => {
         // La compra no llegó al backend: sacamos la orden fantasma y avisamos, en vez de
         // dejar al comprador creyendo que tiene una entrada reservada.
         if (this.orders) this.orders = this.orders.filter((o) => o.id !== order.id)
         bus.emit('orders')
         bus.emit('order:rejected')
+        throw err
+      })
+  }
+
+  override createOrder(planId: PlanId, qty = 1): TicketOrder {
+    const order = this.construirOrden(planId, qty)
+    this.enviarOrden(order)
+      .then(() => this.refetchOrders())
+      .catch(() => {
+        /* el rollback y el aviso ya los hizo enviarOrden */
       })
     return order
+  }
+
+  /**
+   * Crea N órdenes y ESPERA a que existan en el backend.
+   *
+   * `createOrder` es fire-and-forget: el POST sale en paralelo y la orden optimista vuelve al
+   * instante. Encadenar el checkout ahí es una carrera perdida — el cobro puede llegar al server
+   * ANTES que la orden y responder RESOURCE_NOT_FOUND, con lo que el front cae al link manual y
+   * cobra de menos. Con N órdenes basta que UNA llegue tarde para que pase.
+   */
+  override async createOrders(sel: { planId: PlanId; qty: number }[]): Promise<TicketOrder[]> {
+    const ordenes = sel.map((s) => this.construirOrden(s.planId, s.qty))
+    await Promise.all(ordenes.map((o) => this.enviarOrden(o)))
+    this.refetchOrders()
+    return ordenes
   }
 
   override markOrderRedirected(orderId: string): void {
@@ -1408,6 +1447,68 @@ export class RemoteDataStore extends LocalDataStore {
       () => this.refetchAllContents(),
       () => { if (prev) this.contents = prev; bus.emit('contents') },
     )
+  }
+
+  /* ─── Cobros con Mercado Pago (panel del organizador, Tarea 6) ─── */
+
+  private hydrateMpStatus(): void {
+    this.api.get<MpStatus>('/admin/mp/status').then((s) => { this.mpStatus = s; bus.emit('mp') }).catch(() => {})
+  }
+
+  override getMpStatus(): MpStatus | undefined {
+    return this.mpStatus
+  }
+
+  override async connectMp(): Promise<string> {
+    const { url } = await this.api.post<{ url: string }>('/admin/mp/connect', {})
+    return url
+  }
+
+  // El endpoint real es POST (no DELETE): server/src/routes/mp.ts define
+  // `mpRouter.post('/admin/mp/disconnect', ...)` y responde 204.
+  override async disconnectMp(): Promise<void> {
+    await this.api.post('/admin/mp/disconnect', {})
+    this.mpStatus = { conectado: false }
+    bus.emit('mp')
+  }
+
+  /* ─── Checkout real del comprador (Tarea 7) ─── */
+
+  /** Cuántas veces reintentar cuando el server responde 409 CHECKOUT_EN_CURSO — protección
+   *  anti doble-cobro de mpCheckoutService.createCheckout: hay un cobro `pending` reciente para
+   *  este mismo carrito y todavía no se sabe si tiene preferencia. No es un rechazo real, es una
+   *  carrera contra un pedido anterior que está terminando de guardar su preferencia y se
+   *  resuelve sola en el orden de un segundo — por eso se reintenta en vez de caer directo al
+   *  link manual. */
+  private static readonly CHECKOUT_REINTENTOS = 3
+  private static readonly CHECKOUT_ESPERA_MS = 600
+
+  override async startCheckout(items: CheckoutItem[]): Promise<{ initPoint: string; amount: number } | null> {
+    let intento = 0
+    while (true) {
+      intento++
+      try {
+        const r = await this.api.post<{ initPoint: string; amount: number }>('/payments/preference', { items })
+        return { initPoint: r.initPoint, amount: r.amount }
+      } catch (err) {
+        // ⚠️ Solo se reintenta CHECKOUT_EN_CURSO, no "cualquier 409" como antes. Los dos 409 del
+        // endpoint significan cosas opuestas: CHECKOUT_EN_CURSO se resuelve solo en un segundo;
+        // COBRO_SOLAPADO (alguna de estas órdenes ya está adentro de OTRO pago en curso) no se
+        // resuelve nunca solo — reintentarlo y después devolver null mandaba al comprador al link
+        // manual, que cobra un monto fijo distinto del carrito. Ese es justo el bug que estamos
+        // cerrando, así que este error se PROPAGA para que la UI ofrezca retomar el pago vivo.
+        if (err instanceof ApiError && err.code === 'COBRO_SOLAPADO') throw err
+        const reintentable =
+          err instanceof ApiError && err.code === 'CHECKOUT_EN_CURSO' && intento < RemoteDataStore.CHECKOUT_REINTENTOS
+        if (reintentable) {
+          await new Promise((resolve) => setTimeout(resolve, RemoteDataStore.CHECKOUT_ESPERA_MS))
+          continue
+        }
+        // Sin conexión con MP (503), un CHECKOUT_EN_CURSO que no se resolvió tras reintentar, o
+        // error de red: devolvemos null y el llamador decide. No se avisa acá.
+        return null
+      }
+    }
   }
 
   private scheduleFlush(): void {

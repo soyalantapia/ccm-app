@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Badge, Button, Card, Field, Input, toast } from '../../components/ui'
 import { store } from '../../data/store'
+import { esLinkDePagoReal } from '../../config/plans'
 import type { TicketPlan } from '../../data/types'
 import { formatMoney } from './opsFormat'
 
@@ -11,7 +12,10 @@ import { formatMoney } from './opsFormat'
 export function OpsPlanEditor({ plan }: { plan: TicketPlan }) {
   const isFree = plan.kind === 'general'
   const [price, setPrice] = useState(plan.price === null || plan.price === 0 ? '' : String(plan.price))
-  const [mpLink, setMpLink] = useState(plan.mpLink ?? '')
+  // Los planes guardados en la base todavía traen el placeholder (la portada de MP) de un seed
+  // viejo. Si se precargara el campo con eso, el organizador vería un "link cargado" que no cobra
+  // nada y lo dejaría como está. Se muestra vacío: no hay link, y hay que poner uno.
+  const [mpLink, setMpLink] = useState(esLinkDePagoReal(plan.mpLink) ? plan.mpLink! : '')
 
   const savePrice = () => {
     const n = Number(price)
@@ -24,8 +28,10 @@ export function OpsPlanEditor({ plan }: { plan: TicketPlan }) {
   }
 
   const saveLink = () => {
-    if (!mpLink.trim().startsWith('http')) {
-      toast('Ingresá un link válido de Mercado Pago', 'info')
+    // `startsWith('http')` dejaba pasar https://www.mercadopago.com.ar — la portada, que no cobra
+    // nada. Guardado como link de pago, mandaba al comprador a una página donde no puede pagar.
+    if (!esLinkDePagoReal(mpLink)) {
+      toast('Ese link no cobra nada (la portada de Mercado Pago no sirve). Pegá el link del cobro.', 'info')
       return
     }
     store.updatePlan(plan.id, { mpLink: mpLink.trim() })

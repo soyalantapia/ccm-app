@@ -1,0 +1,12 @@
+-- Garantiza que la base elija un único ganador en la carrera de doble cobro (defecto crítico
+-- de mpCheckoutService.createCheckout): dos requests concurrentes para el mismo (kind,
+-- resourceId) hoy pasan las dos por el `findFirst` en null antes de que cualquiera llegue a
+-- guardar nada, y las dos terminan creando una preferencia viva en MP. Es un índice único
+-- PARCIAL: no se puede expresar en el datamodel de Prisma (@@unique no soporta predicado
+-- WHERE), así que vive como SQL crudo, igual que "one_active_per_slot" en
+-- prisma/migrations/1_one_active_per_slot.
+--
+-- OJO nombre de carpeta: Prisma ordena las migraciones por STRING, no por número — por eso
+-- esta carpeta sigue con el prefijo "9_" (en vez de "10_", que ordenaría ANTES que "9_..." por
+-- comparación de string) y el sufijo "pending_unique" ordena después de "payment_init_point".
+CREATE UNIQUE INDEX "Payment_pending_por_recurso" ON "Payment"("kind", "resourceId") WHERE "status" = 'pending';

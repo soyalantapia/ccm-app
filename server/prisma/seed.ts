@@ -6,8 +6,9 @@
  * Cubre lo necesario para Fase B (eventos + bloques + cupos) + sus FKs (sponsors,
  * planes). 🔶 Fases E/F/etc.: catálogo, galerías, contenidos, convocatorias.
  *
- * Correr una vez contra la DB: DATABASE_URL=<...> npx tsx prisma/seed.ts
+ * Correr una vez contra la DB: npm run db:seed (lee server/.env, igual que src/lib/env.ts).
  */
+import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
 import { seedSponsors } from '../../src/data/seed/sponsors'
 import { seedEvents } from '../../src/data/seed/events'

@@ -14,6 +14,7 @@ import { prisma } from '../lib/prisma.js'
 import { toTicketOrder, toAdCampaign } from '../lib/serialize.js'
 import { notFound, badRequest } from '../lib/errors.js'
 import type { TicketOrder, AdCampaign, OrderStatus } from '@domain/types'
+import { priceForCampaign } from '../../../src/lib/pricing.js'
 
 /* ─── Órdenes de entradas ─── */
 
@@ -108,7 +109,9 @@ export async function createCampaign(input: NuevaCampania): Promise<AdCampaign> 
       cta: input.cta ?? null,
       tagline: input.tagline ?? null,
       hours: Math.max(1, Math.floor(input.hours || 1)),
-      total: input.total,
+      // El total lo recalcula el server: el que manda el cliente se ignora (mismo criterio que
+      // las órdenes de entrada, donde se compraba una VIP a $1 editando el request).
+      total: priceForCampaign(input.slot, input.hours),
       status: 'pendiente_pago',
     },
   })

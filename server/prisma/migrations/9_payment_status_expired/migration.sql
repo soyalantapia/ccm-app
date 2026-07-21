@@ -1,0 +1,21 @@
+-- Suma 'expired' a PaymentStatus: el estado destino para un Payment `pending` abandonado que
+-- mpCheckoutService.ts vence de forma perezosa (en el propio intento de compra siguiente, sin
+-- job de fondo) para liberar el índice único parcial Payment(kind,resourceId) WHERE
+-- status='pending' de la migración 9_mp_payment_pending_unique. `rejected` no servía: nadie
+-- rechazó nada, el comprador simplemente no volvió.
+--
+-- OJO nombre de carpeta: mismo motivo que 9_mp_payment_pending_unique — Prisma ordena las
+-- migraciones por STRING, no por número. "10_..." ordenaría ANTES que "9_..." (por comparación
+-- de caracteres, '1' < '9'), así que esta carpeta sigue con el prefijo "9_". Dentro de las "9_",
+-- el segmento "payment_status_expired" (con 'p' de "payment") ordena DESPUÉS de las cuatro "9_"
+-- existentes porque todas arrancan "9_m..." ("m" < "p").
+--
+-- OJO Postgres — ALTER TYPE ... ADD VALUE y transacciones: desde Postgres 12 este statement SÍ
+-- puede correr dentro de un bloque de transacción (Prisma envuelve cada migration.sql en una),
+-- pero el valor nuevo NO se puede usar (INSERT/UPDATE/WHERE) en la MISMA transacción en la que
+-- se agrega — seguiría fallando con "unsafe use of new value". Por eso esta migración hace
+-- SOLO esto (agregar el valor) y nada de backfill: ningún Payment existente se reescribe a
+-- 'expired' acá. El backfill de pendings viejos, si hiciera falta alguna vez, tiene que vivir en
+-- una migración APARTE que corra después de que esta ya haya sido comiteada.
+-- AlterEnum
+ALTER TYPE "PaymentStatus" ADD VALUE 'expired';

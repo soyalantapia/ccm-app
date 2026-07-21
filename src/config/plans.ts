@@ -2,10 +2,42 @@ import type { TicketPlan } from '../data/types'
 
 /**
  * Planes de entrada — precios y tiers REALES de la venta vigente en Tikealo
- * (página oficial del evento, 06/2026). Los links de Mercado Pago siguen
- * siendo placeholder editables desde Admin → Entradas y órdenes.
+ * (página oficial del evento, 06/2026). El link manual de Mercado Pago se carga
+ * desde Admin → Entradas y órdenes; sembrado viene vacío a propósito (ver abajo).
+ */
+
+/**
+ * ⚠️ NO es un link de pago: es la PORTADA de mercadopago.com.ar. No cobra nada.
+ *
+ * Quedó como marcador de "acá va el link que carga el organizador", pero se usaba como si fuera
+ * un cobro: cuando no había checkout real el front redirigía acá y le decía al comprador que su
+ * pago se estaba confirmando. El comprador terminaba en la home de MP, sin nada que pagar,
+ * creyendo que ya había comprado. Eso es peor que cortar la venta: es mentirle.
+ *
+ * Se conserva exportado sólo para poder RECONOCERLO y rechazarlo (los planes guardados en el
+ * backend o en el localStorage de una demo vieja todavía lo tienen).
  */
 export const MP_PLACEHOLDER = 'https://www.mercadopago.com.ar'
+
+/**
+ * Única puerta por la que un `mpLink` puede llegar a usarse como cobro.
+ *
+ * Un link de pago real siempre apunta a ALGO (`mpago.la/2abc9Xy`, `…/checkout/v1/redirect?pref_id=…`).
+ * La raíz pelada de un dominio es una portada, no un cobro — con eso alcanza para descartar el
+ * placeholder sin casos especiales, y sin invalidar un link propio que el organizador cargó a mano.
+ */
+export function esLinkDePagoReal(link: string | null | undefined): boolean {
+  if (!link || !link.trim()) return false
+  let url: URL
+  try {
+    url = new URL(link.trim())
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return false
+  const camino = url.pathname.replace(/\/+$/, '')
+  return camino !== '' || url.search !== ''
+}
 
 export const seedPlans: TicketPlan[] = [
   {
@@ -30,7 +62,9 @@ export const seedPlans: TicketPlan[] = [
     tagline: 'Desfile de las Estrellas · 19 a 21 hs',
     price: 30000,
     serviceCharge: 3000,
-    mpLink: MP_PLACEHOLDER,
+    // Sin link manual: hasta que el organizador cargue uno real (Admin → Entradas), el cobro
+    // sale por el checkout de MP. Antes acá vivía MP_PLACEHOLDER, que no cobra nada.
+    mpLink: null,
     day: 'sabado',
     kind: 'vip',
     preventa: true,
@@ -48,7 +82,9 @@ export const seedPlans: TicketPlan[] = [
     tagline: 'Desfile de las Estrellas + Desfile Internacional',
     price: 50000,
     serviceCharge: 5000,
-    mpLink: MP_PLACEHOLDER,
+    // Sin link manual: hasta que el organizador cargue uno real (Admin → Entradas), el cobro
+    // sale por el checkout de MP. Antes acá vivía MP_PLACEHOLDER, que no cobra nada.
+    mpLink: null,
     day: 'combo',
     kind: 'vip',
     perks: [
@@ -80,7 +116,9 @@ export const seedPlans: TicketPlan[] = [
     tagline: 'Desfile Internacional · 18 a 20 hs',
     price: 30000,
     serviceCharge: 3000,
-    mpLink: MP_PLACEHOLDER,
+    // Sin link manual: hasta que el organizador cargue uno real (Admin → Entradas), el cobro
+    // sale por el checkout de MP. Antes acá vivía MP_PLACEHOLDER, que no cobra nada.
+    mpLink: null,
     day: 'domingo',
     kind: 'vip',
     preventa: true,

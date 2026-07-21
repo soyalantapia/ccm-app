@@ -19,6 +19,7 @@ import type {
   Sponsor,
   AdSlot,
   SponsorCreative,
+  MpStatus,
   TicketOrder,
   TicketPlan,
   Benefit,
@@ -30,6 +31,7 @@ import type {
 } from '../types'
 import type {
   BlockAvailability,
+  CheckoutItem,
   DataStore,
   HydratableResource,
   NewBlock,
@@ -305,6 +307,11 @@ export class LocalDataStore implements DataStore {
     writeJSON(K.orders, [...this.getOrders(), order])
     this.track('ticket_order_created', { planId, orderId: order.id, qty, total: order.total })
     return order
+  }
+
+  /** En demo no hay backend que esperar: las órdenes ya están creadas cuando `createOrder` vuelve. */
+  async createOrders(sel: { planId: PlanId; qty: number }[]): Promise<TicketOrder[]> {
+    return sel.map((s) => this.createOrder(s.planId, s.qty))
   }
 
   markOrderRedirected(orderId: string): void {
@@ -740,5 +747,24 @@ export class LocalDataStore implements DataStore {
   /** Esta es la capa de la DEMO: seed + localStorage, sin backend. */
   hasBackend(): boolean {
     return false
+  }
+
+  /* ─── Cobros con Mercado Pago ─── */
+
+  /** Sin backend no hay nada conectado: la demo local siempre arranca desconectada. */
+  getMpStatus(): MpStatus | undefined {
+    return { conectado: false }
+  }
+
+  async connectMp(): Promise<string> {
+    throw new Error('Mercado Pago no está disponible en la demo local')
+  }
+
+  async disconnectMp(): Promise<void> {}
+
+  /** Demo: nunca hay checkout real (no hay backend que arme la preferencia). El llamador cae
+   *  siempre al link manual del plan. */
+  async startCheckout(_items: CheckoutItem[]): Promise<{ initPoint: string; amount: number } | null> {
+    return null
   }
 }

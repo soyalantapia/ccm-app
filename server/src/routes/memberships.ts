@@ -1,7 +1,8 @@
 import { Router } from 'express'
-import { z } from 'zod'
 import { requireDevice } from '../middlewares/device.js'
 import * as membershipService from '../services/membershipService.js'
+import { isConnected } from '../services/mpOAuthService.js'
+import { ApiError } from '../lib/errors.js'
 
 export const membershipsRouter = Router()
 
@@ -14,15 +15,27 @@ membershipsRouter.get('/memberships/me', requireDevice, async (req, res, next) =
   }
 })
 
-// .max acota al rango de int4 de Postgres: sin esto un paid enorme (vector público) desbordaba
-// la columna Int y tiraba 500 en vez de un 400 de validación.
-const becomeSchema = z.object({ paid: z.number().int().nonnegative().max(2_147_483_647).default(0) })
-
-/** POST /api/v1/memberships — hacerse Socio CCM (persiste server-side). */
+/**
+ * POST /api/v1/memberships — hacerse Socio CCM. El monto lo fija el server (pricing compartido).
+ *
+ * Con Mercado Pago conectado este camino queda CERRADO: activaba la membresía sin cobrar un peso,
+ * y como POST /devices emite tokens sin pedir credenciales, cualquier visitante podía hacerse
+ * socio salteándose el checkout entero. La activación real pasa por el webhook, que es el único
+ * que puede afirmar que la plata entró.
+ *
+ * Sin MP conectado se deja pasar, que es el modo demo del proyecto: sin pasarela no hay forma de
+ * cobrar y bloquearlo dejaría la función muerta. Mismo criterio condicional que assertProd.
+ */
 membershipsRouter.post('/memberships', requireDevice, async (req, res, next) => {
   try {
-    const { paid } = becomeSchema.parse(req.body)
-    res.status(201).json(await membershipService.becomeSocio(req.deviceId!, paid))
+    if (await isConnected()) {
+      throw new ApiError(
+        409,
+        'PAGO_REQUERIDO',
+        'La membresía Socio se activa al acreditarse el pago. Generá el cobro desde Mercado Pago.',
+      )
+    }
+    res.status(201).json(await membershipService.becomeSocio(req.deviceId!))
   } catch (err) {
     next(err)
   }

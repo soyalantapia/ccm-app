@@ -117,6 +117,13 @@ enum PaymentStatus {
   approved
   rejected
   refunded
+  // Un `pending` que superó UMBRAL_VENCIMIENTO_PENDIENTE_MS (mpCheckoutService.ts) SIN que MP
+  // llegara a reportar un pago concreto (mpPaymentId sigue null) NI tener un pago vivo asociado
+  // en MP. Distinto de `rejected`: acá nadie rechazó nada, el comprador simplemente no volvió. Lo
+  // vence el propio intento de compra siguiente (perezoso, sin job de fondo) para liberar el
+  // índice único parcial PaymentItem(kind,resourceId) WHERE "closedAt" IS NULL (migración
+  // 9_ticket_multi_order_payment).
+  expired
 }
 
 enum ProfileFieldKey {
@@ -652,26 +659,70 @@ model Membership {
 //  PAGOS (MERCADO PAGO) — tabla polimórfica (canon 7)
 // ─────────────────────────────────────────────────────────
 
+// Un Payment es la CABECERA de un cobro: una preferencia de Mercado Pago, un monto, un estado.
+// Lo que se está comprando vive en `items` (una fila PaymentItem por recurso concreto), porque
+// un mismo cobro puede cubrir VARIAS órdenes: el comprador elige dos planes VIP y paga UNA vez
+// el total que ve en pantalla. Antes `kind`/`resourceId` vivían acá, lo que forzaba una
+// preferencia por orden — y el front, que solo podía mandar a MP un link, cobraba la primera
+// orden y regalaba el resto.
+//
+// La protección contra doble cobro (índice único parcial) NO se debilitó: se mudó tal cual a
+// PaymentItem(kind, resourceId) WHERE "closedAt" IS NULL, que es donde vive ahora la relación
+// "una fila viva ↔ un recurso" que ese índice siempre asumió. Ver
+// prisma/migrations/9_ticket_multi_order_payment.
 model Payment {
-  id         String        @id @default(cuid())
-  kind       PaymentKind
-  resourceId String // TicketOrder.id | Membership.id | AdCampaign.id (sin FK formal)
-  deviceId   String?
+  id       String  @id @default(cuid())
+  deviceId String?
 
   mpPreferenceId String?
+  initPoint      String? // init_point de la preferencia — se guarda para poder reusarla si se
+  // pide el cobro de nuevo con un Payment `pending` existente, en vez de crear otra preferencia
+  // (eso es lo que evita el doble cobro: dos preferencias vivas para la misma orden).
   mpPaymentId    String?       @unique // idempotencia del webhook
   externalRef    String?
-  amount         Int
+  amount         Int // SUMA de items[].amount — lo que MP cobra. Lo calcula el server, nunca el body.
   status         PaymentStatus @default(pending)
   raw            Json?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  device Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  device Device?       @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  items  PaymentItem[]
 
-  @@index([kind, resourceId])
   @@index([status])
   @@index([deviceId])
+}
+
+/// Una línea del cobro = UN recurso concreto. Un cobro puede cubrir varias (carrito de varios
+/// planes VIP = UNA preferencia de MP). Acá vive ahora la protección contra doble cobro que
+/// antes vivía en Payment(kind, resourceId).
+model PaymentItem {
+  id         String      @id @default(cuid())
+  paymentId  String
+  kind       PaymentKind
+  resourceId String // TicketOrder.id | Device.id (membresía) | AdCampaign.id — sin FK formal
+  amount     Int // monto de ESTA línea, calculado por el server
+  titulo     String // el que ve el comprador en MP; se guarda para poder reconciliar en un incidente
+
+  /// null = línea VIVA (el cobro está `pending`). Se sella cuando el Payment deja de estar
+  /// pending. Existe SOLO para que el índice único parcial pueda vivir en esta tabla: el
+  /// predicado de un índice parcial de Postgres únicamente puede mirar columnas propias.
+  /// INVARIANTE: closedAt IS NULL ⟺ Payment.status = 'pending'. Se escribe EXCLUSIVAMENTE
+  /// desde cerrarPago()/vencerPendientesAbandonados() (mpPaymentState.ts), nunca a mano.
+  closedAt DateTime?
+
+  /// Cuándo se entregó ESTA línea (orden confirmada / socio dado de alta / campaña activada).
+  /// Hace reanudable la entrega parcial sin agregar valores al enum PaymentStatus: si el
+  /// webhook entregó 1 de 2 líneas y falló, el reintento de MP saltea la ya entregada.
+  deliveredAt DateTime?
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@unique([paymentId, kind, resourceId])
+  @@index([kind, resourceId])
+  // ⚠️ El índice ÚNICO PARCIAL (kind, resourceId) WHERE "closedAt" IS NULL NO se puede expresar
+  // acá (@@unique no soporta predicado). Vive en SQL crudo en la migración
+  // 9_ticket_multi_order_payment, mismo patrón que "one_active_per_slot" en AdCampaign.
 }
 
 // ─────────────────────────────────────────────────────────
@@ -819,4 +870,21 @@ model AdminLoginCode {
   // Sirve a las dos consultas del login: traer el último código vivo del usuario y contar
   // los emitidos en la ventana de rate limit.
   @@index([userId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────
+//  MERCADO PAGO
+// ─────────────────────────────────────────────────────────
+
+/// Conexión OAuth con Mercado Pago. Una sola fila (id "default"): CCM cobra en UNA cuenta.
+model MpConnection {
+  id           String   @id @default("default")
+  mpUserId     String // la cuenta de MP a la que entra la plata
+  accessToken  String
+  refreshToken String
+  publicKey    String?
+  expiresAt    DateTime // vencimiento del access token
+  scope        String?
+  connectedAt  DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
