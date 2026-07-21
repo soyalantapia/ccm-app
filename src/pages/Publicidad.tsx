@@ -47,8 +47,7 @@ function AdPreview({ slot, brand, headline, cta, tagline }: { slot: AdSlot; bran
     <div className="relative overflow-hidden rounded-md border border-line bg-surface">
       <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-accent" />
       <div className="py-5 pl-6 pr-5">
-        <div className="eyebrow text-[9px] text-ink-soft/60">Espacio patrocinado</div>
-        <div className="type-serif mt-1.5 text-xl leading-snug text-ink">{h}</div>
+        <div className="type-serif text-xl leading-snug text-ink">{h}</div>
         <div className="mt-2 flex items-center justify-between gap-4">
           <span className="text-xs text-ink-soft">
             {b}

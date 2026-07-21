@@ -81,13 +81,6 @@ export function SponsorCarousel({ className }: { className?: string }) {
 
   return (
     <div className={`mx-auto max-w-3xl ${className ?? ''}`}>
-      {/* Rótulo del espacio */}
-      <div className="mb-2.5 flex items-center justify-center gap-3">
-        <span aria-hidden className="h-px w-8 bg-accent/60" />
-        <span className="eyebrow text-[9px] text-ink-soft/60">Espacio patrocinado</span>
-        <span aria-hidden className="h-px w-8 bg-accent/60" />
-      </div>
-
       {/* Ventana del carrusel */}
       <div
         className="group relative overflow-hidden rounded-[14px] border border-line"

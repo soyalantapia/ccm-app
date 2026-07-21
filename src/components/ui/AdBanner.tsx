@@ -81,8 +81,7 @@ export function AdBanner({ slot, index = 0, className }: AdBannerProps) {
         className="flex items-center justify-between gap-3 rounded-[12px] bg-ink px-4 py-3.5 transition-transform active:scale-[0.99] lg:hidden"
       >
         <div className="min-w-0">
-          <div className="text-[8px] font-bold uppercase tracking-[0.1em] text-accent">Espacio patrocinado</div>
-          <div className="type-serif mt-0.5 truncate text-[13px] text-night-ink">{sponsor.name}</div>
+          <div className="type-serif truncate text-[13px] text-night-ink">{sponsor.name}</div>
           <div className="mt-0.5 truncate text-[9px] text-text-2">{creative.headline}</div>
         </div>
         <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[10px] bg-accent text-accent-ink">
@@ -96,12 +95,7 @@ export function AdBanner({ slot, index = 0, className }: AdBannerProps) {
         onClick={onClick}
         className="group hidden flex-col items-center border-y border-line py-8 text-center transition-colors duration-200 hover:border-accent/50 lg:flex"
       >
-        <span className="eyebrow flex items-center gap-3 text-[9px] text-ink-soft/60">
-          <span aria-hidden className="h-px w-10 bg-accent/70" />
-          Espacio patrocinado
-          <span aria-hidden className="h-px w-10 bg-accent/70" />
-        </span>
-        <span className="type-display mt-3.5 text-[30px] leading-tight text-ink transition-colors duration-200 group-hover:text-accent-strong">
+        <span className="type-display text-[30px] leading-tight text-ink transition-colors duration-200 group-hover:text-accent-strong">
           {sponsor.name}
         </span>
         <span className="mt-2 max-w-xl text-[14px] leading-relaxed text-ink-soft">{creative.headline}</span>
