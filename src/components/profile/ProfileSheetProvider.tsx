@@ -5,7 +5,7 @@ import { bus } from '../../lib/bus'
 import { getProfile, missingFields } from '../../lib/identity'
 import { store } from '../../data/store'
 import { FIELD_META, type ProfileRequest } from '../../lib/profileRequest'
-import { Sheet, Field, Input, Button } from '../ui'
+import { Sheet, Field, Input, Button, PhoneInput } from '../ui'
 import type { ProfileFieldKey } from '../../data/types'
 
 /**
@@ -78,14 +78,24 @@ export function ProfileSheetProvider({ children }: { children: ReactNode }) {
               const meta = FIELD_META[field]
               return (
                 <Field key={field} label={meta.label} required>
-                  <Input
-                    type={meta.type}
-                    placeholder={meta.placeholder}
-                    autoComplete={meta.autocomplete}
-                    value={values[field] ?? ''}
-                    onChange={(e) => setValues((v) => ({ ...v, [field]: e.target.value }))}
-                    required
-                  />
+                  {field === 'phone' ? (
+                    // El teléfono lleva selector de país: sin prefijo, la mitad de los números
+                    // que se cargan no sirven después para escribirle a nadie.
+                    <PhoneInput
+                      value={values[field] ?? ''}
+                      onChange={(v) => setValues((prev) => ({ ...prev, [field]: v }))}
+                      required
+                    />
+                  ) : (
+                    <Input
+                      type={meta.type}
+                      placeholder={meta.placeholder}
+                      autoComplete={meta.autocomplete}
+                      value={values[field] ?? ''}
+                      onChange={(e) => setValues((v) => ({ ...v, [field]: e.target.value }))}
+                      required
+                    />
+                  )}
                 </Field>
               )
             })}
