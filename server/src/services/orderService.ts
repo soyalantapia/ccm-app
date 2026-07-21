@@ -82,8 +82,26 @@ export async function setOrderStatus(
 
 /* ─── Campañas de publicidad ─── */
 
+/**
+ * Las campañas que van AL AIRE. Alimenta `GET /api/v1/campaigns`, que es público.
+ *
+ * Filtra por estado a propósito: `createCampaign` deja toda campaña nueva en `pendiente_pago` y
+ * recién el webhook de Mercado Pago la pasa a `activa`. Sin este `where`, ese circuito de cobro
+ * no servía de nada — cualquier visitante hacía un POST y su aviso ocupaba el splash de apertura
+ * al instante, gratis, desplazando al sponsor que sí había pagado (el front se queda con la
+ * última campaña de cada slot).
+ *
+ * El vencimiento va en el mismo filtro: una campaña que compró 24 h no puede seguir al aire al
+ * tercer día. `expiresAt` null significa "sin vencimiento", no "ya venció".
+ */
 export async function getCampaigns(): Promise<AdCampaign[]> {
-  const rows = await prisma.adCampaign.findMany({ orderBy: { ts: 'asc' } })
+  const rows = await prisma.adCampaign.findMany({
+    where: {
+      status: 'activa',
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    },
+    orderBy: { ts: 'asc' },
+  })
   return rows.map(toAdCampaign)
 }
 
