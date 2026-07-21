@@ -110,9 +110,9 @@ está verificado al revés: con la protección borrada falla con `length of 1 bu
 | Chequeo | Resultado |
 |---|---|
 | `server` typecheck | ✅ limpio |
-| `server` tests | ✅ **210/210**, en dos pasadas seguidas |
+| `server` tests | ✅ **223/223**, en dos pasadas seguidas (post-rebase) |
 | front `tsc -b` | ✅ limpio |
-| front tests | ✅ **68/68** |
+| front tests | ✅ **113/113** (post-rebase) |
 | `npm run build` | ✅ verde |
 | lint | 33 problemas **preexistentes**; los archivos que toca la rama tienen el mismo conteo en `main` — la rama no sumó ninguno |
 
@@ -157,6 +157,15 @@ queda anotado, por severidad:
 - La búsqueda no puede usar índice: `ILIKE '%q%'` sobre `ProfileField.value` y `LIKE` sobre el JSON.
 - Solo se lee la postulación **más reciente**: los datos de las anteriores no se muestran.
 - Ningún test prueba que sea la más reciente (los tests crean una sola postulación).
+
+**P2 — encontrado al rebasar, afecta a todo el repo**
+- **Los prefijos de las migraciones ordenan mal.** Prisma aplica en orden lexicográfico, así que en
+  una base **nueva** corre `0_init`, `1_one_active_per_slot`, `10_event_published`, `11_person`,
+  `2_benefit`… (verificado creando una base vacía y corriendo `migrate deploy`). Hoy no falla de
+  casualidad: tanto `10_` como `11_` dependen solo de `0_init`. La primera migración que dependa de
+  algo creado en `2_`–`9_` explota en cualquier entorno nuevo (CI, una base de staging desde cero).
+  Arreglarlo es renombrarlas todas con ceros a la izquierda, y **no se puede hacer desde una rama
+  cualquiera**: los nombres viejos están guardados en el `_prisma_migrations` de producción.
 
 **P3**
 - El mapeo de claves está hardcodeado contra el seed, pero el form builder permite claves libres.
