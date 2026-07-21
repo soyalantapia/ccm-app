@@ -14,9 +14,11 @@
 - **El monto NUNCA viene del cliente.** Cualquier `total`/`paid`/`amount` que llegue en un request se ignora; se recalcula server-side. Este es el defecto que el plan cierra, no una preferencia de estilo.
 - **Los tokens de MP no salen por ninguna ruta.** `getStatus()` devuelve estado, cuenta y vencimiento; nunca `accessToken` ni `refreshToken`.
 - **Degradación sin corte:** sin conexión MP, la venta sigue con el link manual (`TicketPlan.mpLink`). Ninguna tarea puede dejar la compra inutilizable.
-- **Migraciones aditivas.** Nada de `DROP`/`ALTER ... NOT NULL` sobre columnas con datos. La próxima migración es `9_mp_connection` (van numeradas: `5_nota`, `6_sponsor_banner`, `7_catalog_kind_projects`, `8_convocatoria_logos`).
+- **Migraciones aditivas.** Nada de `DROP`/`ALTER ... NOT NULL` sobre columnas con datos. La próxima migración libre es `12_mp_connection`: main ya tiene hasta `11_person` (`9_admin_auth` el login del panel, `10_event_published` el borrador de eventos, `11_person` el CRM).
 - **Tests:** front `npm test` (vitest + jsdom, `src/**/*.test.{ts,tsx}`); server `cd server && npm test` (vitest + node, `src/**/*.test.ts` co-locados, con `server/test/setup.ts`). Ambos deben quedar verdes.
 - **Typecheck:** front `npx tsc -b`; server `cd server && npm run typecheck`. El server usa `verbatimModuleSyntax` + `NodeNext`: los imports relativos llevan extensión `.js`.
+- **Auth del panel: NO existe `ADMIN_TOKEN`.** Se entra con sesión personal (login por código). Cada ruta `/admin/*` declara su permiso con `requirePermission(<Permission>)` — hay un test estructural (`server/src/routes/adminGuards.test.ts`) que falla si alguna queda sin guard. Las rutas de conexión con Mercado Pago exigen **`team:manage`**: elegir la cuenta donde entra la plata es la acción más sensible del panel.
+- **En el front la sesión la sabe un solo módulo:** `src/data/adminSession.ts` (`getAdminToken()`, `adminAuthHeaders()`, `can(permission)`). Nunca leer `sessionStorage` a mano.
 - **Commits frecuentes**, uno por tarea como mínimo.
 
 ## File Structure
@@ -36,7 +38,7 @@
 
 **Modificados:**
 - `server/prisma/schema.prisma` — modelo `MpConnection`.
-- `server/prisma/migrations/9_mp_connection/migration.sql`.
+- `server/prisma/migrations/12_mp_connection/migration.sql`.
 - `server/src/lib/env.ts` — `MP_CLIENT_ID`, `MP_CLIENT_SECRET`, `MP_REDIRECT_URI`.
 - `server/src/app.ts` — montar `mpRouter`.
 - `server/src/routes/memberships.ts` + `server/src/services/membershipService.ts` — sacar `paid` del cliente.
@@ -258,7 +260,7 @@ relativa igual que htmlPolicy.ts."
 
 **Files:**
 - Modify: `server/prisma/schema.prisma`
-- Create: `server/prisma/migrations/9_mp_connection/migration.sql`
+- Create: `server/prisma/migrations/12_mp_connection/migration.sql`
 - Modify: `server/src/lib/env.ts:43-44`
 - Create: `server/src/lib/mpApi.ts`
 - Create: `server/src/services/mpOAuthService.ts`
@@ -410,7 +412,7 @@ model MpConnection {
 }
 ```
 
-Crear `server/prisma/migrations/9_mp_connection/migration.sql`:
+Crear `server/prisma/migrations/12_mp_connection/migration.sql`:
 
 ```sql
 CREATE TABLE "MpConnection" (
@@ -645,7 +647,7 @@ Expected: `All migrations have been successfully applied.` (crear la base antes 
 
 ```bash
 cd ~/dev/ccm-app
-git add server/prisma/schema.prisma server/prisma/migrations/9_mp_connection \
+git add server/prisma/schema.prisma server/prisma/migrations/12_mp_connection \
         server/src/lib/env.ts server/src/lib/mpApi.ts \
         server/src/services/mpOAuthService.ts server/src/services/mpOAuthService.test.ts
 git commit -m "feat(mp): conexion OAuth con Mercado Pago (tabla + servicio)
@@ -687,30 +689,30 @@ import * as oauth from '../services/mpOAuthService.js'
 import { createApp } from '../app.js'
 
 const app = createApp()
-const ADMIN = 'Bearer test-admin-token-abcdef'
 
 beforeEach(() => vi.clearAllMocks())
 
-describe('rutas de conexión — solo el organizador', () => {
-  it('GET /admin/mp/status sin token → 401', async () => {
+describe('rutas de conexión — exigen sesión con permiso', () => {
+  it('GET /admin/mp/status sin sesión → 401', async () => {
     await request(app).get('/api/v1/admin/mp/status').expect(401)
+    expect(oauth.getStatus).not.toHaveBeenCalled()
   })
 
-  it('POST /admin/mp/disconnect sin token → 401', async () => {
+  it('POST /admin/mp/connect sin sesión → 401', async () => {
+    await request(app).post('/api/v1/admin/mp/connect').expect(401)
+    expect(oauth.buildAuthUrl).not.toHaveBeenCalled()
+  })
+
+  it('POST /admin/mp/disconnect sin sesión → 401', async () => {
     await request(app).post('/api/v1/admin/mp/disconnect').expect(401)
     expect(oauth.disconnect).not.toHaveBeenCalled()
   })
 
-  it('GET /admin/mp/status con token devuelve el estado', async () => {
-    vi.mocked(oauth.getStatus).mockResolvedValue({ conectado: true, cuenta: '1928447' })
-    const res = await request(app).get('/api/v1/admin/mp/status').set('Authorization', ADMIN).expect(200)
-    expect(res.body).toEqual({ conectado: true, cuenta: '1928447' })
-  })
-
-  it('POST /admin/mp/connect devuelve la URL de autorización', async () => {
-    vi.mocked(oauth.buildAuthUrl).mockResolvedValue('https://auth.mercadopago.com.ar/authorization?state=x')
-    const res = await request(app).post('/api/v1/admin/mp/connect').set('Authorization', ADMIN).expect(200)
-    expect(res.body.url).toContain('auth.mercadopago.com.ar')
+  it('un token de sesión inventado → 401, no 403', async () => {
+    await request(app)
+      .get('/api/v1/admin/mp/status')
+      .set('Authorization', 'Bearer token-inventado')
+      .expect(401)
   })
 })
 
@@ -741,15 +743,13 @@ Crear `server/src/routes/mp.ts`:
 
 ```ts
 import { Router } from 'express'
-import { requireAdmin } from '../middlewares/admin.js'
+import { requirePermission } from '../middlewares/admin.js'
 import * as oauth from '../services/mpOAuthService.js'
 
 export const mpRouter = Router()
 
-mpRouter.use('/admin/mp', requireAdmin)
-
 /** Estado de la conexión (sin tokens). */
-mpRouter.get('/admin/mp/status', async (_req, res, next) => {
+mpRouter.get('/admin/mp/status', requirePermission('team:manage'), async (_req, res, next) => {
   try {
     res.json(await oauth.getStatus())
   } catch (err) {
@@ -758,7 +758,7 @@ mpRouter.get('/admin/mp/status', async (_req, res, next) => {
 })
 
 /** Devuelve la URL de autorización; el panel abre esa URL. */
-mpRouter.post('/admin/mp/connect', async (_req, res, next) => {
+mpRouter.post('/admin/mp/connect', requirePermission('team:manage'), async (_req, res, next) => {
   try {
     res.json({ url: await oauth.buildAuthUrl() })
   } catch (err) {
@@ -766,7 +766,7 @@ mpRouter.post('/admin/mp/connect', async (_req, res, next) => {
   }
 })
 
-mpRouter.post('/admin/mp/disconnect', async (_req, res, next) => {
+mpRouter.post('/admin/mp/disconnect', requirePermission('team:manage'), async (_req, res, next) => {
   try {
     await oauth.disconnect()
     res.status(204).end()
@@ -811,6 +811,11 @@ y montarlo antes de `adminRouter`:
 
 Run: `cd ~/dev/ccm-app/server && npx vitest run src/routes/mp.test.ts`
 Expected: PASS — 6 tests
+
+Los tests cubren el rechazo (401 sin sesión) y la vuelta pública de MP. El camino feliz *con*
+sesión no se testea acá a propósito: exige montar una sesión real en la base, y el guard ya está
+cubierto estructuralmente por `adminGuards.test.ts` (falla si una ruta `/admin` queda sin permiso)
+y por `middlewares/admin.test.ts`. Duplicarlo acá probaría el middleware, no estas rutas.
 
 - [ ] **Step 6: Commit**
 
@@ -1803,9 +1808,9 @@ Entrar al panel → Configuración → Cobros → "Conectar con Mercado Pago", i
 
 Expected: vuelve a `/admin/configuracion?mp=ok` y la tarjeta muestra "conectado" con la cuenta y la fecha.
 
-Verificar por API:
+Verificar por API (el token de sesión se saca de las herramientas del navegador con el panel abierto, o se omite este paso y se mira la pantalla):
 ```bash
-curl -s -H "Authorization: Bearer <ADMIN_TOKEN>" https://ccm-api-production-91a9.up.railway.app/api/v1/admin/mp/status
+curl -s -H "Authorization: Bearer <TOKEN-DE-TU-SESION>" https://ccm-api-production-91a9.up.railway.app/api/v1/admin/mp/status
 ```
 Expected: `{"conectado":true,"cuenta":"...","desde":"...","vence":"..."}` — **sin ningún token en la respuesta**.
 
@@ -1818,7 +1823,7 @@ Expected: redirige a MP con el monto correcto (precio × 2, no un link genérico
 - [ ] **Step 7: Verificar que se confirmó sola**
 
 ```bash
-curl -s -H "Authorization: Bearer <ADMIN_TOKEN>" https://ccm-api-production-91a9.up.railway.app/api/v1/admin/orders | python3 -m json.tool | head -20
+curl -s -H "Authorization: Bearer <TOKEN-DE-TU-SESION>" https://ccm-api-production-91a9.up.railway.app/api/v1/admin/orders | python3 -m json.tool | head -20
 ```
 Expected: la orden figura con `"status": "confirmada"` **sin que nadie la haya tocado a mano**.
 

@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { store } from './store'
+import { store, apiBase } from './store'
 import type { BlockAvailability } from './store'
 import type { EventItem, EventBlock, Registration, Benefit, Banner, Nota } from './types'
+import { createApi } from '../lib/api'
 
 /**
  * Hooks de lectura reactiva sobre el DataStore, vía TanStack Query (migración async).
@@ -66,4 +67,50 @@ export function useNotas(): Nota[] {
 }
 export function useNota(slug: string): Nota | undefined {
   return useStoreQuery(['notas', slug], () => store.getNota(slug))
+}
+
+/* ─── CRM de usuarios (Personas) ─── */
+
+const api = createApi(apiBase)
+
+export interface PersonaListItem {
+  id: string
+  nombre: string | null
+  email: string | null
+  telefono: string | null
+  dni: string | null
+  esSocio: boolean
+  inscripciones: number
+  postulaciones: number
+  creadaEl: string
+  ultimaActividad: string | null
+}
+
+export interface PersonaCampo { key: string; value: string; source: string; capturedAt: string }
+
+export interface PersonaFicha extends PersonaListItem {
+  campos: PersonaCampo[]
+  consentimientos: { terms: string | null; news: string | null; sponsors: string | null }
+  inscripcionesDetalle: { id: string; eventId: string; blockId: string | null; status: string; ts: string }[]
+  postulacionesDetalle: { id: string; convocatoriaId: string; status: string; ts: string; data: unknown }[]
+  membresia: { tier: string; since: string | null } | null
+  actividad: { type: string; ts: string; meta: unknown }[]
+}
+
+interface RespuestaLista { items: PersonaListItem[]; nextCursor: string | null; anonimos: number }
+
+/** Lista de usuarios del CRM. `q` ya viene con debounce desde la página. */
+export function usePeople(q: string) {
+  return useQuery<RespuestaLista>({
+    queryKey: ['people', q],
+    queryFn: () => api.get<RespuestaLista>(`/admin/people${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  })
+}
+
+export function usePerson(id: string | null) {
+  return useQuery<PersonaFicha>({
+    queryKey: ['people', 'ficha', id],
+    queryFn: () => api.get<PersonaFicha>(`/admin/people/${id}`),
+    enabled: id !== null,
+  })
 }

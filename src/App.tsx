@@ -46,7 +46,7 @@ const AdminEventos = lazyWithReload(() => import('./pages/admin/AdminEventos'))
 const AdminEventoDetalle = lazyWithReload(() => import('./pages/admin/AdminEventoDetalle'))
 const AdminPostulaciones = lazyWithReload(() => import('./pages/admin/AdminPostulaciones'))
 const AdminConvocatorias = lazyWithReload(() => import('./pages/admin/AdminConvocatorias'))
-const AdminPersonas = lazyWithReload(() => import('./pages/admin/AdminPersonas'))
+const AdminUsuarios = lazyWithReload(() => import('./pages/admin/AdminUsuarios'))
 const AdminGalerias = lazyWithReload(() => import('./pages/admin/AdminGalerias'))
 const AdminCatalogo = lazyWithReload(() => import('./pages/admin/AdminCatalogo'))
 const AdminContenido = lazyWithReload(() => import('./pages/admin/AdminContenido'))
@@ -136,7 +136,7 @@ const router = createBrowserRouter(
             { path: 'eventos/:id', element: <SA><AdminEventoDetalle /></SA> },
             { path: 'postulaciones', element: <SA><AdminPostulaciones /></SA> },
             { path: 'convocatorias', element: <SA><AdminConvocatorias /></SA> },
-            { path: 'personas', element: <SA><AdminPersonas /></SA> },
+            { path: 'personas', element: <SA><AdminUsuarios /></SA> },
             { path: 'galerias', element: <SA><AdminGalerias /></SA> },
             { path: 'catalogo', element: <SA><AdminCatalogo /></SA> },
             { path: 'contenido', element: <SA><AdminContenido /></SA> },

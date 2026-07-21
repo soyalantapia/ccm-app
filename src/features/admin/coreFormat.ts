@@ -55,6 +55,22 @@ export const PROFILE_FIELD_LABELS: Record<ProfileFieldKey, string> = {
   instagram: 'Instagram',
 }
 
+/** Claves que la ficha del CRM puede mostrar y que NO son ProfileFieldKey: salen del JSON de una
+ *  postulación, no del perfil del sitio. `nombre` es el nombre COMPLETO tal como lo escribió la
+ *  persona al postularse, así que no es intercambiable con `firstName` ("Nombre") — de ahí que
+ *  lleve etiqueta propia, y no que se lo mapee a firstName, que sería decir algo falso del dato. */
+const CAMPO_POSTULACION_LABELS: Record<string, string> = {
+  nombre: 'Nombre completo',
+}
+
+/** Etiqueta legible de un campo de la ficha, buscando por string y no por ProfileFieldKey: la
+ *  ficha mezcla campos del perfil con campos de postulaciones, y castear la clave a
+ *  ProfileFieldKey escondía los segundos —el tipo decía que no existían—, que terminaban
+ *  cayendo al fallback y mostrándose crudos ("nombre" en minúscula). */
+export function campoLabel(key: string): string {
+  return PROFILE_FIELD_LABELS[key as ProfileFieldKey] ?? CAMPO_POSTULACION_LABELS[key] ?? key
+}
+
 const SOURCE_LABELS: Record<string, string> = {
   registro_general: 'Registro gratis',
   inscripcion_evento: 'Inscripción a evento',
