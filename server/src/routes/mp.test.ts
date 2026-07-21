@@ -67,7 +67,7 @@ describe('vuelta de Mercado Pago', () => {
  * comportamiento de la RUTA (mp.ts), no la lógica de negocio del servicio (ya cubierta en
  * mpWebhookService.test.ts).
  */
-describe('POST /mp/webhook — la ruta responde 200 siempre, rápido, y no se cae', () => {
+describe('POST /mp/webhook — la respuesta refleja el resultado, que es lo que hace que MP reintente', () => {
   it('es pública: sin sesión ni device, igual procesa', async () => {
     vi.mocked(webhook.verificarFirma).mockReturnValue(true)
     vi.mocked(webhook.handleNotification).mockResolvedValue(undefined)
@@ -88,7 +88,7 @@ describe('POST /mp/webhook — la ruta responde 200 siempre, rápido, y no se ca
     expect(webhook.handleNotification).toHaveBeenCalledWith('222', true)
   })
 
-  it('si handleNotification rechaza, la respuesta 200 ya viaja y el error no se propaga', async () => {
+  it('si handleNotification rechaza responde 500, para que MP reintente (con 200 el reintento no existe)', async () => {
     vi.mocked(webhook.verificarFirma).mockReturnValue(true)
     vi.mocked(webhook.handleNotification).mockRejectedValue(new Error('la base se cayó justo acá'))
 
@@ -100,10 +100,9 @@ describe('POST /mp/webhook — la ruta responde 200 siempre, rápido, y no se ca
     }
     process.once('unhandledRejection', onUnhandled)
 
-    await request(app).post('/api/v1/mp/webhook').send({ data: { id: '333' } }).expect(200)
-    // Le doy una vuelta de microtask/macrotask a la promesa que sigue corriendo en segundo
-    // plano después de que la respuesta ya salió, para que el rechazo (si escapara) alcance a
-    // dispararse antes de chequear.
+    await request(app).post('/api/v1/mp/webhook').send({ data: { id: '333' } }).expect(500)
+    // Le doy una vuelta de microtask/macrotask por si algún rechazo quedara suelto en segundo
+    // plano, para que alcance a dispararse antes de chequear.
     await new Promise((r) => setImmediate(r))
 
     process.removeListener('unhandledRejection', onUnhandled)
@@ -113,7 +112,15 @@ describe('POST /mp/webhook — la ruta responde 200 siempre, rápido, y no se ca
   it('un dataId no-string en el body (ej. objeto) no rompe la ruta', async () => {
     vi.mocked(webhook.verificarFirma).mockReturnValue(false)
     vi.mocked(webhook.handleNotification).mockResolvedValue(undefined)
-    await request(app).post('/api/v1/mp/webhook').send({ data: { id: { raro: true } } }).expect(200)
+    // Firma inválida → 401: no se procesa, pero MP reintenta (la causa masiva más probable es
+    // MP_WEBHOOK_SECRET mal configurado, y así esos avisos se recuperan al arreglarlo).
+    await request(app).post('/api/v1/mp/webhook').send({ data: { id: { raro: true } } }).expect(401)
+  })
+
+  it('con firma inválida NO procesa el aviso y responde 401', async () => {
+    vi.mocked(webhook.verificarFirma).mockReturnValue(false)
+    await request(app).post('/api/v1/mp/webhook').send({ data: { id: '444' } }).expect(401)
+    expect(webhook.handleNotification).not.toHaveBeenCalled()
   })
 })
 
@@ -129,7 +136,7 @@ describe('POST /mp/webhook — defecto D: nada de esto pasa en silencio', () => 
     vi.mocked(webhook.verificarFirma).mockReturnValue(false)
     vi.mocked(webhook.handleNotification).mockResolvedValue(undefined)
 
-    await request(app).post('/api/v1/mp/webhook').send({ data: { id: '444' } }).expect(200)
+    await request(app).post('/api/v1/mp/webhook').send({ data: { id: '444' } }).expect(401)
 
     expect(errSpy).toHaveBeenCalled()
     errSpy.mockRestore()
@@ -140,7 +147,7 @@ describe('POST /mp/webhook — defecto D: nada de esto pasa en silencio', () => 
     vi.mocked(webhook.verificarFirma).mockReturnValue(true)
     vi.mocked(webhook.handleNotification).mockRejectedValue(new Error('la activación falló'))
 
-    await request(app).post('/api/v1/mp/webhook').send({ data: { id: '555' } }).expect(200)
+    await request(app).post('/api/v1/mp/webhook').send({ data: { id: '555' } }).expect(500)
     await new Promise((r) => setImmediate(r))
 
     expect(errSpy).toHaveBeenCalled()

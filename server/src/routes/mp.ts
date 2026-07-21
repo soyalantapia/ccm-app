@@ -83,8 +83,11 @@ mpRouter.post('/payments/preference', requireDevice, async (req, res, next) => {
  */
 mpRouter.post('/mp/webhook', async (req, res) => {
   const dataId = String((req.body as { data?: { id?: string } })?.data?.id ?? req.query['data.id'] ?? '')
-  res.status(200).end()
-  if (!dataId) return
+  // Un aviso sin id no se puede procesar ni reintentando: 200 y listo.
+  if (!dataId) {
+    res.status(200).end()
+    return
+  }
   const headers = req.headers as Record<string, string | undefined>
   const firmaValida = verificarFirma(headers, dataId)
   if (!firmaValida) {
@@ -93,14 +96,25 @@ mpRouter.post('/mp/webhook', async (req, res) => {
     // el problema del proxy del defecto A) se ven EXACTAMENTE igual: nada. Mismo formato que
     // /mp/callback más abajo.
     console.error('[mp.webhook] firma inválida', { dataId })
+    // 401 en vez de 200: la causa más probable de que la firma no valide en masa NO es un
+    // atacante, es una configuración rota (MP_WEBHOOK_SECRET ausente o mal seteado). Con un 200
+    // esos avisos se descartaban de a uno y para siempre; con un error MP reintenta durante
+    // horas, así que arreglar la variable recupera solo los cobros de esa ventana. Un atacante
+    // que mande firmas truchas no gana nada con esto: MP reintenta contra su propio webhook.
+    res.status(401).end()
+    return
   }
   try {
     await handleNotification(dataId, firmaValida)
+    res.status(200).end()
   } catch (err) {
-    // Nunca propagamos: el 200 ya salió y MP no debe reintentar en loop por esto. Pero si no
-    // logueamos acá, los defectos A/B/C de la Tarea 5 vuelven a ser invisibles: MP cobra, nada
-    // se activa, y no queda ni una línea para saber por qué. Mismo formato que /mp/callback y
-    // middlewares/error.ts.
     console.error('[mp.webhook]', err instanceof Error ? err.stack : err)
+    // Antes acá se respondía 200 (de hecho ya había salido antes de procesar) y eso volvía
+    // decorativa toda la red de seguridad del servicio: handleNotification suelta el claim
+    // "para que MP pueda reintentar", pero MP sólo reintenta si le contestamos con un error.
+    // Con un 200, un fallo de activación quedaba en plata cobrada, recurso jamás entregado y
+    // nadie volviendo a intentarlo nunca. El 500 es lo que hace que ese reintento exista.
+    // Es seguro: handleNotification es idempotente (claim atómico por mpPaymentId).
+    res.status(500).end()
   }
 })

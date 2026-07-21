@@ -102,6 +102,20 @@ export function assertProd(): void {
   // quedarían hasheados con un pepper débil. Nada de fallback silencioso a un valor de juguete.
   if (!env.ADMIN_TOKEN_SECRET) missing.push('ADMIN_TOKEN_SECRET — sin él no se pueden firmar las sesiones del panel (nadie entra)')
   if (!env.OTP_PEPPER) missing.push('OTP_PEPPER — sin él los códigos OTP no se pueden hashear de forma segura')
+
+  // Cobros: se exigen SÓLO si Mercado Pago está configurado — un deploy que no cobra nada tiene
+  // que poder arrancar sin ninguna de estas. Lo que no puede existir es MP a medias, que es el
+  // estado más peligroso de todos: el panel dice "conectado", el comprador paga de verdad, y del
+  // lado nuestro no se activa nada. Sin MP_WEBHOOK_SECRET la firma NUNCA valida y se descarta el
+  // 100% de los avisos; sin PUBLIC_BASE_URL el notification_url apunta a localhost y MP no tiene
+  // a dónde avisar (además de devolver al comprador a localhost al terminar de pagar). Los dos
+  // fallan en silencio y sólo se descubren cuando alguien reclama la entrada que pagó.
+  const mpConfigurado = !!(env.MP_CLIENT_ID || env.MP_CLIENT_SECRET || env.MP_ACCESS_TOKEN)
+  if (mpConfigurado) {
+    if (!env.MP_WEBHOOK_SECRET) missing.push('MP_WEBHOOK_SECRET — con MP configurado y sin este secreto, la firma de los avisos nunca valida: se cobra y no se entrega nada')
+    if (!env.PUBLIC_BASE_URL) missing.push('PUBLIC_BASE_URL — con MP configurado, sin esto el aviso de pago apunta a localhost y nunca llega')
+  }
+
   if (missing.length > 0) {
     console.error('❌ [assertProd] Faltan variables obligatorias en producción:\n  - ' + missing.join('\n  - '))
     process.exit(1)
