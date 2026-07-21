@@ -56,13 +56,20 @@ const SECTIONS: NavItem[] = [
 ]
 
 /* Bottom nav app-style (mobile): 2 tabs laterales + "Panel" central sobresaliente
-   (FAB) + 1 tab + "Más" (sheet). */
-const NAV_LEFT = [
-  { to: '/admin/eventos', label: 'Eventos', icon: CalendarDays },
-  { to: '/admin/personas', label: 'Usuarios', icon: Users },
+   (FAB) + 1 tab + "Más" (sheet).
+
+   Llevan `needs` igual que SECTIONS y MORE, y se filtran con el mismo criterio: estas pestañas
+   son atajos a secciones que YA están en SECTIONS, así que si el rol no llega a la sección
+   tampoco tiene que ver el atajo. Sin el filtro, en celular un CONTENT (prensa/marketing) veía
+   "Usuarios" —el CRM con datos personales— y al tocarlo se comía el 403 del backend. */
+const NAV_LEFT: NavItem[] = [
+  { to: '/admin/eventos', label: 'Eventos', icon: CalendarDays, needs: 'events:write' },
+  { to: '/admin/personas', label: 'Usuarios', icon: Users, needs: 'people:read' },
 ]
 const NAV_CENTER = { to: '/admin', label: 'Panel', icon: LayoutDashboard, end: true }
-const NAV_RIGHT = [{ to: '/admin/galerias', label: 'Sponsors', icon: Images }]
+const NAV_RIGHT: NavItem[] = [
+  { to: '/admin/galerias', label: 'Sponsors', icon: Images, needs: 'content:write' },
+]
 const MORE: NavItem[] = [
   { to: '/admin/postulaciones', label: 'Postulaciones', icon: Inbox, needs: 'applications:read' },
   { to: '/admin/catalogo', label: 'Expositores', icon: Store, needs: 'catalog:write' },
@@ -221,15 +228,57 @@ function FlatTab({ item }: { item: { to: string; label: string; icon: typeof Use
  * "Panel" va al centro como pestaña circular elevada que sobresale por encima
  * de la barra (FAB), para un look moderno (no una barra plana).
  */
-function AdminBottomNav({ moreActive, onMore }: { moreActive: boolean; onMore: () => void }) {
+function AdminBottomNav({
+  moreActive,
+  onMore,
+  visible,
+}: {
+  moreActive: boolean
+  onMore: () => void
+  visible: (i: NavItem) => boolean
+}) {
   const CenterIcon = NAV_CENTER.icon
+
+  // Las pestañas laterales visibles, en orden, contando "Más" como una más: el FAB se mete
+  // JUSTO AL MEDIO de esta lista, en vez de tener dos grupos fijos a los costados.
+  //
+  // Con los grupos fijos y `grid-cols-5` hardcodeado, filtrar por permisos rompía el centrado:
+  // a un CONTENT (que no ve ni Eventos ni Usuarios) le quedaban 3 columnas y el FAB caía en la
+  // primera, pegado al borde izquierdo. Repartiendo alrededor del medio, el FAB queda centrado
+  // para cualquier combinación de permisos, y para OWNER/EDITOR da exactamente el mismo layout
+  // de siempre: Eventos · Usuarios | FAB | Sponsors · Más.
+  const laterales: Array<NavItem | 'mas'> = [...NAV_LEFT.filter(visible), ...NAV_RIGHT.filter(visible), 'mas']
+  const corte = Math.ceil(laterales.length / 2)
+
+  const pintarLateral = (item: NavItem | 'mas') =>
+    item === 'mas' ? (
+      <button
+        key="mas"
+        onClick={onMore}
+        aria-label="Más secciones"
+        className="flex flex-col items-center gap-1 pb-1.5 pt-3 transition-transform active:scale-90"
+      >
+        <MoreHorizontal size={19} strokeWidth={1.75} className={moreActive ? 'text-accent' : 'text-night-ink/55'} />
+        <span
+          className={`text-[9px] font-semibold uppercase tracking-[0.1em] ${
+            moreActive ? 'text-accent' : 'text-night-ink/55'
+          }`}
+        >
+          Más
+        </span>
+      </button>
+    ) : (
+      <FlatTab key={item.to} item={item} />
+    )
+
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 md:hidden">
       <div className="border-t border-night-soft bg-night/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
-        <div className="grid grid-cols-5 items-end">
-          {NAV_LEFT.map((item) => (
-            <FlatTab key={item.to} item={item} />
-          ))}
+        <div
+          className="grid items-end"
+          style={{ gridTemplateColumns: `repeat(${laterales.length + 1}, minmax(0, 1fr))` }}
+        >
+          {laterales.slice(0, corte).map(pintarLateral)}
 
           {/* Pestaña central circular sobresaliente (FAB) */}
           <NavLink to={NAV_CENTER.to} end={NAV_CENTER.end} className="relative flex flex-col items-center pb-1.5">
@@ -253,24 +302,7 @@ function AdminBottomNav({ moreActive, onMore }: { moreActive: boolean; onMore: (
             )}
           </NavLink>
 
-          {NAV_RIGHT.map((item) => (
-            <FlatTab key={item.to} item={item} />
-          ))}
-
-          <button
-            onClick={onMore}
-            aria-label="Más secciones"
-            className="flex flex-col items-center gap-1 pb-1.5 pt-3 transition-transform active:scale-90"
-          >
-            <MoreHorizontal size={19} strokeWidth={1.75} className={moreActive ? 'text-accent' : 'text-night-ink/55'} />
-            <span
-              className={`text-[9px] font-semibold uppercase tracking-[0.1em] ${
-                moreActive ? 'text-accent' : 'text-night-ink/55'
-              }`}
-            >
-              Más
-            </span>
-          </button>
+          {laterales.slice(corte).map(pintarLateral)}
         </div>
       </div>
     </nav>
@@ -364,7 +396,7 @@ export default function AdminLayout() {
         </div>
       </main>
 
-      <AdminBottomNav moreActive={moreActive} onMore={() => setMoreOpen(true)} />
+      <AdminBottomNav moreActive={moreActive} onMore={() => setMoreOpen(true)} visible={visible} />
 
       {/* Sheet "Más": secciones secundarias + volver a la app */}
       <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title="Más secciones">
