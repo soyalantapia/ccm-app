@@ -69,7 +69,35 @@ export async function getDeviceApplications(deviceId: string): Promise<Applicati
   return rows.map(toApplication)
 }
 
-/** Admin: aceptar/rechazar. Solo desde 'preinscripta' (decideApplication del dominio). */
-export async function decideApplication(id: string, status: 'aceptada' | 'rechazada'): Promise<void> {
-  await prisma.application.update({ where: { id }, data: { status, decidedAt: new Date() } })
+/**
+ * Decide una postulación. Es una TRANSICIÓN, no un update: exige que esté en el estado de
+ * origen esperado. Sin eso, un doble click aplicaba dos decisiones — y con el aviso conectado,
+ * mandaba dos mails a la misma persona.
+ *
+ * `preinscripta` como destino es "volver a revisión": la única transición que parte de una
+ * postulación ya decidida.
+ */
+export async function decideApplication(
+  id: string,
+  status: 'aceptada' | 'rechazada' | 'preinscripta',
+  opts: { adminUserId: string; note?: string },
+): Promise<void> {
+  const volviendo = status === 'preinscripta'
+  const admin = await prisma.adminUser.findUnique({
+    where: { id: opts.adminUserId },
+    select: { email: true },
+  })
+  const { count } = await prisma.application.updateMany({
+    // Volver a revisión parte de una decidida; decidir parte de una pendiente.
+    where: volviendo ? { id, status: { in: ['aceptada', 'rechazada'] } } : { id, status: 'preinscripta' },
+    data: volviendo
+      ? { status, decidedAt: null, decidedBy: null, decisionNote: null, notifiedAt: null, notifyError: null }
+      : { status, decidedAt: new Date(), decidedBy: admin?.email ?? null, decisionNote: opts.note?.trim() || null },
+  })
+  if (count === 0) {
+    throw conflict(
+      'APPLICATION_ALREADY_DECIDED',
+      volviendo ? 'Esta postulación no está decidida.' : 'Esta postulación ya fue decidida.',
+    )
+  }
 }
