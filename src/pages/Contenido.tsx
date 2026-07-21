@@ -87,13 +87,10 @@ export default function Contenido() {
                 </>
               )}
 
-              <SectionLabel>Noticias</SectionLabel>
-              <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:mx-0 lg:grid lg:grid-cols-3 lg:gap-5 lg:overflow-visible lg:px-0">
-                {sorted.slice(0, 6).map((c) => (
-                  <VideoThumb key={c.id} c={c} />
-                ))}
-              </div>
-
+              {/* Acá había un tercer carrusel titulado «Noticias» que volvía a renderizar
+                  `sorted.slice(0, 6)` — los mismos videos que ya están arriba como destacado y
+                  como filas. Con los 3 videos del catálogo, el visitante los veía tres veces en
+                  la misma pantalla. Se va: el listado de arriba ya los muestra todos. */}
             </>
           )
         ) : (
@@ -110,20 +107,28 @@ export default function Contenido() {
               </div>
             )}
 
-            <SectionLabel>Entrevistas Elukamo</SectionLabel>
-            <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:mx-0 lg:grid lg:grid-cols-3 lg:gap-5 lg:overflow-visible lg:px-0">
-              {sorted.slice(0, 6).map((c) => (
-                <VideoThumb key={c.id} c={c} />
-              ))}
-            </div>
-
-            <SectionLabel>Noticias CCM</SectionLabel>
-            <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:mx-0 lg:grid lg:grid-cols-3 lg:gap-5 lg:overflow-visible lg:px-0">
-              {sorted.slice(0, 6).map((c) => (
-                <VideoThumb key={`n-${c.id}`} c={c} />
-              ))}
-            </div>
-
+            {/* UN listado, no dos. Acá había dos carruseles titulados «Entrevistas Elukamo» y
+                «Noticias CCM» que renderizaban exactamente el mismo `sorted.slice(0, 6)`:
+                el visitante veía los mismos videos repetidos bajo nombres distintos, como si
+                fueran secciones separadas. No se puede filtrar por sección porque ContentItem
+                no tiene categoría — el modelo no la modela (ver el reporte del cazabug). Hasta
+                que exista ese campo, mostrar una sola lista es lo honesto. */}
+            {sorted.length > 0 ? (
+              <>
+                <SectionLabel>Videos de Elukamo</SectionLabel>
+                <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 lg:mx-0 lg:grid lg:grid-cols-3 lg:gap-5 lg:overflow-visible lg:px-0">
+                  {sorted.map((c) => (
+                    <VideoThumb key={c.id} c={c} />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="mt-4">
+                <EmptyState title="Todavía no hay capacitaciones">
+                  Cuando el equipo publique videos, aparecen acá.
+                </EmptyState>
+              </div>
+            )}
           </>
         )}
       </div>

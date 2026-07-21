@@ -322,7 +322,8 @@ function PasoCodigo({
       </div>
 
       <div className="mt-4 flex items-center justify-between text-xs">
-        <span className={vencido ? 'text-danger' : restan <= 60 ? 'text-warn' : 'text-night-ink/50'}>
+        {/* El último minuto se marca con el acento, no con rojo: todavía no pasó nada malo. */}
+        <span className={vencido ? 'text-danger' : restan <= 60 ? 'text-accent' : 'text-night-ink/50'}>
           {vencido ? 'El código venció' : <>Vence en <span className="font-bold tabular-nums">{mmss}</span></>}
         </span>
         <button
@@ -335,8 +336,11 @@ function PasoCodigo({
         </button>
       </div>
 
+      {/* El verde del tema (#2e7d4f) está calibrado para fondo claro: sobre esta pantalla
+          oscura da 2.9:1 y no llega a AA. La señal de "salió bien" la da el fondo teñido;
+          el texto va en el color legible de la superficie oscura (12.9:1). */}
       {aviso && (
-        <p className="mt-3 rounded-lg bg-ok/15 px-3 py-2 text-xs text-ok" role="status">
+        <p className="mt-3 rounded-lg bg-success/15 px-3 py-2 text-xs text-night-ink" role="status">
           {aviso}
         </p>
       )}

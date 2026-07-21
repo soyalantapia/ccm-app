@@ -3,7 +3,19 @@ import { toEventItem, toEventBlock } from '../lib/serialize.js'
 import { notFound } from '../lib/errors.js'
 import type { EventItem, EventBlock } from '@domain/types'
 
+/** Los eventos que ve el público: sólo los publicados. Un borrador no existe para nadie
+ *  fuera del panel — se filtra acá, en el server, y no escondiendo cosas en la interfaz. */
 export async function getEvents(): Promise<EventItem[]> {
+  const rows = await prisma.event.findMany({
+    where: { published: true },
+    orderBy: { startDate: 'asc' },
+    include: { sponsors: { select: { sponsorId: true } } },
+  })
+  return rows.map(toEventItem)
+}
+
+/** TODOS los eventos, borradores incluidos. Sólo para el panel (va detrás del guard de permisos). */
+export async function getAllEvents(): Promise<EventItem[]> {
   const rows = await prisma.event.findMany({
     orderBy: { startDate: 'asc' },
     include: { sponsors: { select: { sponsorId: true } } },
@@ -16,7 +28,9 @@ export async function getEvent(slug: string): Promise<EventItem> {
     where: { slug },
     include: { sponsors: { select: { sponsorId: true } } },
   })
-  if (!ev) throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
+  // Un borrador responde igual que un evento inexistente: si diera un error distinto, la ficha
+  // de un evento sin publicar sería adivinable desde afuera probando slugs.
+  if (!ev || !ev.published) throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
   return toEventItem(ev)
 }
 
@@ -94,6 +108,9 @@ export async function getEventAvailability(eventId: string): Promise<EventAvaila
 /** Eventos con sus bloques embebidos: 1 query en lugar de 1+N (fix N+1 bootstrap). */
 export async function getEventsWithBlocks(): Promise<(EventItem & { blocks: EventBlock[] })[]> {
   const rows = await prisma.event.findMany({
+    // Ruta pública: mismos eventos que devuelve getEvents(). Si acá no se filtrara, el bootstrap
+    // del front —que usa este endpoint— se traería los borradores igual.
+    where: { published: true },
     orderBy: { startDate: 'asc' },
     include: {
       sponsors: { select: { sponsorId: true } },

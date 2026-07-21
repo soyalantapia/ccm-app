@@ -50,7 +50,7 @@ interface Props {
 }
 
 export function OpsConvocatoriaForm({ open, convocatoria, onClose }: Props) {
-  const events = store.getEvents()
+  const events = store.getAdminEvents()
   const eventOptions = events.map((e) => ({ value: e.id, label: e.title }))
 
   const empty: Form = {

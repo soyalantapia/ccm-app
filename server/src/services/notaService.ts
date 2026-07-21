@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js'
+import { normalizarYoutubeId } from '../lib/youtube.js'
 import { toNota } from '../lib/serialize.js'
 import { notFound } from '../lib/errors.js'
 import { parseDate } from '../lib/dates.js'
@@ -31,7 +32,7 @@ export async function createNota(n: Nota): Promise<Nota> {
     data: {
       id: n.id, slug: n.slug, title: n.title, excerpt: n.excerpt, body: sanitizeNotaBody(n.body),
       cover: n.cover ?? null, author: n.author ?? null, category: n.category ?? null,
-      youtubeId: n.youtubeId ?? null, published: n.published ?? true,
+      youtubeId: normalizarYoutubeId(n.youtubeId) || null, published: n.published ?? true,
       publishedAt: parseDate(n.publishedAt, 'fecha de publicación'), order: n.order ?? 0,
     },
   })
@@ -40,9 +41,10 @@ export async function createNota(n: Nota): Promise<Nota> {
 
 export async function updateNota(id: string, patch: Partial<Nota>): Promise<Nota> {
   const data: Record<string, unknown> = {}
-  for (const k of ['slug', 'title', 'excerpt', 'body', 'cover', 'author', 'category', 'youtubeId', 'published', 'order'] as const) {
+  for (const k of ['slug', 'title', 'excerpt', 'body', 'cover', 'author', 'category', 'published', 'order'] as const) {
     if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   }
+  if ('youtubeId' in patch) data.youtubeId = normalizarYoutubeId(patch.youtubeId) || null
   // El cuerpo se limpia también al editar: si no, alcanzaba con un PATCH para meter HTML crudo.
   if (typeof data.body === 'string') data.body = sanitizeNotaBody(data.body)
   if (patch.publishedAt) data.publishedAt = parseDate(patch.publishedAt, 'fecha de publicación')
