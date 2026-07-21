@@ -14,8 +14,14 @@ export async function getMembership(deviceId: string): Promise<Membership> {
  * hacerse Socio declarando que pagó 0. Cuando el cobro por MP esté activo, el webhook es quien
  * llama acá tras confirmar el pago real.
  */
-export async function becomeSocio(deviceId: string, paid: number = SOCIO_PRICE): Promise<Membership> {
-  const m = await prisma.membership.upsert({
+export async function becomeSocio(
+  deviceId: string,
+  paid: number = SOCIO_PRICE,
+  /** Cliente Prisma a usar. El webhook pasa el `tx` de su transacción para que dar de alta al
+   *  socio y marcar la línea del cobro como entregada sean una sola operación atómica. */
+  client: Pick<typeof prisma, 'membership'> = prisma,
+): Promise<Membership> {
+  const m = await client.membership.upsert({
     where: { deviceId },
     create: { deviceId, tier: 'socio', since: new Date(), paid },
     update: { tier: 'socio', since: new Date(), paid },

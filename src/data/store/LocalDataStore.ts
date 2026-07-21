@@ -31,6 +31,7 @@ import type {
 } from '../types'
 import type {
   BlockAvailability,
+  CheckoutItem,
   DataStore,
   HydratableResource,
   NewBlock,
@@ -306,6 +307,11 @@ export class LocalDataStore implements DataStore {
     writeJSON(K.orders, [...this.getOrders(), order])
     this.track('ticket_order_created', { planId, orderId: order.id, qty, total: order.total })
     return order
+  }
+
+  /** En demo no hay backend que esperar: las órdenes ya están creadas cuando `createOrder` vuelve. */
+  async createOrders(sel: { planId: PlanId; qty: number }[]): Promise<TicketOrder[]> {
+    return sel.map((s) => this.createOrder(s.planId, s.qty))
   }
 
   markOrderRedirected(orderId: string): void {
@@ -748,10 +754,7 @@ export class LocalDataStore implements DataStore {
 
   /** Demo: nunca hay checkout real (no hay backend que arme la preferencia). El llamador cae
    *  siempre al link manual del plan. */
-  async startCheckout(
-    _kind: 'ticket_order' | 'membership' | 'ad_campaign',
-    _resourceId: string,
-  ): Promise<string | null> {
+  async startCheckout(_items: CheckoutItem[]): Promise<{ initPoint: string; amount: number } | null> {
     return null
   }
 }

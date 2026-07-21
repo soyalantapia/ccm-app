@@ -1,14 +1,24 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('../lib/prisma.js', () => ({
-  prisma: {
+vi.mock('../lib/prisma.js', () => {
+  const prisma = {
     ticketOrder: { findUnique: vi.fn() },
     adCampaign: { findUnique: vi.fn() },
-    payment: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
-  },
-}))
+    membership: { findUnique: vi.fn() },
+    payment: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), findMany: vi.fn() },
+    paymentItem: { findMany: vi.fn(), updateMany: vi.fn() },
+    // `$transaction` con callback: le pasa el MISMO cliente mockeado, que es lo más parecido a
+    // lo que hace Prisma de verdad (un tx expone la misma superficie). No simula rollback: los
+    // tests que necesitan verificar atomicidad lo hacen mirando el resultado final.
+    $transaction: vi.fn(),
+  }
+  prisma.$transaction.mockImplementation(async (arg: unknown) =>
+    Array.isArray(arg) ? Promise.all(arg) : (arg as (c: unknown) => unknown)(prisma),
+  )
+  return { prisma }
+})
 vi.mock('./mpOAuthService.js', () => ({ getValidToken: vi.fn() }))
-vi.mock('../lib/mpApi.js', () => ({ createPreference: vi.fn() }))
+vi.mock('../lib/mpApi.js', () => ({ createPreference: vi.fn(), searchPaymentsByExternalReference: vi.fn() }))
 
 import { prisma } from '../lib/prisma.js'
 import * as mpApi from '../lib/mpApi.js'
@@ -16,61 +26,321 @@ import { getValidToken } from './mpOAuthService.js'
 import { env } from '../lib/env.js'
 import { createCheckout } from './mpCheckoutService.js'
 
+/* ────────────────────────────────────────────────────────────────────────────
+ *  Store en memoria de Payment + PaymentItem
+ *
+ *  No alcanza con `mockResolvedValueOnce`: lo que hay que demostrar acá es que la BASE es la que
+ *  impide el doble cobro, y eso solo se ve con un store con estado real que haga cumplir el
+ *  índice único parcial de la migración 9_ticket_multi_order_payment:
+ *
+ *      PaymentItem(kind, resourceId) WHERE "closedAt" IS NULL
+ *
+ *  `payment.create` con líneas anidadas revienta con P2002 si alguna línea toca un recurso que ya
+ *  tiene una línea VIVA — igual que Postgres, y sin dejar el Payment a medio armar. Eso es lo
+ *  único que permite reproducir de verdad dos requests concurrentes con `Promise.all`, y la
+ *  carrera entre dos carritos que se solapan.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+interface FilaPayment {
+  id: string
+  deviceId: string | null
+  amount: number
+  status: string
+  mpPreferenceId: string | null
+  initPoint: string | null
+  mpPaymentId: string | null
+  createdAt: Date
+  seq: number
+}
+interface FilaItem {
+  id: string
+  paymentId: string
+  kind: string
+  resourceId: string
+  amount: number
+  titulo: string
+  closedAt: Date | null
+  deliveredAt: Date | null
+}
+
+function crearStore() {
+  let seq = 0
+  const payments: FilaPayment[] = []
+  const items: FilaItem[] = []
+
+  /** Compara un valor de fila contra un filtro de Prisma (escalar, {not}, {notIn}, {in}, {lt}, {gte}). */
+  function cumpleFiltro(valor: unknown, cond: unknown): boolean {
+    if (cond === null) return valor === null
+    if (cond instanceof Date) return valor instanceof Date && valor.getTime() === cond.getTime()
+    if (typeof cond === 'object') {
+      const c = cond as Record<string, unknown>
+      if ('not' in c) {
+        if (typeof c.not === 'object' && c.not !== null) return !cumpleFiltro(valor, c.not)
+        return valor !== c.not
+      }
+      if ('notIn' in c) return !(c.notIn as unknown[]).includes(valor)
+      if ('in' in c) return (c.in as unknown[]).includes(valor)
+      if ('lt' in c && valor instanceof Date) return valor.getTime() < (c.lt as Date).getTime()
+      if ('gte' in c && valor instanceof Date) return valor.getTime() >= (c.gte as Date).getTime()
+      return false
+    }
+    return valor === cond
+  }
+
+  function itemCumple(it: FilaItem, where: Record<string, unknown>): boolean {
+    for (const [k, cond] of Object.entries(where)) {
+      if (k === 'OR') {
+        if (!(cond as Record<string, unknown>[]).some((sub) => itemCumple(it, sub))) return false
+        continue
+      }
+      if (k === 'payment') {
+        const p = payments.find((x) => x.id === it.paymentId)
+        if (!p || !paymentCumple(p, cond as Record<string, unknown>)) return false
+        continue
+      }
+      if (!cumpleFiltro((it as unknown as Record<string, unknown>)[k], cond)) return false
+    }
+    return true
+  }
+
+  function paymentCumple(p: FilaPayment, where: Record<string, unknown>): boolean {
+    for (const [k, cond] of Object.entries(where)) {
+      if (k === 'items') {
+        const some = (cond as { some: Record<string, unknown> }).some
+        if (!items.some((it) => it.paymentId === p.id && itemCumple(it, some))) return false
+        continue
+      }
+      if (!cumpleFiltro((p as unknown as Record<string, unknown>)[k], cond)) return false
+    }
+    return true
+  }
+
+  return {
+    /** Siembra un cobro completo sin pasar por el chequeo de unicidad — para armar el escenario
+     *  de partida de un test (un cobro que ya existía antes de la request bajo prueba). */
+    sembrar(
+      pago: Partial<FilaPayment>,
+      lineas: { kind: string; resourceId: string; amount?: number; closedAt?: Date | null }[],
+    ): string {
+      seq += 1
+      const id = pago.id ?? `pay_s${seq}`
+      payments.push({
+        deviceId: null,
+        amount: 1000,
+        status: 'pending',
+        mpPreferenceId: null,
+        initPoint: null,
+        mpPaymentId: null,
+        createdAt: new Date(),
+        seq,
+        ...pago,
+        id,
+      })
+      for (const l of lineas) {
+        seq += 1
+        items.push({
+          id: `it_s${seq}`,
+          paymentId: id,
+          kind: l.kind,
+          resourceId: l.resourceId,
+          amount: l.amount ?? 1000,
+          titulo: 'sembrado',
+          closedAt: l.closedAt ?? null,
+          deliveredAt: null,
+        })
+      }
+      return id
+    },
+    /** Todas las líneas VIVAS de un recurso. Si alguna vez hay más de una, el índice se rompió. */
+    vivasDe: (kind: string, resourceId: string) =>
+      items.filter((i) => i.kind === kind && i.resourceId === resourceId && i.closedAt === null),
+    itemsDe: (paymentId: string) => items.filter((i) => i.paymentId === paymentId),
+    pagos: () => payments,
+
+    payment: {
+      async create({ data }: { data: Record<string, unknown> }) {
+        const nuevas = ((data.items as { create: Record<string, unknown>[] })?.create ?? []) as Record<string, unknown>[]
+        // EL índice único parcial. Se chequea ANTES de insertar nada: si una línea choca, no
+        // queda ni el Payment ni las otras líneas (transacción implícita del create anidado).
+        for (const l of nuevas) {
+          if (items.some((i) => i.kind === l.kind && i.resourceId === l.resourceId && i.closedAt === null)) {
+            throw Object.assign(new Error('Unique constraint failed on the fields: (`kind`,`resourceId`)'), {
+              code: 'P2002',
+            })
+          }
+        }
+        seq += 1
+        const fila: FilaPayment = {
+          id: `pay_${seq}`,
+          deviceId: (data.deviceId as string | null) ?? null,
+          amount: data.amount as number,
+          status: (data.status as string) ?? 'pending',
+          mpPreferenceId: null,
+          initPoint: null,
+          mpPaymentId: null,
+          createdAt: new Date(),
+          seq,
+        }
+        payments.push(fila)
+        for (const l of nuevas) {
+          seq += 1
+          items.push({
+            id: `it_${seq}`,
+            paymentId: fila.id,
+            kind: l.kind as string,
+            resourceId: l.resourceId as string,
+            amount: l.amount as number,
+            titulo: l.titulo as string,
+            closedAt: null,
+            deliveredAt: null,
+          })
+        }
+        return { ...fila }
+      },
+      async findMany({
+        where,
+        include,
+        select,
+      }: {
+        where: Record<string, unknown>
+        include?: { items?: boolean }
+        select?: Record<string, boolean>
+      }) {
+        const encontradas = payments.filter((p) => paymentCumple(p, where ?? {}))
+        encontradas.sort((a, b) => b.seq - a.seq) // orderBy createdAt desc, con desempate estable
+        return encontradas.map((p) => {
+          if (select) {
+            const out: Record<string, unknown> = {}
+            for (const k of Object.keys(select)) out[k] = (p as unknown as Record<string, unknown>)[k]
+            return out
+          }
+          const base: Record<string, unknown> = { ...p }
+          if (include?.items) base.items = items.filter((i) => i.paymentId === p.id).map((i) => ({ ...i }))
+          return base
+        })
+      },
+      async update({ where, data }: { where: { id: string }; data: Record<string, unknown> }) {
+        const fila = payments.find((p) => p.id === where.id)
+        if (!fila) throw Object.assign(new Error('Record to update not found.'), { code: 'P2025' })
+        Object.assign(fila, data)
+        return { ...fila }
+      },
+      async updateMany({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) {
+        let count = 0
+        for (const p of payments) {
+          if (paymentCumple(p, where ?? {})) {
+            Object.assign(p, data)
+            count += 1
+          }
+        }
+        return { count }
+      },
+    },
+
+    paymentItem: {
+      async findMany({ where, select }: { where: Record<string, unknown>; select?: Record<string, boolean> }) {
+        return items
+          .filter((i) => itemCumple(i, where ?? {}))
+          .map((i) => {
+            if (!select) return { ...i }
+            const out: Record<string, unknown> = {}
+            for (const k of Object.keys(select)) out[k] = (i as unknown as Record<string, unknown>)[k]
+            return out
+          })
+      },
+      async updateMany({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) {
+        let count = 0
+        for (const i of items) {
+          if (itemCumple(i, where ?? {})) {
+            Object.assign(i, data)
+            count += 1
+          }
+        }
+        return { count }
+      },
+    },
+  }
+}
+
+type Store = ReturnType<typeof crearStore>
+
+/** Enchufa un store con estado real al mock de prisma. Lo usa toda la suite. */
+function enchufar(): Store {
+  const store = crearStore()
+  vi.mocked(prisma.payment.create).mockImplementation(store.payment.create as never)
+  vi.mocked(prisma.payment.findMany).mockImplementation(store.payment.findMany as never)
+  vi.mocked(prisma.payment.update).mockImplementation(store.payment.update as never)
+  vi.mocked(prisma.payment.updateMany).mockImplementation(store.payment.updateMany as never)
+  vi.mocked(prisma.paymentItem.findMany).mockImplementation(store.paymentItem.findMany as never)
+  vi.mocked(prisma.paymentItem.updateMany).mockImplementation(store.paymentItem.updateMany as never)
+  return store
+}
+
+/** Deja N órdenes listas para cobrar, con su total. Sin argumentos: ninguna orden existe. */
+function ordenes(...defs: { id: string; total: number; qty?: number; deviceId?: string; status?: string }[]) {
+  vi.mocked(prisma.ticketOrder.findUnique).mockImplementation((async ({ where }: { where: { id: string } }) => {
+    const o = defs.find((d) => d.id === where.id)
+    return o
+      ? { id: o.id, total: o.total, qty: o.qty ?? 1, planId: 'p', status: o.status ?? 'iniciada', deviceId: o.deviceId ?? 'dev_1' }
+      : null
+  }) as never)
+}
+
+let store: Store
+
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getValidToken).mockResolvedValue('ACCESS-1')
-  vi.mocked(prisma.payment.create).mockResolvedValue({ id: 'pay_1' } as never)
-  // Sin Payment reusable por default: cada test que quiera probar la reutilización lo pisa.
-  vi.mocked(prisma.payment.findFirst).mockResolvedValue(null as never)
-  // Default que guarda bien: `vi.clearAllMocks()` borra el historial de llamadas pero NO
-  // implementaciones (`mockResolvedValue`/`mockRejectedValue`) — sin este default explícito acá,
-  // un test que pise `payment.update` con `mockRejectedValue` (no `Once`) dejaría ese fallo
-  // filtrando hacia tests posteriores que no lo esperan.
-  vi.mocked(prisma.payment.update).mockResolvedValue({} as never)
-  // Sin pendings viejos que vencer por default: el `updateMany` de vencimiento matchea 0 filas
-  // salvo que un test arme un store real (ver `crearPaymentStoreEnMemoria`) que lo implemente.
-  vi.mocked(prisma.payment.updateMany).mockResolvedValue({ count: 0 } as never)
+  vi.mocked(prisma.membership.findUnique).mockResolvedValue(null as never)
+  // Por default MP no conoce ningún pago para nuestros cobros: lo viejo está abandonado de
+  // verdad. Los tests del cupón de efectivo pisan esto.
+  vi.mocked(mpApi.searchPaymentsByExternalReference).mockResolvedValue([])
   vi.mocked(mpApi.createPreference).mockResolvedValue({ id: 'pref_1', init_point: 'https://mp/checkout/pref_1' })
+  ordenes()
+  store = enchufar()
 })
 
-/** Lee el monto que se le mandó a MP en la preferencia. */
-function montoEnviadoAMp(): number {
-  const body = vi.mocked(mpApi.createPreference).mock.calls[0][1] as { items: { unit_price: number; quantity: number }[] }
+/** Lee el total que se le mandó a MP en la preferencia (suma de sus líneas). */
+function montoEnviadoAMp(llamada = 0): number {
+  const body = vi.mocked(mpApi.createPreference).mock.calls[llamada][1] as {
+    items: { unit_price: number; quantity: number }[]
+  }
   return body.items.reduce((acc, i) => acc + i.unit_price * i.quantity, 0)
+}
+function itemsEnviadosAMp(llamada = 0) {
+  return (vi.mocked(mpApi.createPreference).mock.calls[llamada][1] as { items: { title: string; unit_price: number }[] })
+    .items
 }
 
 describe('mpCheckoutService — el monto sale de la base', () => {
   it('una orden de entradas cobra su total congelado', async () => {
-    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 66000, qty: 2, planId: 'sab-night-vip', status: 'iniciada', deviceId: 'dev_1' } as never)
-    const r = await createCheckout('ticket_order', 'ord_1', 'dev_1')
+    ordenes({ id: 'ord_1', total: 66000, qty: 2 })
+    const r = await createCheckout([{ kind: 'ticket_order', resourceId: 'ord_1' }], 'dev_1')
     expect(montoEnviadoAMp()).toBe(66000)
+    expect(r.amount).toBe(66000)
     expect(r.initPoint).toBe('https://mp/checkout/pref_1')
   })
 
   it('la membresía cobra SOCIO_PRICE, no lo que diga nadie', async () => {
-    await createCheckout('membership', 'dev_1', 'dev_1')
+    await createCheckout([{ kind: 'membership', resourceId: 'dev_1' }], 'dev_1')
     expect(montoEnviadoAMp()).toBe(9900)
   })
 
   it('la campaña se recalcula por slot y horas', async () => {
     vi.mocked(prisma.adCampaign.findUnique).mockResolvedValue({ id: 'camp_1', slot: 'S2', hours: 5, total: 1 } as never)
-    await createCheckout('ad_campaign', 'camp_1', 'dev_1')
+    await createCheckout([{ kind: 'ad_campaign', resourceId: 'camp_1' }], 'dev_1')
     expect(montoEnviadoAMp()).toBe(30000)
   })
 
   it('la preferencia lleva external_reference con el id del Payment (es lo que reconcilia)', async () => {
-    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
-    await createCheckout('ticket_order', 'ord_1', 'dev_1')
+    ordenes({ id: 'ord_1', total: 1000 })
+    const r = await createCheckout([{ kind: 'ticket_order', resourceId: 'ord_1' }], 'dev_1')
     const body = vi.mocked(mpApi.createPreference).mock.calls[0][1] as { external_reference: string }
-    expect(body.external_reference).toBe('pay_1')
+    expect(body.external_reference).toBe(r.paymentId)
   })
 
-  // Cobertura extra (no viene en el brief): server/test/setup.ts define
-  // PUBLIC_BASE_URL = 'http://localhost:4000'. baseUrl() la usa tal cual (sin recortar nada de
-  // MP_REDIRECT_URI) para armar notification_url y back_urls. El resto de estos tests mockean
-  // mpApi.createPreference entero y nunca miran esos dos campos.
   it('notification_url y back_urls usan el host limpio de PUBLIC_BASE_URL', async () => {
-    await createCheckout('membership', 'dev_1', 'dev_1')
+    await createCheckout([{ kind: 'membership', resourceId: 'dev_1' }], 'dev_1')
     const body = vi.mocked(mpApi.createPreference).mock.calls[0][1] as {
       notification_url: string
       back_urls: { success: string; pending: string; failure: string }
@@ -82,191 +352,264 @@ describe('mpCheckoutService — el monto sale de la base', () => {
   })
 })
 
+/**
+ * (a) del pedido: el bug que motivó todo esto. El comprador elegía dos planes VIP, el front creaba
+ * DOS órdenes y mandaba a MP el link de UNA — pagaba una y se llevaba las dos. Ahora un cobro
+ * cubre las N órdenes: una preferencia, el total sumado, y las N líneas adentro.
+ */
+describe('mpCheckoutService — un cobro cubre N órdenes y cobra la SUMA', () => {
+  it('carrito de 2 planes → 1 Payment, 2 PaymentItem, amount = suma, UNA sola preferencia con 2 líneas', async () => {
+    ordenes({ id: 'ord_a', total: 30000, qty: 1 }, { id: 'ord_b', total: 45000, qty: 2 })
+
+    const r = await createCheckout(
+      [
+        { kind: 'ticket_order', resourceId: 'ord_a' },
+        { kind: 'ticket_order', resourceId: 'ord_b' },
+      ],
+      'dev_1',
+    )
+
+    // Una sola preferencia, con el total sumado repartido en dos líneas visibles para el comprador.
+    expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
+    expect(montoEnviadoAMp()).toBe(75000)
+    expect(itemsEnviadosAMp()).toHaveLength(2)
+    expect(itemsEnviadosAMp().map((i) => i.unit_price).sort((a, b) => a - b)).toEqual([30000, 45000])
+
+    // Y en la base: un solo cobro con dos líneas, cuya suma es el amount de la cabecera.
+    expect(r.amount).toBe(75000)
+    expect(r.items).toHaveLength(2)
+    expect(store.pagos()).toHaveLength(1)
+    expect(store.pagos()[0].amount).toBe(75000)
+    const lineas = store.itemsDe(r.paymentId)
+    expect(lineas).toHaveLength(2)
+    expect(lineas.reduce((a, l) => a + l.amount, 0)).toBe(75000)
+    expect(lineas.map((l) => l.resourceId).sort()).toEqual(['ord_a', 'ord_b'])
+  })
+
+  it('el orden de las líneas en el pedido no cambia nada: se normaliza ASC (es lo que evita deadlocks)', async () => {
+    ordenes({ id: 'ord_a', total: 100 }, { id: 'ord_b', total: 200 })
+    const r = await createCheckout(
+      [
+        { kind: 'ticket_order', resourceId: 'ord_b' },
+        { kind: 'ticket_order', resourceId: 'ord_a' },
+      ],
+      'dev_1',
+    )
+    expect(r.items.map((l) => l.resourceId)).toEqual(['ord_a', 'ord_b'])
+    expect(r.amount).toBe(300)
+  })
+
+  it('si una sola línea del carrito no es válida, NO se cobra nada (ni se crea el Payment)', async () => {
+    ordenes({ id: 'ord_a', total: 100 }, { id: 'ord_b', total: 200, status: 'confirmada' })
+    await expect(
+      createCheckout(
+        [
+          { kind: 'ticket_order', resourceId: 'ord_a' },
+          { kind: 'ticket_order', resourceId: 'ord_b' },
+        ],
+        'dev_1',
+      ),
+    ).rejects.toMatchObject({ code: 'ALREADY_PAID' })
+    expect(mpApi.createPreference).not.toHaveBeenCalled()
+    expect(store.pagos()).toHaveLength(0)
+  })
+})
+
+describe('mpCheckoutService — validación del carrito', () => {
+  it('el mismo recurso repetido en el pedido es 400, no se deduplica en silencio', async () => {
+    ordenes({ id: 'ord_a', total: 100 })
+    await expect(
+      createCheckout(
+        [
+          { kind: 'ticket_order', resourceId: 'ord_a' },
+          { kind: 'ticket_order', resourceId: 'ord_a' },
+        ],
+        'dev_1',
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR', status: 400 })
+  })
+
+  it('un carrito vacío es 400', async () => {
+    await expect(createCheckout([], 'dev_1')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+  })
+
+  it('más de 10 líneas es 400', async () => {
+    const muchas = Array.from({ length: 11 }, (_, i) => ({ kind: 'ticket_order' as const, resourceId: `ord_${i}` }))
+    await expect(createCheckout(muchas, 'dev_1')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+  })
+
+  it('un espacio publicitario NO puede entrar en un carrito multi-línea (AdCampaign no tiene dueño en el modelo)', async () => {
+    ordenes({ id: 'ord_a', total: 100 })
+    await expect(
+      createCheckout(
+        [
+          { kind: 'ticket_order', resourceId: 'ord_a' },
+          { kind: 'ad_campaign', resourceId: 'camp_ajena' },
+        ],
+        'dev_1',
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+    expect(mpApi.createPreference).not.toHaveBeenCalled()
+  })
+})
+
 describe('mpCheckoutService — casos que no deben cobrar', () => {
   it('sin conexión responde 503 y no crea preferencia', async () => {
     vi.mocked(getValidToken).mockRejectedValue(Object.assign(new Error('x'), { status: 503, code: 'MP_NOT_CONNECTED' }))
-    await expect(createCheckout('membership', 'dev_1', 'dev_1')).rejects.toMatchObject({ code: 'MP_NOT_CONNECTED' })
+    await expect(createCheckout([{ kind: 'membership', resourceId: 'dev_1' }], 'dev_1')).rejects.toMatchObject({
+      code: 'MP_NOT_CONNECTED',
+    })
     expect(mpApi.createPreference).not.toHaveBeenCalled()
   })
 
   it('una orden inexistente no crea cobro', async () => {
-    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue(null as never)
-    await expect(createCheckout('ticket_order', 'ord_fantasma', 'dev_1')).rejects.toMatchObject({ code: 'RESOURCE_NOT_FOUND' })
+    await expect(createCheckout([{ kind: 'ticket_order', resourceId: 'ord_fantasma' }], 'dev_1')).rejects.toMatchObject({
+      code: 'RESOURCE_NOT_FOUND',
+    })
   })
 
   it('una orden ya confirmada no se vuelve a cobrar', async () => {
-    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'confirmada', deviceId: 'dev_1' } as never)
-    await expect(createCheckout('ticket_order', 'ord_1', 'dev_1')).rejects.toMatchObject({ code: 'ALREADY_PAID' })
+    ordenes({ id: 'ord_1', total: 1000, status: 'confirmada' })
+    await expect(createCheckout([{ kind: 'ticket_order', resourceId: 'ord_1' }], 'dev_1')).rejects.toMatchObject({
+      code: 'ALREADY_PAID',
+    })
   })
-})
 
-describe('mpCheckoutService — no permite doble cobro (defecto crítico 1)', () => {
-  it('pedir el cobro dos veces para la misma orden reusa la preferencia: MP se llama una sola vez', async () => {
-    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
+  it('un socio activo no puede volver a pagar la membresía', async () => {
+    vi.mocked(prisma.membership.findUnique).mockResolvedValue({ deviceId: 'dev_1', tier: 'socio' } as never)
+    await expect(createCheckout([{ kind: 'membership', resourceId: 'dev_1' }], 'dev_1')).rejects.toMatchObject({
+      code: 'ALREADY_PAID',
+    })
+    expect(mpApi.createPreference).not.toHaveBeenCalled()
+  })
 
-    // Primer pedido: no hay ningún Payment pending con preferencia todavía → crea uno nuevo.
-    const r1 = await createCheckout('ticket_order', 'ord_1', 'dev_1')
-
-    // Segundo pedido (doble clic, dos pestañas, reintento del navegador): ya existe un Payment
-    // pending con la preferencia guardada para esa misma (kind, resourceId) → hay que reusarla,
-    // no crear otra preferencia nueva en MP.
-    vi.mocked(prisma.payment.findFirst).mockResolvedValueOnce({
-      id: 'pay_1',
-      mpPreferenceId: 'pref_1',
-      initPoint: r1.initPoint,
-    } as never)
-    const r2 = await createCheckout('ticket_order', 'ord_1', 'dev_1')
-
-    expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
-    expect(r2.initPoint).toBe(r1.initPoint)
+  it('una orden de total 0 no se manda a MP (un unit_price 0 lo rechaza con un 400 sin explicación)', async () => {
+    ordenes({ id: 'ord_0', total: 0 })
+    await expect(createCheckout([{ kind: 'ticket_order', resourceId: 'ord_0' }], 'dev_1')).rejects.toMatchObject({
+      code: 'MP_API_ERROR',
+    })
+    expect(mpApi.createPreference).not.toHaveBeenCalled()
   })
 })
 
 describe('mpCheckoutService — verifica de quién es el recurso (defecto crítico 2)', () => {
   it('un device que no es dueño de la orden no puede generar el cobro (misma respuesta que "no existe")', async () => {
-    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_dueño' } as never)
+    ordenes({ id: 'ord_1', total: 1000, deviceId: 'dev_dueño' })
 
-    await expect(createCheckout('ticket_order', 'ord_1', 'dev_intruso')).rejects.toMatchObject({
+    await expect(createCheckout([{ kind: 'ticket_order', resourceId: 'ord_1' }], 'dev_intruso')).rejects.toMatchObject({
       code: 'RESOURCE_NOT_FOUND',
       message: 'La orden no existe',
     })
     expect(mpApi.createPreference).not.toHaveBeenCalled()
 
     // Misma respuesta exacta que si la orden directamente no existiera: no hay que darle a un
-    // atacante ninguna pista de que "La orden no existe" (mismatch) es distinto de "no existe"
-    // (null) — si no, podría enumerar órdenes ajenas por diferencia de respuesta.
-    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue(null as never)
-    await expect(createCheckout('ticket_order', 'ord_fantasma', 'dev_intruso')).rejects.toMatchObject({
-      code: 'RESOURCE_NOT_FOUND',
-      message: 'La orden no existe',
-    })
+    // atacante ninguna pista de que "no es tuya" es distinto de "no existe" — si no, podría
+    // enumerar órdenes ajenas por diferencia de respuesta.
+    ordenes()
+    await expect(
+      createCheckout([{ kind: 'ticket_order', resourceId: 'ord_fantasma' }], 'dev_intruso'),
+    ).rejects.toMatchObject({ code: 'RESOURCE_NOT_FOUND', message: 'La orden no existe' })
+  })
+})
+
+describe('mpCheckoutService — no permite doble cobro (defecto crítico 1)', () => {
+  it('pedir el MISMO carrito dos veces reusa la preferencia: MP se llama una sola vez', async () => {
+    ordenes({ id: 'ord_a', total: 1000 }, { id: 'ord_b', total: 2000 })
+    const carrito = [
+      { kind: 'ticket_order' as const, resourceId: 'ord_a' },
+      { kind: 'ticket_order' as const, resourceId: 'ord_b' },
+    ]
+
+    const r1 = await createCheckout(carrito, 'dev_1')
+    const r2 = await createCheckout(carrito, 'dev_1')
+
+    expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
+    expect(r2.initPoint).toBe(r1.initPoint)
+    expect(r2.paymentId).toBe(r1.paymentId)
   })
 })
 
 /**
- * A diferencia de `mockResolvedValueOnce` (que solo puede simular el caso SECUENCIAL: primero
- * termina la request 1 entera, RECIÉN AHÍ se pisa el mock para la request 2), este store tiene
- * estado real y hace cumplir el índice único parcial que agrega la migración
- * 9_mp_payment_pending_unique (un solo Payment `pending` por (kind, resourceId)): `create` tira
- * un error `{ code: 'P2002' }` si ya hay un pending para ese par. Es lo único que permite
- * reproducir la carrera de DOS requests concurrentes de verdad con `Promise.all`.
+ * (b) del pedido. Con un cobro por recurso esto lo resolvía el índice de Payment; ahora que un
+ * cobro cubre N recursos, la pregunta se vuelve "¿alguna de estas órdenes YA está adentro de un
+ * cobro vivo?" — incluso si el carrito nuevo es distinto. Nunca puede haber dos líneas vivas
+ * sobre la misma orden, y NUNCA se le devuelve al carrito nuevo el link del cobro viejo (ese link
+ * cobra otro monto: es exactamente el bug que estamos cerrando).
  */
-function crearPaymentStoreEnMemoria() {
-  let autoincremento = 0
-  const filas: {
-    id: string
-    kind: string
-    resourceId: string
-    deviceId: string | null
-    amount: number
-    status: string
-    mpPreferenceId: string | null
-    initPoint: string | null
-    mpPaymentId: string | null
-    createdAt: Date
-  }[] = []
+describe('mpCheckoutService — una orden ya incluida en un cobro pendiente no puede entrar en un segundo cobro', () => {
+  it('carrito {a,b} vivo → pedir {b,c} da COBRO_SOLAPADO con el link del cobro en curso, y no crea nada', async () => {
+    ordenes({ id: 'ord_a', total: 1000 }, { id: 'ord_b', total: 2000 }, { id: 'ord_c', total: 3000 })
 
-  function coincide(fila: (typeof filas)[number], where: Record<string, unknown>): boolean {
-    if ('kind' in where && fila.kind !== where.kind) return false
-    if ('resourceId' in where && fila.resourceId !== where.resourceId) return false
-    if ('status' in where && fila.status !== where.status) return false
-    if ('mpPreferenceId' in where) {
-      const cond = where.mpPreferenceId as { not?: null } | null
-      if (cond === null) {
-        if (fila.mpPreferenceId !== null) return false
-      } else if (cond && 'not' in cond && cond.not === null) {
-        if (fila.mpPreferenceId === null) return false
-      }
-    }
-    // A diferencia de mpPreferenceId (arriba, siempre viene envuelto en `{ not: null }`), el
-    // `where` de vencimiento pide `mpPaymentId: null` DIRECTO (sin envolver) — el corazón de la
-    // tarea: jamás vencer un pending que MP ya asoció a un pago concreto (efectivo pendiente de
-    // acreditación).
-    if ('mpPaymentId' in where && where.mpPaymentId === null && fila.mpPaymentId !== null) return false
-    if ('createdAt' in where) {
-      const cond = where.createdAt as { gte?: Date; lt?: Date }
-      if (cond?.gte && fila.createdAt.getTime() < cond.gte.getTime()) return false
-      if (cond?.lt && fila.createdAt.getTime() >= cond.lt.getTime()) return false
-    }
-    return true
-  }
+    const primero = await createCheckout(
+      [
+        { kind: 'ticket_order', resourceId: 'ord_a' },
+        { kind: 'ticket_order', resourceId: 'ord_b' },
+      ],
+      'dev_1',
+    )
 
-  return {
-    /** Siembra una fila directo, sin pasar por el chequeo de unicidad de `create` — para armar
-     * el escenario de partida de un test (un Payment `pending` que ya existía antes de la
-     * request bajo prueba), con `createdAt`/`mpPaymentId` a medida. */
-    sembrar: (fila: Partial<(typeof filas)[number]> & { kind: string; resourceId: string }) => {
-      autoincremento += 1
-      filas.push({
-        id: `pay_${autoincremento}`,
-        deviceId: null,
-        amount: 1000,
-        status: 'pending',
-        mpPreferenceId: null,
-        initPoint: null,
-        mpPaymentId: null,
-        createdAt: new Date(),
-        ...fila,
-      })
-    },
-    create: async ({ data }: { data: Record<string, unknown> }) => {
-      const yaHayPending = filas.some((f) => f.kind === data.kind && f.resourceId === data.resourceId && f.status === 'pending')
-      if (yaHayPending) {
-        throw Object.assign(new Error('Unique constraint failed on the fields: (`kind`,`resourceId`)'), { code: 'P2002' })
-      }
-      autoincremento += 1
-      const fila = {
-        id: `pay_${autoincremento}`,
-        kind: data.kind as string,
-        resourceId: data.resourceId as string,
-        deviceId: (data.deviceId as string | null) ?? null,
-        amount: data.amount as number,
-        status: (data.status as string) ?? 'pending',
-        mpPreferenceId: null,
-        initPoint: null,
-        mpPaymentId: null,
-        createdAt: new Date(),
-      }
-      filas.push(fila)
-      return { ...fila }
-    },
-    findFirst: async ({ where }: { where: Record<string, unknown> }) => {
-      const candidatas = filas.filter((f) => coincide(f, where))
-      candidatas.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      return candidatas[0] ? { ...candidatas[0] } : null
-    },
-    update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
-      const fila = filas.find((f) => f.id === where.id)
-      if (!fila) throw Object.assign(new Error('Record to update not found.'), { code: 'P2025' })
-      Object.assign(fila, data)
-      return { ...fila }
-    },
-    /** Simula el `updateMany` condicional de vencimiento: aplica `data` a TODAS las filas que
-     * matchean `where` (así lo haría Postgres), devuelve cuántas tocó. */
-    updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
-      let count = 0
-      for (const f of filas) {
-        if (coincide(f, where)) {
-          Object.assign(f, data)
-          count += 1
-        }
-      }
-      return { count }
-    },
-  }
-}
+    await expect(
+      createCheckout(
+        [
+          { kind: 'ticket_order', resourceId: 'ord_b' },
+          { kind: 'ticket_order', resourceId: 'ord_c' },
+        ],
+        'dev_1',
+      ),
+    ).rejects.toMatchObject({
+      code: 'COBRO_SOLAPADO',
+      status: 409,
+      // El front necesita el link para ofrecer "retomar el pago en curso" en vez de dejar al
+      // comprador en un callejón sin salida de 30 minutos.
+      details: { paymentId: primero.paymentId, initPoint: primero.initPoint },
+    })
+
+    expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
+    expect(store.pagos()).toHaveLength(1)
+    // Y lo importante: ord_b nunca queda con dos cobros vivos encima.
+    expect(store.vivasDe('ticket_order', 'ord_b')).toHaveLength(1)
+  })
+
+  it('una orden ya incluida en un cobro de 2: pedirla SOLA también da COBRO_SOLAPADO', async () => {
+    ordenes({ id: 'ord_a', total: 1000 }, { id: 'ord_b', total: 2000 })
+
+    await createCheckout(
+      [
+        { kind: 'ticket_order', resourceId: 'ord_a' },
+        { kind: 'ticket_order', resourceId: 'ord_b' },
+      ],
+      'dev_1',
+    )
+
+    await expect(createCheckout([{ kind: 'ticket_order', resourceId: 'ord_a' }], 'dev_1')).rejects.toMatchObject({
+      code: 'COBRO_SOLAPADO',
+    })
+    expect(store.vivasDe('ticket_order', 'ord_a')).toHaveLength(1)
+    expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
+  })
+
+  it('cuando el cobro viejo se cierra (rechazado), las órdenes quedan libres y se puede armar otro carrito', async () => {
+    ordenes({ id: 'ord_a', total: 1000 }, { id: 'ord_b', total: 2000 })
+    // Cobro anterior YA cerrado: cabecera rejected y líneas selladas (así lo deja `cerrarPago`).
+    store.sembrar({ status: 'rejected' }, [
+      { kind: 'ticket_order', resourceId: 'ord_a', closedAt: new Date() },
+      { kind: 'ticket_order', resourceId: 'ord_b', closedAt: new Date() },
+    ])
+
+    const r = await createCheckout(
+      [
+        { kind: 'ticket_order', resourceId: 'ord_a' },
+        { kind: 'ticket_order', resourceId: 'ord_b' },
+      ],
+      'dev_1',
+    )
+    expect(r.amount).toBe(3000)
+  })
+})
 
 describe('mpCheckoutService — atomicidad real ante concurrencia (defecto crítico A)', () => {
-  it('dos createCheckout concurrentes para la misma orden: MP se llama UNA sola vez (con store con estado real, no mockResolvedValueOnce)', async () => {
-    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
-
-    const store = crearPaymentStoreEnMemoria()
-    vi.mocked(prisma.payment.create).mockImplementation(store.create as never)
-    vi.mocked(prisma.payment.findFirst).mockImplementation(store.findFirst as never)
-    vi.mocked(prisma.payment.update).mockImplementation(store.update as never)
-
-    // Latencia real en createPreference (50ms): es la ventana en la que un doble clic real cae
-    // de lleno. Sin ella, todo el `Promise.all` corre en microtasks y nunca se demuestra nada.
+  /** createPreference con latencia real: es la ventana en la que cae un doble clic de verdad. */
+  function preferenciaLenta() {
     let llamadas = 0
     vi.mocked(mpApi.createPreference).mockImplementation(async () => {
       llamadas += 1
@@ -274,141 +617,234 @@ describe('mpCheckoutService — atomicidad real ante concurrencia (defecto crít
       await new Promise((resolve) => setTimeout(resolve, 50))
       return { id: `pref_${n}`, init_point: `https://mp/checkout/pref_${n}` }
     })
+  }
 
-    const [r1, r2] = await Promise.all([
-      createCheckout('ticket_order', 'ord_1', 'dev_1'),
-      createCheckout('ticket_order', 'ord_1', 'dev_1'),
-    ])
+  it('dos createCheckout concurrentes con el MISMO carrito: MP se llama UNA sola vez y las dos reciben el mismo link', async () => {
+    ordenes({ id: 'ord_a', total: 1000 }, { id: 'ord_b', total: 2000 })
+    preferenciaLenta()
+    const carrito = [
+      { kind: 'ticket_order' as const, resourceId: 'ord_a' },
+      { kind: 'ticket_order' as const, resourceId: 'ord_b' },
+    ]
+
+    const [r1, r2] = await Promise.all([createCheckout(carrito, 'dev_1'), createCheckout(carrito, 'dev_1')])
 
     expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
-    // Las dos requests tienen que terminar con el MISMO link — nunca dos preferencias vivas
-    // pagables para la misma orden.
     expect(r1.initPoint).toBe(r2.initPoint)
   }, 10_000)
 
-  it('en secuencial (una request termina antes de que arranque la otra) da 1 sola preferencia, para contrastar con el caso concurrente', async () => {
-    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
+  it('dos carritos SOLAPADOS concurrentes ({a,b} y {b,c}): uno crea, el otro se rechaza, y nunca hay dos cobros vivos sobre b', async () => {
+    ordenes({ id: 'ord_a', total: 1000 }, { id: 'ord_b', total: 2000 }, { id: 'ord_c', total: 3000 })
+    preferenciaLenta()
 
-    const store = crearPaymentStoreEnMemoria()
-    vi.mocked(prisma.payment.create).mockImplementation(store.create as never)
-    vi.mocked(prisma.payment.findFirst).mockImplementation(store.findFirst as never)
-    vi.mocked(prisma.payment.update).mockImplementation(store.update as never)
-    vi.mocked(mpApi.createPreference).mockResolvedValue({ id: 'pref_1', init_point: 'https://mp/checkout/pref_1' })
+    const resultados = await Promise.allSettled([
+      createCheckout(
+        [
+          { kind: 'ticket_order', resourceId: 'ord_a' },
+          { kind: 'ticket_order', resourceId: 'ord_b' },
+        ],
+        'dev_1',
+      ),
+      createCheckout(
+        [
+          { kind: 'ticket_order', resourceId: 'ord_b' },
+          { kind: 'ticket_order', resourceId: 'ord_c' },
+        ],
+        'dev_1',
+      ),
+    ])
 
-    const r1 = await createCheckout('ticket_order', 'ord_1', 'dev_1')
-    const r2 = await createCheckout('ticket_order', 'ord_1', 'dev_1')
-
+    expect(resultados.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    const rechazada = resultados.find((r) => r.status === 'rejected') as PromiseRejectedResult
+    expect(['COBRO_SOLAPADO', 'CHECKOUT_EN_CURSO']).toContain(rechazada.reason.code)
+    // Lo que jamás puede pasar: dos cobros vivos tocando la misma orden.
+    expect(store.vivasDe('ticket_order', 'ord_b')).toHaveLength(1)
     expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
-    expect(r1.initPoint).toBe(r2.initPoint)
-  })
+  }, 10_000)
 })
 
-describe('mpCheckoutService — vencimiento perezoso de pendings abandonados (Tarea 8)', () => {
-  it('un pending viejo SIN mpPaymentId no traba: se vence solo y se genera un cobro nuevo', async () => {
-    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
+/**
+ * (c) del pedido. El comentario viejo afirmaba que filtrar por `mpPaymentId: null` alcanzaba para
+ * no vencer nunca un pago en efectivo en curso. Era FALSO: `mpPaymentId` se puebla recién cuando
+ * el webhook procesa el aviso, y entre que el comprador imprime el cupón de Rapipago y que ese
+ * aviso llega (segundos, HORAS si el webhook falla, nunca si el secreto está mal configurado) la
+ * fila sigue en null. A los 30 minutos se vencía, se liberaba el índice, el comprador generaba un
+ * segundo cobro, y cuando MP acreditaba el efectivo había plata cobrada contra un Payment muerto.
+ */
+describe('mpCheckoutService — vencimiento perezoso de pendings abandonados', () => {
+  const HACE_31_MIN = () => new Date(Date.now() - 31 * 60_000)
 
-    const store = crearPaymentStoreEnMemoria()
-    // El abandono típico del brief: tocó "comprar", MP le armó una preferencia (mpPreferenceId
-    // + initPoint viven), cerró la pestaña, MP nunca avisó nada (mpPaymentId sigue null). 31
-    // minutos: un toque pasado del umbral de 30.
-    store.sembrar({
-      kind: 'ticket_order',
-      resourceId: 'ord_1',
-      mpPreferenceId: 'pref_viejo',
-      initPoint: 'https://mp/checkout/pref_viejo',
-      mpPaymentId: null,
-      createdAt: new Date(Date.now() - 31 * 60_000),
-    })
-    vi.mocked(prisma.payment.create).mockImplementation(store.create as never)
-    vi.mocked(prisma.payment.findFirst).mockImplementation(store.findFirst as never)
-    vi.mocked(prisma.payment.update).mockImplementation(store.update as never)
-    vi.mocked(prisma.payment.updateMany).mockImplementation(store.updateMany as never)
+  it('un pending viejo que MP no conoce se vence solo y libera la orden', async () => {
+    ordenes({ id: 'ord_1', total: 1000 })
+    const viejo = store.sembrar(
+      { mpPreferenceId: 'pref_viejo', initPoint: 'https://mp/checkout/pref_viejo', createdAt: HACE_31_MIN() },
+      [{ kind: 'ticket_order', resourceId: 'ord_1' }],
+    )
     vi.mocked(mpApi.createPreference).mockResolvedValue({ id: 'pref_nuevo', init_point: 'https://mp/checkout/pref_nuevo' })
 
-    const r = await createCheckout('ticket_order', 'ord_1', 'dev_1')
+    const r = await createCheckout([{ kind: 'ticket_order', resourceId: 'ord_1' }], 'dev_1')
 
-    // No reusa el link viejo: se venció, así que hay que haber pasado por MP de nuevo.
-    expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
+    expect(r.initPoint).toBe('https://mp/checkout/pref_nuevo')
+    // El viejo quedó cerrado ENTERO: cabecera expired y línea sellada (si no, el índice seguiría
+    // trabado y esto no habría podido crear nada).
+    expect(store.pagos().find((p) => p.id === viejo)!.status).toBe('expired')
+    expect(store.itemsDe(viejo)[0].closedAt).not.toBeNull()
+    expect(store.vivasDe('ticket_order', 'ord_1')).toHaveLength(1)
+  })
+
+  it('⚠️ un CUPÓN DE EFECTIVO recién generado NO se vence, aunque el aviso de MP todavía no haya llegado', async () => {
+    ordenes({ id: 'ord_1', total: 1000 })
+    // El escenario exacto del bug: el comprador generó el cupón de Rapipago hace más de 30
+    // minutos y el webhook nunca llegó (o está en pleno backoff de reintentos), así que acá
+    // seguimos con mpPaymentId en null. Mirando SOLO la base, esta fila es indistinguible de un
+    // abandono. Lo único que las distingue es MP.
+    const conCupon = store.sembrar(
+      {
+        mpPreferenceId: 'pref_efectivo',
+        initPoint: 'https://mp/checkout/pref_efectivo',
+        mpPaymentId: null,
+        createdAt: HACE_31_MIN(),
+      },
+      [{ kind: 'ticket_order', resourceId: 'ord_1' }],
+    )
+    vi.mocked(mpApi.searchPaymentsByExternalReference).mockResolvedValue([{ id: 987654, status: 'pending' } as never])
+
+    const r = await createCheckout([{ kind: 'ticket_order', resourceId: 'ord_1' }], 'dev_1')
+
+    // No se venció, no se creó una segunda preferencia, y el comprador recibe el MISMO link.
+    expect(store.pagos().find((p) => p.id === conCupon)!.status).toBe('pending')
+    expect(store.itemsDe(conCupon)[0].closedAt).toBeNull()
+    expect(mpApi.createPreference).not.toHaveBeenCalled()
+    expect(r.initPoint).toBe('https://mp/checkout/pref_efectivo')
+    // Además se anota el payment_id que nos faltaba, para no tener que volver a preguntarle a MP.
+    expect(store.pagos().find((p) => p.id === conCupon)!.mpPaymentId).toBe('987654')
+  })
+
+  it('si la consulta a MP falla, NO se vence (fail-closed: trabar un rato es recuperable, cobrar dos veces no)', async () => {
+    ordenes({ id: 'ord_1', total: 1000 })
+    const viejo = store.sembrar(
+      { mpPreferenceId: 'pref_x', initPoint: 'https://mp/checkout/pref_x', createdAt: HACE_31_MIN() },
+      [{ kind: 'ticket_order', resourceId: 'ord_1' }],
+    )
+    vi.mocked(mpApi.searchPaymentsByExternalReference).mockRejectedValue(new Error('MP no responde'))
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const r = await createCheckout([{ kind: 'ticket_order', resourceId: 'ord_1' }], 'dev_1')
+
+    expect(store.pagos().find((p) => p.id === viejo)!.status).toBe('pending')
+    expect(r.initPoint).toBe('https://mp/checkout/pref_x')
+    expect(mpApi.createPreference).not.toHaveBeenCalled()
+    expect(errSpy).toHaveBeenCalled()
+    errSpy.mockRestore()
+  })
+
+  it('un pago RECHAZADO en MP no bloquea el vencimiento (si no, una tarjeta rebotada trabaría la orden para siempre)', async () => {
+    ordenes({ id: 'ord_1', total: 1000 })
+    const viejo = store.sembrar(
+      { mpPreferenceId: 'pref_y', initPoint: 'https://mp/checkout/pref_y', createdAt: HACE_31_MIN() },
+      [{ kind: 'ticket_order', resourceId: 'ord_1' }],
+    )
+    vi.mocked(mpApi.searchPaymentsByExternalReference).mockResolvedValue([{ id: 1, status: 'rejected' } as never])
+    vi.mocked(mpApi.createPreference).mockResolvedValue({ id: 'pref_nuevo', init_point: 'https://mp/checkout/pref_nuevo' })
+
+    const r = await createCheckout([{ kind: 'ticket_order', resourceId: 'ord_1' }], 'dev_1')
+
+    expect(store.pagos().find((p) => p.id === viejo)!.status).toBe('expired')
     expect(r.initPoint).toBe('https://mp/checkout/pref_nuevo')
   })
 
-  it('un pending RECIENTE sigue trabando: se reusa su initPoint, no se crea otra preferencia', async () => {
-    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
+  it('un pending viejo CON mpPaymentId ni siquiera se consulta: ya se sabe que hay un pago concreto', async () => {
+    ordenes({ id: 'ord_1', total: 1000 })
+    store.sembrar(
+      {
+        mpPreferenceId: 'pref_e',
+        initPoint: 'https://mp/checkout/pref_e',
+        mpPaymentId: 'mp_123456',
+        createdAt: new Date(Date.now() - 10 * 24 * 3600_000),
+      },
+      [{ kind: 'ticket_order', resourceId: 'ord_1' }],
+    )
 
-    const store = crearPaymentStoreEnMemoria()
-    // 5 minutos: todavía puede tener el checkout de MP abierto en otra pestaña — no hay que
-    // tocarlo.
-    store.sembrar({
-      kind: 'ticket_order',
-      resourceId: 'ord_1',
-      mpPreferenceId: 'pref_reciente',
-      initPoint: 'https://mp/checkout/pref_reciente',
-      mpPaymentId: null,
-      createdAt: new Date(Date.now() - 5 * 60_000),
-    })
-    vi.mocked(prisma.payment.create).mockImplementation(store.create as never)
-    vi.mocked(prisma.payment.findFirst).mockImplementation(store.findFirst as never)
-    vi.mocked(prisma.payment.update).mockImplementation(store.update as never)
-    vi.mocked(prisma.payment.updateMany).mockImplementation(store.updateMany as never)
+    const r = await createCheckout([{ kind: 'ticket_order', resourceId: 'ord_1' }], 'dev_1')
 
-    const r = await createCheckout('ticket_order', 'ord_1', 'dev_1')
+    expect(mpApi.searchPaymentsByExternalReference).not.toHaveBeenCalled()
+    expect(mpApi.createPreference).not.toHaveBeenCalled()
+    expect(r.initPoint).toBe('https://mp/checkout/pref_e')
+  })
 
+  it('un pending RECIENTE sigue trabando: se reusa su initPoint, no se pregunta ni se crea otra preferencia', async () => {
+    ordenes({ id: 'ord_1', total: 1000 })
+    store.sembrar(
+      { mpPreferenceId: 'pref_reciente', initPoint: 'https://mp/checkout/pref_reciente', createdAt: new Date(Date.now() - 5 * 60_000) },
+      [{ kind: 'ticket_order', resourceId: 'ord_1' }],
+    )
+
+    const r = await createCheckout([{ kind: 'ticket_order', resourceId: 'ord_1' }], 'dev_1')
+
+    expect(mpApi.searchPaymentsByExternalReference).not.toHaveBeenCalled()
     expect(mpApi.createPreference).not.toHaveBeenCalled()
     expect(r.initPoint).toBe('https://mp/checkout/pref_reciente')
   })
 
-  it('un pending viejo CON mpPaymentId (efectivo esperando acreditación) NO se vence nunca, por más viejo que sea', async () => {
-    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
+  it('el vencimiento es por cobro ENTERO: un carrito de 2 abandonado libera las 2 órdenes juntas', async () => {
+    ordenes({ id: 'ord_a', total: 1000 }, { id: 'ord_b', total: 2000 })
+    const viejo = store.sembrar(
+      { mpPreferenceId: 'pref_v', initPoint: 'https://mp/checkout/pref_v', createdAt: HACE_31_MIN() },
+      [
+        { kind: 'ticket_order', resourceId: 'ord_a' },
+        { kind: 'ticket_order', resourceId: 'ord_b' },
+      ],
+    )
+    vi.mocked(mpApi.createPreference).mockResolvedValue({ id: 'pref_n', init_point: 'https://mp/checkout/pref_n' })
 
-    const store = crearPaymentStoreEnMemoria()
-    // 10 días: MUCHO más viejo que el umbral, pero mpPaymentId != null significa que MP YA
-    // conoce un pago concreto para esto (p.ej. un boleto de Rapipago pendiente de acreditación).
-    // Vencerlo liberaría el índice, el comprador generaría un segundo cobro, y cuando MP acredite
-    // el efectivo tendríamos plata cobrada contra un Payment marcado 'expired'.
-    store.sembrar({
-      kind: 'ticket_order',
-      resourceId: 'ord_1',
-      mpPreferenceId: 'pref_efectivo',
-      initPoint: 'https://mp/checkout/pref_efectivo',
-      mpPaymentId: 'mp_123456',
-      createdAt: new Date(Date.now() - 10 * 24 * 60 * 60_000),
-    })
-    vi.mocked(prisma.payment.create).mockImplementation(store.create as never)
-    vi.mocked(prisma.payment.findFirst).mockImplementation(store.findFirst as never)
-    vi.mocked(prisma.payment.update).mockImplementation(store.update as never)
-    vi.mocked(prisma.payment.updateMany).mockImplementation(store.updateMany as never)
+    // Alcanza con que el carrito nuevo toque UNA de las dos para que el cobro entero venza.
+    const r = await createCheckout([{ kind: 'ticket_order', resourceId: 'ord_a' }], 'dev_1')
 
-    const r = await createCheckout('ticket_order', 'ord_1', 'dev_1')
+    expect(r.initPoint).toBe('https://mp/checkout/pref_n')
+    expect(store.itemsDe(viejo).every((i) => i.closedAt !== null)).toBe(true)
+    // ord_b quedó libre también, no a medio camino.
+    expect(store.vivasDe('ticket_order', 'ord_b')).toHaveLength(0)
+  })
+})
 
-    expect(mpApi.createPreference).not.toHaveBeenCalled()
-    expect(r.initPoint).toBe('https://mp/checkout/pref_efectivo')
+describe('mpCheckoutService — el espejo closedAt se repara solo si se desincroniza', () => {
+  it('una línea VIVA sobre un Payment que ya no está pending se cierra y deja de trabar la orden', async () => {
+    ordenes({ id: 'ord_1', total: 1000 })
+    // Estado imposible por diseño, pero recuperable: si un bug lo produjera, sin el barrido esa
+    // orden no se podría cobrar NUNCA MÁS y el síntoma sería un 409 eterno sin explicación.
+    const roto = store.sembrar({ status: 'approved' }, [{ kind: 'ticket_order', resourceId: 'ord_1', closedAt: null }])
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const r = await createCheckout([{ kind: 'ticket_order', resourceId: 'ord_1' }], 'dev_1')
+
+    expect(store.itemsDe(roto)[0].closedAt).not.toBeNull()
+    expect(r.initPoint).toBe('https://mp/checkout/pref_1')
+    expect(errSpy).toHaveBeenCalled()
+    errSpy.mockRestore()
   })
 })
 
 describe('mpCheckoutService — el reintento del comprador tras un fallo de persistencia no genera un segundo cobro (defecto crítico B)', () => {
-  it('createPreference OK pero el update que guarda mpPreferenceId/initPoint falla siempre: el reintento del comprador NO crea una segunda preferencia', async () => {
-    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
-
-    const store = crearPaymentStoreEnMemoria()
-    vi.mocked(prisma.payment.create).mockImplementation(store.create as never)
-    vi.mocked(prisma.payment.findFirst).mockImplementation(store.findFirst as never)
-    // El update SIEMPRE falla (no es un fallo transitorio que un reintento con backoff
-    // resuelva): mpPreferenceId/initPoint nunca quedan guardados en la base.
+  it('createPreference OK pero el update que guarda mpPreferenceId/initPoint falla siempre: el reintento NO crea una segunda preferencia', async () => {
+    ordenes({ id: 'ord_1', total: 1000 })
+    // El update SIEMPRE falla (no es un fallo transitorio que un reintento con backoff resuelva):
+    // mpPreferenceId/initPoint nunca quedan guardados en la base.
     vi.mocked(prisma.payment.update).mockRejectedValue(new Error('la base no vuelve más'))
-    vi.mocked(mpApi.createPreference).mockResolvedValue({ id: 'pref_1', init_point: 'https://mp/checkout/pref_1' })
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    // Primer pedido: MP ya le dio un link real al comprador (la preferencia está viva), aunque
-    // no se haya podido guardar en la base.
-    const r1 = await createCheckout('ticket_order', 'ord_1', 'dev_1')
+    const r1 = await createCheckout([{ kind: 'ticket_order', resourceId: 'ord_1' }], 'dev_1')
     expect(r1.initPoint).toBe('https://mp/checkout/pref_1')
 
-    // El comprador reintenta (el link no le sirvió / volvió a tocar "pagar"). El Payment de la
-    // primera vez quedó `pending` con `mpPreferenceId: null` para siempre — invisible para el
-    // guard de reuso. Sin la red de contención del defecto B, esto genera una SEGUNDA
-    // preferencia pagable en MP (doble cobro si el comprador paga las dos).
-    await expect(createCheckout('ticket_order', 'ord_1', 'dev_1')).rejects.toMatchObject({ code: 'CHECKOUT_EN_CURSO' })
+    // El comprador reintenta. El Payment de la primera vez quedó `pending` con
+    // `mpPreferenceId: null` — invisible para el guard de reuso. Sin la red de contención, esto
+    // genera una SEGUNDA preferencia pagable en MP (doble cobro si el comprador paga las dos).
+    await expect(createCheckout([{ kind: 'ticket_order', resourceId: 'ord_1' }], 'dev_1')).rejects.toMatchObject({
+      code: 'CHECKOUT_EN_CURSO',
+    })
+    errSpy.mockRestore()
 
     expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
+    expect(store.vivasDe('ticket_order', 'ord_1')).toHaveLength(1)
   })
 })
 
@@ -416,14 +852,26 @@ describe('mpCheckoutService — si falla el guardado post-creación no se pierde
   it('createPreference OK + update posterior falla → el Payment NO queda rejected y se devuelve el initPoint', async () => {
     vi.mocked(prisma.payment.update).mockRejectedValueOnce(new Error('la base se cayó justo acá'))
 
-    const r = await createCheckout('membership', 'dev_1', 'dev_1')
+    const r = await createCheckout([{ kind: 'membership', resourceId: 'dev_1' }], 'dev_1')
 
     expect(r.initPoint).toBe('https://mp/checkout/pref_1')
-    // Ninguna llamada a update debe haber marcado el Payment como rechazado: la preferencia
-    // está viva en MP, etiquetarla rejected sería mentirle a cualquiera que reconcilie después.
-    const llamadasAUpdate = vi.mocked(prisma.payment.update).mock.calls as unknown as { data?: { status?: string } }[][]
-    const marcoRechazado = llamadasAUpdate.some(([args]) => args?.data?.status === 'rejected')
-    expect(marcoRechazado).toBe(false)
+    // La preferencia está viva en MP: etiquetar el cobro como rechazado sería mentirle a
+    // cualquiera que reconcilie después. Y las líneas siguen vivas (el recurso, reservado).
+    expect(store.pagos()[0].status).toBe('pending')
+    expect(store.vivasDe('membership', 'dev_1')).toHaveLength(1)
+  })
+
+  it('si createPreference FALLA, el cobro se cierra entero (cabecera + líneas) y la orden queda libre', async () => {
+    ordenes({ id: 'ord_1', total: 1000 })
+    vi.mocked(mpApi.createPreference).mockRejectedValue(new Error('MP explotó'))
+
+    await expect(createCheckout([{ kind: 'ticket_order', resourceId: 'ord_1' }], 'dev_1')).rejects.toMatchObject({
+      code: 'MP_API_ERROR',
+    })
+
+    expect(store.pagos()[0].status).toBe('rejected')
+    // Si solo se moviera la cabecera, la orden quedaría trabada por un cobro que no existe.
+    expect(store.vivasDe('ticket_order', 'ord_1')).toHaveLength(0)
   })
 })
 
@@ -443,7 +891,7 @@ describe('mpCheckoutService — la base sale de PUBLIC_BASE_URL, no de recortar 
     // entera pegada adelante en vez del host limpio de PUBLIC_BASE_URL.
     env.MP_REDIRECT_URI = 'https://otra-cosa.mercadopago.com/oauth/authorize'
 
-    await createCheckout('membership', 'dev_1', 'dev_1')
+    await createCheckout([{ kind: 'membership', resourceId: 'dev_1' }], 'dev_1')
 
     const body = vi.mocked(mpApi.createPreference).mock.calls[0][1] as {
       notification_url: string

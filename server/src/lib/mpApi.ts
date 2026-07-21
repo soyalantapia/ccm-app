@@ -96,6 +96,36 @@ export function createPreference(
   return post<{ id: string; init_point: string }>('/checkout/preferences', body, accessToken)
 }
 
+/**
+ * Todos los pagos que MP conoce para un `external_reference` (= Payment.id nuestro).
+ *
+ * Es la ÚNICA forma de contestar "¿este cobro está realmente abandonado?" sin depender de que el
+ * webhook haya llegado. Hace falta para no vencer un cupón de efectivo/Rapipago recién generado:
+ * entre que el comprador genera el cupón y que el aviso de MP llega (o se pierde y se reintenta
+ * durante horas) nuestro Payment sigue con `mpPaymentId: null` y parecería abandonado. Ver
+ * `vencerPendientesAbandonados` en mpCheckoutService.
+ *
+ * Una preferencia puede tener VARIOS pagos (la tarjeta rebotó y reintentó con otra), por eso
+ * devuelve la lista entera y decide el que llama.
+ */
+export async function searchPaymentsByExternalReference(
+  accessToken: string,
+  externalReference: string,
+): Promise<MpPayment[]> {
+  return conTimeout(async (signal) => {
+    const url = `${AUTH_BASE}/v1/payments/search?external_reference=${encodeURIComponent(externalReference)}&sort=date_created&criteria=desc`
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal,
+    })
+    if (!res.ok) {
+      throw new ApiError(502, 'MP_API_ERROR', `Mercado Pago respondió ${res.status} al buscar pagos por referencia`)
+    }
+    const cuerpo = (await res.json()) as { results?: MpPayment[] }
+    return cuerpo.results ?? []
+  })
+}
+
 /** Consulta el estado REAL de un pago. Nunca se le cree al cuerpo del webhook. */
 export async function getPayment(accessToken: string, paymentId: string): Promise<MpPayment> {
   return conTimeout(async (signal) => {

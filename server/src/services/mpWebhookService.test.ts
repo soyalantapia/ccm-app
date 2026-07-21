@@ -1,16 +1,25 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('../lib/prisma.js', () => ({
-  prisma: {
+vi.mock('../lib/prisma.js', () => {
+  const prisma = {
     payment: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    // Las líneas del cobro: un Payment cubre N recursos y la entrega se marca por línea.
+    paymentItem: { update: vi.fn(), updateMany: vi.fn() },
     ticketOrder: { update: vi.fn() },
     // findUnique además de update: `activar()` necesita leer AdCampaign.hours (lo comprado) para
-    // calcular expiresAt — ese dato no viaja en el Payment (que solo tiene el monto). Sin este
-    // mock, "una campaña se pone al aire..." explota con "adCampaign.findUnique is not a function"
-    // (desvío respecto del brief, documentado en el informe).
+    // calcular expiresAt — ese dato no viaja en el Payment (que solo tiene el monto).
     adCampaign: { findUnique: vi.fn(), update: vi.fn() },
-  },
-}))
+    membership: { upsert: vi.fn() },
+    // `$transaction` en sus dos formas. Con callback le pasa el MISMO cliente mockeado (un tx de
+    // Prisma expone la misma superficie). No simula rollback: lo que estos tests verifican es el
+    // resultado final, no el rollback.
+    $transaction: vi.fn(),
+  }
+  prisma.$transaction.mockImplementation(async (arg: unknown) =>
+    Array.isArray(arg) ? Promise.all(arg) : (arg as (c: unknown) => unknown)(prisma),
+  )
+  return { prisma }
+})
 vi.mock('./mpOAuthService.js', () => ({ getValidToken: vi.fn() }))
 vi.mock('../lib/mpApi.js', () => ({ getPayment: vi.fn() }))
 vi.mock('./membershipService.js', () => ({ becomeSocio: vi.fn() }))
@@ -29,33 +38,54 @@ beforeEach(() => {
   vi.mocked(prisma.payment.findFirst).mockResolvedValue(null as never)
   vi.mocked(prisma.payment.update).mockResolvedValue({} as never)
   // Camino aprobado feliz: por default el gate atómico deja pasar (los tests que necesitan
-  // simular la carrera/el fallo pisan esto con un mock con estado real, ver `filaFake` abajo).
+  // simular la carrera/el fallo pisan esto con un mock con estado real, ver `cobroFake` abajo).
   vi.mocked(prisma.payment.updateMany).mockResolvedValue({ count: 1 } as never)
+  vi.mocked(prisma.paymentItem.update).mockResolvedValue({} as never)
+  vi.mocked(prisma.paymentItem.updateMany).mockResolvedValue({ count: 0 } as never)
 })
 
 function pagoAprobado(ref: string, status: string = 'approved') {
   vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 111, status, external_reference: ref } as never)
 }
 
+interface LineaFake {
+  kind: string
+  resourceId: string
+  amount?: number
+  closedAt?: Date | null
+  deliveredAt?: Date | null
+}
+
 /**
- * Fila de Payment con estado REAL en memoria, para poder probar el gate atómico (defecto B.3)
- * de verdad: `updateMany`/`findUnique`/`update`/`findFirst` leen y escriben sobre el MISMO
- * objeto, respetando el `where` como lo haría Postgres (coincide TODO lo pedido en el `where`
- * contra el valor actual de la fila). Esto es a propósito más pesado que un `mockResolvedValueOnce`:
- * un mock que "siempre dice que sí" no puede demostrar una condición de carrera ni que el
- * segundo aviso reintenta después de que el primero soltó el claim.
+ * Cobro (cabecera + líneas) con estado REAL en memoria, para poder probar el gate atómico
+ * (defecto B.3) de verdad: `updateMany`/`findUnique`/`update` leen y escriben sobre los MISMOS
+ * objetos, respetando el `where` como lo haría Postgres. Esto es a propósito más pesado que un
+ * `mockResolvedValueOnce`: un mock que "siempre dice que sí" no puede demostrar una condición de
+ * carrera, ni que el segundo aviso reintenta después de que el primero soltó el claim, ni que una
+ * entrega parcial no se repite.
+ *
+ * Las líneas arrancan VIVAS (`closedAt: null`) si el cobro está pending, y selladas si ya
+ * terminó: es el invariante que sostienen `cerrarPago`/`vencerPendientesAbandonados`.
  */
-function filaFake(overrides: Partial<Record<string, unknown>>) {
+function cobroFake(overrides: Partial<Record<string, unknown>> = {}, lineasDef: LineaFake[] = [{ kind: 'ticket_order', resourceId: 'ord_x' }]) {
   const fila: Record<string, unknown> = {
     id: 'pay_x',
-    kind: 'ticket_order',
-    resourceId: 'ord_x',
     deviceId: null,
     amount: 1000,
     status: 'pending',
     mpPaymentId: null,
     ...overrides,
   }
+  const items = lineasDef.map((l, i) => ({
+    id: `it_${i}`,
+    paymentId: fila.id as string,
+    kind: l.kind,
+    resourceId: l.resourceId,
+    amount: l.amount ?? (fila.amount as number),
+    titulo: 'linea',
+    closedAt: l.closedAt !== undefined ? l.closedAt : fila.status === 'pending' ? null : new Date(),
+    deliveredAt: l.deliveredAt ?? null,
+  }))
 
   /**
    * Soporta las pocas formas de `where` que usa el servicio: igualdad, `{ not }`, `{ notIn }` y
@@ -67,7 +97,7 @@ function filaFake(overrides: Partial<Record<string, unknown>>) {
       const c = cond as Record<string, unknown>
       if ('not' in c) return actual !== c.not
       if ('notIn' in c) return !(c.notIn as unknown[]).includes(actual)
-      throw new Error(`filaFake: condición no soportada ${JSON.stringify(cond)}`)
+      throw new Error(`cobroFake: condición no soportada ${JSON.stringify(cond)}`)
     }
     return actual === cond
   }
@@ -86,16 +116,33 @@ function filaFake(overrides: Partial<Record<string, unknown>>) {
     }
     return { count: 0 }
   }) as never)
-  vi.mocked(prisma.payment.findFirst).mockImplementation((async (args: { where: Record<string, unknown> }) => {
-    return coincide(args.where) ? { ...fila } : null
-  }) as never)
-  vi.mocked(prisma.payment.findUnique).mockImplementation((async () => ({ ...fila })) as never)
+  vi.mocked(prisma.payment.findUnique).mockImplementation((async () => ({
+    ...fila,
+    items: items.map((i) => ({ ...i })),
+  })) as never)
   vi.mocked(prisma.payment.update).mockImplementation((async (args: { data: Record<string, unknown> }) => {
     Object.assign(fila, args.data)
     return { ...fila }
   }) as never)
+  vi.mocked(prisma.paymentItem.update).mockImplementation((async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+    const it = items.find((i) => i.id === args.where.id)
+    if (!it) throw Object.assign(new Error('Record to update not found.'), { code: 'P2025' })
+    Object.assign(it, args.data)
+    return { ...it }
+  }) as never)
+  vi.mocked(prisma.paymentItem.updateMany).mockImplementation((async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+    let count = 0
+    for (const it of items) {
+      const w = args.where as { paymentId?: string; closedAt?: null }
+      if (w.paymentId && it.paymentId !== w.paymentId) continue
+      if ('closedAt' in w && w.closedAt === null && it.closedAt !== null) continue
+      Object.assign(it, args.data)
+      count += 1
+    }
+    return { count }
+  }) as never)
 
-  return fila
+  return { fila, items }
 }
 
 describe('webhook — verificación de firma', () => {
@@ -160,27 +207,90 @@ describe('webhook — verificación de firma', () => {
 
 describe('webhook — activa el recurso al aprobarse', () => {
   it('una orden de entradas pasa a confirmada', async () => {
-    vi.mocked(prisma.payment.findUnique).mockResolvedValue({ id: 'pay_1', kind: 'ticket_order', resourceId: 'ord_1', deviceId: 'dev_1', status: 'pending' } as never)
+    cobroFake({ id: 'pay_1', deviceId: 'dev_1' }, [{ kind: 'ticket_order', resourceId: 'ord_1' }])
     pagoAprobado('pay_1')
     await handleNotification('111', true)
     expect(prisma.ticketOrder.update).toHaveBeenCalledWith({ where: { id: 'ord_1' }, data: { status: 'confirmada' } })
   })
 
   it('una membresía deja al device como socio', async () => {
-    vi.mocked(prisma.payment.findUnique).mockResolvedValue({ id: 'pay_2', kind: 'membership', resourceId: 'dev_1', deviceId: 'dev_1', amount: 9900, status: 'pending' } as never)
+    cobroFake({ id: 'pay_2', deviceId: 'dev_1', amount: 9900 }, [{ kind: 'membership', resourceId: 'dev_1', amount: 9900 }])
     pagoAprobado('pay_2')
     await handleNotification('111', true)
-    expect(becomeSocio).toHaveBeenCalledWith('dev_1', 9900)
+    // El tercer argumento es el cliente de la transacción (para que alta de socio y marca de
+    // entrega sean atómicas): no se fija en cuál, sí en que el monto no lo elige el cliente.
+    expect(becomeSocio).toHaveBeenCalledWith('dev_1', 9900, expect.anything())
   })
 
   it('una campaña se pone al aire con su ventana de horas', async () => {
-    vi.mocked(prisma.payment.findUnique).mockResolvedValue({ id: 'pay_3', kind: 'ad_campaign', resourceId: 'camp_1', status: 'pending' } as never)
+    cobroFake({ id: 'pay_3' }, [{ kind: 'ad_campaign', resourceId: 'camp_1' }])
     vi.mocked(prisma.adCampaign.update).mockResolvedValue({} as never)
     pagoAprobado('pay_3')
     await handleNotification('111', true)
     const args = vi.mocked(prisma.adCampaign.update).mock.calls[0][0] as { data: { status: string; startsAt: Date; expiresAt: Date } }
     expect(args.data.status).toBe('activa')
     expect(args.data.expiresAt.getTime()).toBeGreaterThan(args.data.startsAt.getTime())
+  })
+})
+
+/**
+ * El corazón del cambio multi-orden en el webhook: un cobro cubre N líneas y hay que entregarlas
+ * TODAS. Antes esto era imposible de expresar — el Payment tenía un solo (kind, resourceId).
+ */
+describe('webhook — un cobro que cubre varias órdenes las entrega TODAS', () => {
+  it('2 líneas aprobadas → las 2 órdenes quedan confirmadas y el cobro queda approved con las líneas selladas', async () => {
+    const { fila, items } = cobroFake({ id: 'pay_multi', deviceId: 'dev_1', amount: 3000 }, [
+      { kind: 'ticket_order', resourceId: 'ord_a', amount: 1000 },
+      { kind: 'ticket_order', resourceId: 'ord_b', amount: 2000 },
+    ])
+    pagoAprobado('pay_multi')
+
+    await handleNotification('111', true)
+
+    expect(prisma.ticketOrder.update).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(prisma.ticketOrder.update).mock.calls.map((c) => (c[0] as { where: { id: string } }).where.id).sort()).toEqual(['ord_a', 'ord_b'])
+    expect(fila.status).toBe('approved')
+    // Las dos líneas quedan entregadas y cerradas: el índice único parcial libera los recursos.
+    expect(items.every((i) => i.deliveredAt !== null)).toBe(true)
+    expect(items.every((i) => i.closedAt !== null)).toBe(true)
+  })
+
+  it('si la 2ª línea falla: la 1ª queda entregada, el claim se suelta, y el reintento de MP NO la re-entrega', async () => {
+    const { fila, items } = cobroFake({ id: 'pay_parcial', deviceId: 'dev_1', amount: 3000 }, [
+      { kind: 'ticket_order', resourceId: 'ord_a', amount: 1000 },
+      { kind: 'ticket_order', resourceId: 'ord_b', amount: 2000 },
+    ])
+    pagoAprobado('pay_parcial')
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    // La primera entrega bien; la segunda revienta.
+    vi.mocked(prisma.ticketOrder.update).mockImplementation((async ({ where }: { where: { id: string } }) => {
+      if (where.id === 'ord_b') throw new Error('P2025 simulado: la orden ya no existe')
+      return {}
+    }) as never)
+
+    await expect(handleNotification('111', true)).rejects.toThrow()
+
+    // ord_a entregada de verdad; ord_b no. El cobro NO queda marcado como entregado (si quedara,
+    // ningún reintento de MP volvería a intentar: plata cobrada, entrada nunca entregada).
+    expect(items[0].deliveredAt).not.toBeNull()
+    expect(items[1].deliveredAt).toBeNull()
+    expect(fila.status).toBe('pending')
+    expect(fila.mpPaymentId).toBeNull()
+    // Las líneas siguen VIVAS: hay un pago aprobado dando vueltas, el comprador no puede generarse
+    // un segundo cobro para estas órdenes mientras tanto.
+    expect(items.every((i) => i.closedAt === null)).toBe(true)
+
+    // Reintento de MP, ahora sin el fallo: NO re-activa ord_a (ya tiene deliveredAt) y cierra.
+    vi.mocked(prisma.ticketOrder.update).mockResolvedValue({} as never)
+    const llamadasAntes = vi.mocked(prisma.ticketOrder.update).mock.calls.length
+    await handleNotification('111', true)
+
+    const nuevas = vi.mocked(prisma.ticketOrder.update).mock.calls.slice(llamadasAntes)
+    expect(nuevas).toHaveLength(1)
+    expect((nuevas[0][0] as { where: { id: string } }).where.id).toBe('ord_b')
+    expect(fila.status).toBe('approved')
+    expect(items.every((i) => i.closedAt !== null)).toBe(true)
+    errSpy.mockRestore()
   })
 })
 
@@ -191,17 +301,23 @@ describe('webhook — lo que NO debe pasar', () => {
     expect(prisma.ticketOrder.update).not.toHaveBeenCalled()
   })
 
-  it('un pago pendiente (efectivo) NO confirma la orden', async () => {
-    vi.mocked(prisma.payment.findUnique).mockResolvedValue({ id: 'pay_4', kind: 'ticket_order', resourceId: 'ord_1', status: 'pending' } as never)
+  it('un pago pendiente (efectivo) NO confirma la orden Y DEJA LAS LÍNEAS VIVAS (el recurso sigue reservado)', async () => {
+    const { fila, items } = cobroFake({ id: 'pay_4' }, [{ kind: 'ticket_order', resourceId: 'ord_1' }])
     vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 111, status: 'pending', external_reference: 'pay_4' } as never)
+
     await handleNotification('111', true)
+
     expect(prisma.ticketOrder.update).not.toHaveBeenCalled()
+    expect(fila.status).toBe('pending')
+    // Lo importante: un cupón de efectivo en curso NO libera el índice. Si estas líneas se
+    // cerraran, el comprador podría generarse un segundo cobro por lo mismo.
+    expect(items.every((i) => i.closedAt === null)).toBe(true)
   })
 })
 
-describe('webhook — defecto B: activar antes de marcar aprobado, sin bloquear el reintento', () => {
+describe('webhook — defecto B: un fallo de entrega nunca queda grabado como entregado', () => {
   it('el mismo pago avisado dos veces SEGUIDAS activa una sola vez', async () => {
-    const fila = filaFake({ id: 'pay_5', kind: 'ticket_order', resourceId: 'ord_5' })
+    const { fila } = cobroFake({ id: 'pay_5' }, [{ kind: 'ticket_order', resourceId: 'ord_5' }])
     pagoAprobado('pay_5')
 
     await handleNotification('111', true)
@@ -212,7 +328,7 @@ describe('webhook — defecto B: activar antes de marcar aprobado, sin bloquear 
   })
 
   it('dos avisos CONCURRENTES del mismo pago activan una sola vez (gate atómico, no mockResolvedValueOnce)', async () => {
-    const fila = filaFake({ id: 'pay_6', kind: 'ticket_order', resourceId: 'ord_6' })
+    const { fila } = cobroFake({ id: 'pay_6' }, [{ kind: 'ticket_order', resourceId: 'ord_6' }])
     pagoAprobado('pay_6')
 
     await Promise.all([handleNotification('111', true), handleNotification('111', true)])
@@ -222,8 +338,9 @@ describe('webhook — defecto B: activar antes de marcar aprobado, sin bloquear 
   })
 
   it('si la activación falla, el Payment NO queda bloqueado y un segundo aviso reintenta', async () => {
-    const fila = filaFake({ id: 'pay_7', kind: 'ticket_order', resourceId: 'ord_7' })
+    const { fila } = cobroFake({ id: 'pay_7' }, [{ kind: 'ticket_order', resourceId: 'ord_7' }])
     pagoAprobado('pay_7')
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.mocked(prisma.ticketOrder.update).mockRejectedValueOnce(new Error('P2025 simulado: la orden ya no existe'))
 
     await expect(handleNotification('111', true)).rejects.toThrow()
@@ -239,10 +356,13 @@ describe('webhook — defecto B: activar antes de marcar aprobado, sin bloquear 
 
     expect(prisma.ticketOrder.update).toHaveBeenCalledTimes(2)
     expect(fila.status).toBe('approved')
+    errSpy.mockRestore()
   })
 
   it('membership con deviceId nulo: no activa, deja log, y no queda marcado como entregado', async () => {
-    const fila = filaFake({ id: 'pay_8', kind: 'membership', resourceId: 'dev_borrado', deviceId: null, amount: 9900 })
+    const { fila } = cobroFake({ id: 'pay_8', deviceId: null, amount: 9900 }, [
+      { kind: 'membership', resourceId: 'dev_borrado', amount: 9900 },
+    ])
     pagoAprobado('pay_8')
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
@@ -258,33 +378,33 @@ describe('webhook — defecto B: activar antes de marcar aprobado, sin bloquear 
 })
 
 describe('webhook — defecto C: reversos y vencimientos NO son "pendiente"', () => {
-  it('un pago cancelled (efectivo vencido) libera el índice único: NO queda pending', async () => {
-    vi.mocked(prisma.payment.findUnique).mockResolvedValue({ id: 'pay_9', kind: 'ticket_order', resourceId: 'ord_9', status: 'pending' } as never)
+  it('un pago cancelled (efectivo vencido) libera el índice único: NO queda pending y las líneas se sellan', async () => {
+    const { fila, items } = cobroFake({ id: 'pay_9' }, [{ kind: 'ticket_order', resourceId: 'ord_9' }])
     pagoAprobado('pay_9', 'cancelled')
 
     await handleNotification('111', true)
 
-    const args = vi.mocked(prisma.payment.updateMany).mock.calls[0][0] as { data: { status: string } }
-    expect(args.data.status).not.toBe('pending')
-    expect(args.data.status).toBe('rejected')
+    expect(fila.status).toBe('rejected')
+    // Sin el sellado de las líneas, el comprador no podría generar un cobro nuevo NUNCA MÁS.
+    expect(items.every((i) => i.closedAt !== null)).toBe(true)
   })
 
-  it('un pago refunded se registra como tal y deja el log accionable', async () => {
-    vi.mocked(prisma.payment.findUnique).mockResolvedValue({
-      id: 'pay_10',
-      kind: 'ticket_order',
-      resourceId: 'ord_10',
-      deviceId: 'dev_10',
-      status: 'approved', // ya estaba aprobado y entregado
-    } as never)
+  it('un pago refunded se registra como tal y deja el log accionable con TODO lo entregado', async () => {
+    const { fila } = cobroFake({ id: 'pay_10', deviceId: 'dev_10', status: 'approved' }, [
+      { kind: 'ticket_order', resourceId: 'ord_10', deliveredAt: new Date(), closedAt: new Date() },
+    ])
     pagoAprobado('pay_10', 'refunded')
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await handleNotification('111', true)
 
-    const args = vi.mocked(prisma.payment.updateMany).mock.calls[0][0] as { data: { status: string } }
-    expect(args.data.status).toBe('refunded')
+    expect(fila.status).toBe('refunded')
     expect(errSpy).toHaveBeenCalled()
+    // El log tiene que listar lo que quedó entregado: es lo único accionable para el operador.
+    const contexto = errSpy.mock.calls.flat().find((a) => typeof a === 'object' && a !== null && 'entregado' in (a as object)) as {
+      entregado: { resourceId: string }[]
+    }
+    expect(contexto.entregado.map((e) => e.resourceId)).toEqual(['ord_10'])
 
     errSpy.mockRestore()
   })
@@ -299,9 +419,9 @@ describe('webhook — defecto C: reversos y vencimientos NO son "pendiente"', ()
  */
 describe('webhook — P0-A: la idempotencia es por payment_id CONCRETO, no por "hay algún mpPaymentId"', () => {
   it('rechazado con una tarjeta y aprobado con otra: el aprobado SÍ entrega', async () => {
-    const fila = filaFake({ id: 'pay_A', kind: 'ticket_order', resourceId: 'ord_A' })
+    const { fila } = cobroFake({ id: 'pay_A' }, [{ kind: 'ticket_order', resourceId: 'ord_A' }])
 
-    // Intento 1: la tarjeta rebota. Ocupa mpPaymentId con el payment_id 900.
+    // Intento 1: la tarjeta rebota. Ocupa mpPaymentId con el payment_id 900 y cierra el cobro.
     vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 900, status: 'rejected', external_reference: 'pay_A' } as never)
     await handleNotification('900', true)
     expect(fila.mpPaymentId).toBe('900')
@@ -316,7 +436,7 @@ describe('webhook — P0-A: la idempotencia es por payment_id CONCRETO, no por "
   })
 
   it('efectivo pendiente y después acreditado (mismo payment_id) entrega una sola vez', async () => {
-    const fila = filaFake({ id: 'pay_A2', kind: 'ticket_order', resourceId: 'ord_A2' })
+    const { fila } = cobroFake({ id: 'pay_A2' }, [{ kind: 'ticket_order', resourceId: 'ord_A2' }])
 
     vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 902, status: 'pending', external_reference: 'pay_A2' } as never)
     await handleNotification('902', true)
@@ -331,7 +451,9 @@ describe('webhook — P0-A: la idempotencia es por payment_id CONCRETO, no por "
   })
 
   it('un SEGUNDO payment_id aprobado sobre un pago ya entregado no re-entrega, pero grita en el log', async () => {
-    const fila = filaFake({ id: 'pay_A3', kind: 'ticket_order', resourceId: 'ord_A3', status: 'approved', mpPaymentId: '903' })
+    const { fila } = cobroFake({ id: 'pay_A3', status: 'approved', mpPaymentId: '903' }, [
+      { kind: 'ticket_order', resourceId: 'ord_A3', deliveredAt: new Date() },
+    ])
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 904, status: 'approved', external_reference: 'pay_A3' } as never)
 
@@ -351,7 +473,9 @@ describe('webhook — P0-A: la idempotencia es por payment_id CONCRETO, no por "
  */
 describe('webhook — P0-B: un pago aprobado no puede retroceder de estado', () => {
   it('un rechazo tardío de OTRO payment_id no degrada un pago ya aprobado y entregado', async () => {
-    const fila = filaFake({ id: 'pay_B', kind: 'ticket_order', resourceId: 'ord_B', status: 'approved', mpPaymentId: '901' })
+    const { fila } = cobroFake({ id: 'pay_B', status: 'approved', mpPaymentId: '901' }, [
+      { kind: 'ticket_order', resourceId: 'ord_B', deliveredAt: new Date() },
+    ])
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 900, status: 'rejected', external_reference: 'pay_B' } as never)
 
@@ -363,7 +487,9 @@ describe('webhook — P0-B: un pago aprobado no puede retroceder de estado', () 
   })
 
   it('un pending desordenado tampoco lo devuelve a pendiente (re-trabaría el índice único)', async () => {
-    const fila = filaFake({ id: 'pay_B2', kind: 'ticket_order', resourceId: 'ord_B2', status: 'approved', mpPaymentId: '901' })
+    const { fila } = cobroFake({ id: 'pay_B2', status: 'approved', mpPaymentId: '901' }, [
+      { kind: 'ticket_order', resourceId: 'ord_B2', deliveredAt: new Date() },
+    ])
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 901, status: 'in_process', external_reference: 'pay_B2' } as never)
 
@@ -374,7 +500,9 @@ describe('webhook — P0-B: un pago aprobado no puede retroceder de estado', () 
   })
 
   it('approved → refunded SÍ es una transición válida (el reverso tiene que quedar registrado)', async () => {
-    const fila = filaFake({ id: 'pay_B3', kind: 'ticket_order', resourceId: 'ord_B3', status: 'approved', mpPaymentId: '901' })
+    const { fila } = cobroFake({ id: 'pay_B3', status: 'approved', mpPaymentId: '901' }, [
+      { kind: 'ticket_order', resourceId: 'ord_B3', deliveredAt: new Date() },
+    ])
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 901, status: 'refunded', external_reference: 'pay_B3' } as never)
 
@@ -385,7 +513,9 @@ describe('webhook — P0-B: un pago aprobado no puede retroceder de estado', () 
   })
 
   it('un rechazo que llega después de un reverso tampoco lo pisa', async () => {
-    const fila = filaFake({ id: 'pay_B4', kind: 'ticket_order', resourceId: 'ord_B4', status: 'refunded', mpPaymentId: '901' })
+    const { fila } = cobroFake({ id: 'pay_B4', status: 'refunded', mpPaymentId: '901' }, [
+      { kind: 'ticket_order', resourceId: 'ord_B4', deliveredAt: new Date() },
+    ])
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 900, status: 'rejected', external_reference: 'pay_B4' } as never)
 
@@ -393,5 +523,58 @@ describe('webhook — P0-B: un pago aprobado no puede retroceder de estado', () 
 
     expect(fila.status).toBe('refunded')
     errSpy.mockRestore()
+  })
+})
+
+/**
+ * El invariante que sostiene el índice único parcial:
+ *     closedAt IS NULL  ⟺  Payment.status = 'pending'
+ * Si se rompe, el índice deja de proteger EN SILENCIO (o traba un recurso para siempre). Este
+ * test lo recorre transición por transición: es el gate del espejo.
+ */
+describe('webhook — invariante del espejo closedAt', () => {
+  const casos: { estadoMp: string; esperado: string }[] = [
+    { estadoMp: 'approved', esperado: 'approved' },
+    { estadoMp: 'rejected', esperado: 'rejected' },
+    { estadoMp: 'cancelled', esperado: 'rejected' },
+  ]
+
+  for (const { estadoMp, esperado } of casos) {
+    it(`tras un ${estadoMp} (→ ${esperado}) no queda ninguna línea viva`, async () => {
+      const { fila, items } = cobroFake({ id: 'pay_inv', deviceId: 'dev_1' }, [
+        { kind: 'ticket_order', resourceId: 'ord_i1' },
+        { kind: 'ticket_order', resourceId: 'ord_i2' },
+      ])
+      pagoAprobado('pay_inv', estadoMp)
+
+      await handleNotification('111', true)
+
+      expect(fila.status).toBe(esperado)
+      expect(items.filter((i) => i.closedAt === null)).toHaveLength(0)
+    })
+  }
+
+  it('tras un refunded sobre un cobro ya aprobado tampoco queda ninguna línea viva', async () => {
+    const { fila, items } = cobroFake({ id: 'pay_inv2', status: 'approved', mpPaymentId: '1' }, [
+      { kind: 'ticket_order', resourceId: 'ord_i3', deliveredAt: new Date(), closedAt: null },
+    ])
+    pagoAprobado('pay_inv2', 'refunded')
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await handleNotification('111', true)
+
+    expect(fila.status).toBe('refunded')
+    expect(items.filter((i) => i.closedAt === null)).toHaveLength(0)
+    errSpy.mockRestore()
+  })
+
+  it('con status pending (efectivo) las líneas siguen VIVAS: el recurso queda reservado', async () => {
+    const { fila, items } = cobroFake({ id: 'pay_inv3' }, [{ kind: 'ticket_order', resourceId: 'ord_i4' }])
+    pagoAprobado('pay_inv3', 'pending')
+
+    await handleNotification('111', true)
+
+    expect(fila.status).toBe('pending')
+    expect(items.filter((i) => i.closedAt === null)).toHaveLength(1)
   })
 })

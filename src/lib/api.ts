@@ -18,13 +18,21 @@ export class ApiError extends Error {
   readonly code?: string
   /** Mensaje del backend, ya redactado para el usuario final (en español). */
   readonly serverMessage?: string
+  /**
+   * Datos estructurados del rechazo (`error.details` del backend). Antes se descartaban, y sin
+   * eso hay rechazos que el front no puede resolver: el 409 COBRO_SOLAPADO del checkout trae acá
+   * el `initPoint` del pago en curso, que es lo único que permite ofrecer "retomar el pago" en
+   * vez de dejar al comprador esperando 30 minutos sin explicación.
+   */
+  readonly details?: unknown
 
-  constructor(status: number, message: string, code?: string, serverMessage?: string) {
+  constructor(status: number, message: string, code?: string, serverMessage?: string, details?: unknown) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.serverMessage = serverMessage
+    this.details = details
   }
 
   /** Texto mostrable: prefiere el del backend, que está escrito para el usuario. */
@@ -93,8 +101,16 @@ export function createApi(apiBase: string): ApiClient {
       // basura y quedaba un Error de string con solo el status. Sin `code`, el llamador no puede
       // distinguir un rechazo real (BLOCK_FULL) de uno que en realidad es éxito
       // (ALREADY_REGISTERED), ni mostrarle al usuario por qué falló.
-      const cuerpo = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null
-      throw new ApiError(res.status, `API ${method} ${path} → ${res.status}`, cuerpo?.error?.code, cuerpo?.error?.message)
+      const cuerpo = (await res.json().catch(() => null)) as
+        | { error?: { code?: string; message?: string; details?: unknown } }
+        | null
+      throw new ApiError(
+        res.status,
+        `API ${method} ${path} → ${res.status}`,
+        cuerpo?.error?.code,
+        cuerpo?.error?.message,
+        cuerpo?.error?.details,
+      )
     }
     return (res.status === 204 ? undefined : await res.json()) as T
   }

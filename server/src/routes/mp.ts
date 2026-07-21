@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { requirePermission } from '../middlewares/admin.js'
 import { requireDevice } from '../middlewares/device.js'
 import * as oauth from '../services/mpOAuthService.js'
-import { createCheckout } from '../services/mpCheckoutService.js'
+import { createCheckout, MAX_LINEAS } from '../services/mpCheckoutService.js'
 import { handleNotification, verificarFirma } from '../services/mpWebhookService.js'
 
 export const mpRouter = Router()
@@ -57,20 +57,41 @@ mpRouter.get('/mp/callback', async (req, res) => {
   }
 })
 
-const checkoutSchema = z.object({
+/** Una línea del carrito. El monto NO se acepta: lo calcula el server. */
+const lineaSchema = z.object({
   kind: z.enum(['ticket_order', 'membership', 'ad_campaign']),
   resourceId: z.string().min(1),
-  // El monto NO se acepta: lo calcula el server.
 })
+
+/**
+ * Un cobro cubre N recursos. Se acepta la forma NUEVA (`{ items: [...] }`) y también la VIEJA
+ * (`{ kind, resourceId }`) a propósito: durante el deploy hay clientes ya cargados en el
+ * navegador que siguen mandando la forma vieja, y romperles el checkout significa perder ventas
+ * reales por unos minutos. La vieja se normaliza a un carrito de una línea.
+ */
+const checkoutSchema = z.union([
+  z.object({ items: z.array(lineaSchema).min(1).max(MAX_LINEAS) }),
+  lineaSchema.transform((l) => ({ items: [l] })),
+])
 
 /**
  * POST /api/v1/payments/preference — devuelve el link de pago de esta compra.
  * Device-scoped (la usa el comprador, no el panel): requireDevice, no requirePermission.
+ *
+ * Respuesta 201: { paymentId, initPoint, amount, items: [{ kind, resourceId, amount, titulo }] }.
+ * `amount` viaja de vuelta a propósito: si el server cobra distinto de lo que el comprador vio en
+ * pantalla, el front no redirige. Es la red de contención barata contra la clase de bug que este
+ * endpoint viene a cerrar.
+ *
+ * Errores 409, que NO significan lo mismo: `CHECKOUT_EN_CURSO` es una carrera contra un pedido
+ * idéntico y se resuelve sola (el front reintenta); `COBRO_SOLAPADO` es un cobro vivo con OTRO
+ * conjunto de líneas y no se resuelve nunca solo (el front NO reintenta y ofrece retomar ese
+ * pago, con el `details.initPoint` que viaja en el error).
  */
 mpRouter.post('/payments/preference', requireDevice, async (req, res, next) => {
   try {
-    const { kind, resourceId } = checkoutSchema.parse(req.body)
-    res.status(201).json(await createCheckout(kind, resourceId, req.deviceId!))
+    const { items } = checkoutSchema.parse(req.body)
+    res.status(201).json(await createCheckout(items, req.deviceId!))
   } catch (err) {
     next(err)
   }

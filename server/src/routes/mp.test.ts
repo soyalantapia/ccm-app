@@ -11,9 +11,12 @@ vi.mock('../services/mpWebhookService.js', () => ({
   handleNotification: vi.fn(),
   verificarFirma: vi.fn(),
 }))
+vi.mock('../services/mpCheckoutService.js', () => ({ createCheckout: vi.fn(), MAX_LINEAS: 10 }))
 
 import * as oauth from '../services/mpOAuthService.js'
 import * as webhook from '../services/mpWebhookService.js'
+import { createCheckout } from '../services/mpCheckoutService.js'
+import { signDeviceToken } from '../lib/deviceToken.js'
 import { createApp } from '../app.js'
 import { webhookConfig } from './mp.js'
 
@@ -57,6 +60,85 @@ describe('vuelta de Mercado Pago', () => {
     const res = await request(app).get('/api/v1/mp/callback').expect(302)
     expect(res.headers.location).toContain('mp=error')
     expect(oauth.exchangeCode).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * POST /payments/preference. Un cobro cubre N recursos, así que el contrato pasó de
+ * `{ kind, resourceId }` a `{ items: [{ kind, resourceId }] }`. La forma VIEJA se sigue
+ * aceptando a propósito: durante el deploy hay clientes ya cargados en el navegador que la
+ * mandan, y romperles el checkout es perder ventas reales.
+ */
+describe('POST /payments/preference — contrato multi-línea', () => {
+  const tokenDevice = signDeviceToken('dev_interno_1', 'pub_1')
+
+  beforeEach(() => {
+    vi.mocked(createCheckout).mockResolvedValue({
+      paymentId: 'pay_1',
+      initPoint: 'https://mp/checkout/pref_1',
+      amount: 75000,
+      items: [
+        { kind: 'ticket_order', resourceId: 'ord_a', amount: 30000, titulo: 'Entradas CCM · 1' },
+        { kind: 'ticket_order', resourceId: 'ord_b', amount: 45000, titulo: 'Entradas CCM · 2' },
+      ],
+    })
+  })
+
+  it('sin X-Device-Token no se puede pedir un cobro', async () => {
+    await request(app).post('/api/v1/payments/preference').send({ items: [{ kind: 'ticket_order', resourceId: 'ord_a' }] }).expect(401)
+    expect(createCheckout).not.toHaveBeenCalled()
+  })
+
+  it('acepta un carrito de N líneas y devuelve paymentId, initPoint, amount e items', async () => {
+    const res = await request(app)
+      .post('/api/v1/payments/preference')
+      .set('X-Device-Token', tokenDevice)
+      .send({
+        items: [
+          { kind: 'ticket_order', resourceId: 'ord_a' },
+          { kind: 'ticket_order', resourceId: 'ord_b' },
+        ],
+      })
+      .expect(201)
+
+    expect(createCheckout).toHaveBeenCalledWith(
+      [
+        { kind: 'ticket_order', resourceId: 'ord_a' },
+        { kind: 'ticket_order', resourceId: 'ord_b' },
+      ],
+      'dev_interno_1',
+    )
+    expect(res.body).toMatchObject({ paymentId: 'pay_1', initPoint: 'https://mp/checkout/pref_1', amount: 75000 })
+    expect(res.body.items).toHaveLength(2)
+  })
+
+  it('la forma VIEJA { kind, resourceId } sigue andando: se normaliza a un carrito de una línea', async () => {
+    await request(app)
+      .post('/api/v1/payments/preference')
+      .set('X-Device-Token', tokenDevice)
+      .send({ kind: 'membership', resourceId: 'dev_interno_1' })
+      .expect(201)
+
+    expect(createCheckout).toHaveBeenCalledWith([{ kind: 'membership', resourceId: 'dev_interno_1' }], 'dev_interno_1')
+  })
+
+  it('el monto NUNCA se acepta del body: aunque lo manden, no llega al servicio', async () => {
+    await request(app)
+      .post('/api/v1/payments/preference')
+      .set('X-Device-Token', tokenDevice)
+      .send({ items: [{ kind: 'ticket_order', resourceId: 'ord_a', amount: 1 }] })
+      .expect(201)
+
+    expect(createCheckout).toHaveBeenCalledWith([{ kind: 'ticket_order', resourceId: 'ord_a' }], 'dev_interno_1')
+  })
+
+  it('un carrito vacío no llega al servicio', async () => {
+    await request(app)
+      .post('/api/v1/payments/preference')
+      .set('X-Device-Token', tokenDevice)
+      .send({ items: [] })
+      .expect(400)
+    expect(createCheckout).not.toHaveBeenCalled()
   })
 })
 

@@ -5,10 +5,13 @@
  * lleva entradas gratis — probando los dos candidatos de request-id (ver `verificarFirma`,
  * defecto A del informe de la Tarea 5); (2) no creerle al cuerpo del mensaje — se consulta el
  * estado real a MP; (3) idempotencia, porque MP reintenta: el guard y la decisión de activar son
- * la MISMA operación atómica (ver el `updateMany` en `handleNotification`, defecto B); (4) activar
- * ANTES de marcar aprobado — si activar falla, el Payment no puede quedar en un estado que
- * bloquee el reintento (defecto B); (5) los estados de MP se mapean con intención, no por
- * descarte — un reverso o un vencimiento NO son "pendiente" (defecto C).
+ * la MISMA operación atómica (ver el `updateMany` en `handleNotification`, defecto B); (4) un
+ * fallo de entrega NUNCA queda grabado como entregado — el claim marca `approved` para elegir un
+ * único procesador, pero si activar falla se DESHACE (vuelve a `pending`) y la ruta devuelve 5xx
+ * para que MP reintente (defecto B); (5) los estados de MP se mapean con intención, no por
+ * descarte — un reverso o un vencimiento NO son "pendiente" (defecto C); (6) un cobro cubre N
+ * líneas y se entregan de a una, marcando `PaymentItem.deliveredAt`, así una entrega parcial es
+ * reanudable y el reintento no re-activa lo ya entregado.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { prisma } from '../lib/prisma.js'
@@ -16,6 +19,15 @@ import { env } from '../lib/env.js'
 import * as mpApi from '../lib/mpApi.js'
 import { getValidToken } from './mpOAuthService.js'
 import { becomeSocio } from './membershipService.js'
+import { cerrarPago, cerrarPagoSiSigueEn } from './mpPaymentState.js'
+
+/** Log del bloqueo optimista: el estado del pago cambió mientras procesábamos este aviso. */
+function avisarCarreraDeEstado(paymentId: string, estadoLeido: string, estadoDelAviso: string, mpPaymentId: string): void {
+  console.error(
+    '[mpWebhookService] el estado del pago cambió mientras procesábamos este aviso: no se pisa nada',
+    { paymentId, estadoLeido, estadoDelAviso, mpPaymentId },
+  )
+}
 
 /**
  * Firma de MP: HMAC-SHA256 sobre "id:<dataId>;request-id:<reqId>;ts:<ts>;" con MP_WEBHOOK_SECRET.
@@ -70,7 +82,7 @@ type EstadoPago = 'approved' | 'pending' | 'rejected' | 'refunded'
  * `pending` ni a `rejected` — solo puede avanzar a `refunded`.
  *
  * `expired` y `rejected` comparten rango: los dos son "este intento terminó sin acreditarse" y
- * los dos liberan el índice único parcial Payment(kind,resourceId) WHERE status='pending'. Que
+ * los dos liberan el índice único parcial PaymentItem(kind,resourceId) WHERE "closedAt" IS NULL. Que
  * `pending` NO pueda pisar a `expired` es a propósito: si pudiera, un aviso tardío volvería a
  * trabar ese índice y el comprador no podría generar un cobro nuevo. Si ese pago igual termina
  * acreditándose, el `approved` entra igual (rango mayor) y se entrega.
@@ -94,7 +106,7 @@ function transicionPermitida(actual: string, nuevo: EstadoPago): boolean {
  * charged_back) y pagos en efectivo VENCIDOS (cancelled), con dos consecuencias reales: (1) un
  * pago aprobado y activado que se revierte quedaba re-etiquetado 'pending' sin que nadie lo note
  * (se entregó el producto habiendo devuelto la plata), y (2) un pago vencido quedaba 'pending'
- * para siempre y, por el índice único parcial Payment(kind,resourceId) WHERE status='pending',
+ * para siempre y, por el índice único parcial PaymentItem(kind,resourceId) WHERE "closedAt" IS NULL,
  * ese comprador no podía generar un cobro nuevo NUNCA MÁS para ese recurso.
  */
 function mapearEstado(estadoMp: string): EstadoPago {
@@ -106,14 +118,28 @@ function mapearEstado(estadoMp: string): EstadoPago {
   return 'pending'
 }
 
+/** Subconjunto del cliente Prisma que usa `activar` — así acepta tanto `prisma` como un `tx`. */
+type ClientePrisma = Pick<typeof prisma, 'ticketOrder' | 'adCampaign' | 'membership'>
+
 /**
  * Activa lo que corresponda según el tipo de cobro. TIRA si no pudo entregar de verdad — quien
  * llama (`handleNotification`) es el que decide qué hacer con eso (defecto B): soltar el claim
  * para que MP pueda reintentar, y dejar un log con contexto.
+ *
+ * Recibe el cliente por parámetro para poder correr dentro de la MISMA transacción que marca la
+ * línea como entregada (`PaymentItem.deliveredAt`): si se entregara fuera de la transacción,
+ * una caída en el medio dejaría el recurso activo y la línea sin marcar, y el reintento de MP
+ * volvería a activar (en `ad_campaign` eso regala horas de aire, porque pisa startsAt/expiresAt).
  */
-async function activar(kind: string, resourceId: string, deviceId: string | null, amount: number): Promise<void> {
+async function activar(
+  tx: ClientePrisma,
+  kind: string,
+  resourceId: string,
+  deviceId: string | null,
+  amount: number,
+): Promise<void> {
   if (kind === 'ticket_order') {
-    await prisma.ticketOrder.update({ where: { id: resourceId }, data: { status: 'confirmada' } })
+    await tx.ticketOrder.update({ where: { id: resourceId }, data: { status: 'confirmada' } })
     return
   }
   if (kind === 'membership') {
@@ -125,13 +151,13 @@ async function activar(kind: string, resourceId: string, deviceId: string | null
     if (!deviceId) {
       throw new Error(`membership sin deviceId para resourceId=${resourceId}: no se puede activar (¿Device borrado?)`)
     }
-    await becomeSocio(deviceId, amount)
+    await becomeSocio(deviceId, amount, tx)
     return
   }
-  const camp = await prisma.adCampaign.findUnique({ where: { id: resourceId } })
+  const camp = await tx.adCampaign.findUnique({ where: { id: resourceId } })
   const horas = camp?.hours ?? 1
   const desde = new Date()
-  await prisma.adCampaign.update({
+  await tx.adCampaign.update({
     where: { id: resourceId },
     data: { status: 'activa', startsAt: desde, expiresAt: new Date(desde.getTime() + horas * 3600_000) },
   })
@@ -148,7 +174,7 @@ export async function handleNotification(mpPaymentId: string, firmaValida: boole
   const estado = mapearEstado(pagoMp.status)
 
   if (estado !== 'approved') {
-    const pago = await prisma.payment.findUnique({ where: { id: ref } })
+    const pago = await prisma.payment.findUnique({ where: { id: ref }, include: { items: true } })
     if (!pago) return
 
     // P0-B: antes acá había un `update` INCONDICIONAL. Un aviso de OTRO payment_id de la misma
@@ -170,30 +196,44 @@ export async function handleNotification(mpPaymentId: string, firmaValida: boole
       // Tarea 5, queda pendiente del dueño del producto). Lo mínimo indispensable es dejar un
       // rastro accionable de qué quedó entregado con la plata devuelta.
       console.error(
-        '[mpWebhookService] pago revertido DESPUÉS de haber sido entregado: el recurso sigue activo, alguien tiene que decidir si se revoca',
-        { paymentId: pago.id, kind: pago.kind, resourceId: pago.resourceId, deviceId: pago.deviceId, mpPaymentId, estadoMp: pagoMp.status },
+        '[mpWebhookService] pago revertido DESPUÉS de haber sido entregado: los recursos siguen activos, alguien tiene que decidir si se revocan',
+        {
+          paymentId: pago.id,
+          deviceId: pago.deviceId,
+          mpPaymentId,
+          estadoMp: pagoMp.status,
+          // TODAS las líneas entregadas, no una sola: un cobro puede cubrir varias órdenes y el
+          // operador necesita la lista completa de lo que hay que revocar (o no).
+          entregado: pago.items
+            .filter((i) => i.deliveredAt !== null)
+            .map((i) => ({ kind: i.kind, resourceId: i.resourceId, amount: i.amount })),
+        },
       )
     }
 
-    // Efectivo/Rapipago llega como pending; un rechazo o un vencimiento liberan el índice único
-    // de "pending" (pueden reintentar la compra); un reverso deja constancia de 'refunded'. En
-    // ningún caso de esta rama se activa nada.
-    //
-    // `updateMany` gateado por el estado que acabamos de leer (bloqueo optimista), no `update`
-    // por id: entre el `findUnique` de arriba y esta escritura puede colarse el aviso APROBADO
-    // (otro request, en paralelo) y dejar el pago entregado. Con el estado en el `WHERE`, esa
-    // carrera la pierde este aviso viejo en vez de pisar un `approved` — el chequeo de
-    // `transicionPermitida` solo, sobre una lectura ya rancia, no alcanza.
-    const escrito = await prisma.payment.updateMany({
-      where: { id: pago.id, status: pago.status },
-      data: { mpPaymentId, status: estado, raw: pagoMp as never },
-    })
-    if (escrito.count !== 1) {
-      console.error(
-        '[mpWebhookService] el estado del pago cambió mientras procesábamos este aviso: no se pisa nada',
-        { paymentId: pago.id, estadoLeido: pago.status, estadoDelAviso: estado, mpPaymentId },
-      )
+    if (estado === 'pending') {
+      // Efectivo/Rapipago: el cobro sigue VIVO. Se escribe SOLO la cabecera (nunca `cerrarPago`):
+      // las líneas quedan con `closedAt = null` y el recurso sigue reservado hasta que se
+      // acredite o venza. Cerrarlas acá liberaría el índice y el comprador podría generarse un
+      // segundo cobro por lo mismo.
+      //
+      // `updateMany` gateado por el estado que acabamos de leer (bloqueo optimista), no `update`
+      // por id: entre el `findUnique` de arriba y esta escritura puede colarse el aviso APROBADO
+      // (otro request, en paralelo) y dejar el pago entregado. Con el estado en el `WHERE`, esa
+      // carrera la pierde este aviso viejo en vez de pisar un `approved` — el chequeo de
+      // `transicionPermitida` solo, sobre una lectura ya rancia, no alcanza.
+      const escrito = await prisma.payment.updateMany({
+        where: { id: pago.id, status: pago.status },
+        data: { mpPaymentId, status: 'pending', raw: pagoMp as never },
+      })
+      if (escrito.count !== 1) avisarCarreraDeEstado(pago.id, pago.status, estado, mpPaymentId)
+      return
     }
+
+    // rejected / refunded: el cobro terminó. Cabecera y líneas se cierran JUNTAS (`cerrarPago…`),
+    // que es lo que libera el índice único parcial y deja al comprador reintentar la compra.
+    const cerrado = await cerrarPagoSiSigueEn(pago.id, pago.status, estado, { mpPaymentId, raw: pagoMp as never })
+    if (!cerrado) avisarCarreraDeEstado(pago.id, pago.status, estado, mpPaymentId)
     return
   }
 
@@ -233,14 +273,19 @@ export async function handleNotification(mpPaymentId: string, firmaValida: boole
   })
   if (claim.count !== 1) {
     // No se pudo reclamar. Hay tres motivos posibles y solo uno amerita despertar a alguien.
-    const actual = await prisma.payment.findUnique({ where: { id: ref } })
+    const actual = await prisma.payment.findUnique({ where: { id: ref }, include: { items: true } })
     if (actual && actual.status === 'approved' && actual.mpPaymentId !== mpPaymentId) {
       // DOS pagos aprobados distintos contra la misma compra: MP cobró dos veces de verdad (p.ej.
       // el comprador pagó el cupón de efectivo y además con tarjeta). No re-entregamos —eso está
       // bien— pero alguien tiene que devolver esa plata, así que no puede pasar en silencio.
       console.error(
         '[mpWebhookService] llegó un SEGUNDO pago aprobado para una compra ya entregada: revisar y devolver',
-        { paymentId: ref, kind: actual.kind, resourceId: actual.resourceId, mpPaymentIdEntregado: actual.mpPaymentId, mpPaymentIdNuevo: mpPaymentId },
+        {
+          paymentId: ref,
+          items: actual.items.map((i) => ({ kind: i.kind, resourceId: i.resourceId, amount: i.amount })),
+          mpPaymentIdEntregado: actual.mpPaymentId,
+          mpPaymentIdNuevo: mpPaymentId,
+        },
       )
     }
     // Los otros dos motivos son normales y no se loguean: (1) reintento de MP del MISMO aviso ya
@@ -248,39 +293,61 @@ export async function handleNotification(mpPaymentId: string, firmaValida: boole
     return
   }
 
-  const pago = await prisma.payment.findUnique({ where: { id: ref } })
+  const pago = await prisma.payment.findUnique({ where: { id: ref }, include: { items: true } })
   if (!pago) return // no debería pasar: el updateMany de arriba matcheó justo esta fila
 
-  try {
-    // Defecto B.1: lo que NO se puede es dar el pago por cerrado sin haber entregado. El claim de
-    // arriba marcó `approved`, pero si `activar` falla (el recurso ya no existe → Prisma tira
-    // P2025, o una membresía sin deviceId — ver el comentario en `activar`) el `catch` DESHACE
-    // ese estado. Lo prohibido es que un fallo de entrega quede grabado como entregado: ahí
-    // ningún reintento de MP volvería a intentar, y sería plata cobrada con producto jamás
-    // entregado.
-    await activar(pago.kind, pago.resourceId, pago.deviceId, pago.amount)
-  } catch (err) {
-    // No se pudo entregar: se deshace el claim (vuelve a `pending`, y `mpPaymentId` a null) para
-    // que el PRÓXIMO reintento de MP —que llega porque la ruta devuelve 5xx, ver mp.ts, P0-C—
-    // pueda volver a intentarlo, en vez de quedar trabado para siempre. Vuelve a `pending` y no a
-    // `expired`: hay un pago aprobado de verdad dando vueltas, así que el comprador NO debería
-    // poder generarse un segundo cobro para este recurso mientras tanto (índice único parcial).
-    console.error(
-      '[mpWebhookService] no se pudo activar un pago aprobado — se deshace el claim para que MP pueda reintentar',
-      { paymentId: pago.id, kind: pago.kind, resourceId: pago.resourceId, deviceId: pago.deviceId, mpPaymentId },
-      err instanceof Error ? err.stack : err,
-    )
-    await prisma.payment.updateMany({
-      where: { id: pago.id, mpPaymentId },
-      data: { mpPaymentId: null, status: 'pending' },
-    })
-    throw err
+  // Entrega LÍNEA POR LÍNEA (un cobro puede cubrir varias órdenes). Cada línea se entrega y se
+  // marca en la MISMA transacción, así que una entrega parcial queda registrada: el reintento de
+  // MP saltea lo ya entregado en vez de re-activarlo. Antes de `deliveredAt`, un reintento sobre
+  // `ad_campaign` volvía a pisar startsAt/expiresAt (regalando horas de aire) y `becomeSocio`
+  // volvía a pisar `since`.
+  const noEntregadas = pago.items.filter((i) => i.deliveredAt === null)
+  for (const linea of noEntregadas) {
+    try {
+      // Defecto B.1: lo que NO se puede es dar el pago por cerrado sin haber entregado. El claim
+      // de arriba marcó `approved`, pero si `activar` falla (el recurso ya no existe → Prisma
+      // tira P2025, o una membresía sin deviceId — ver el comentario en `activar`) el `catch`
+      // DESHACE ese estado. Lo prohibido es que un fallo de entrega quede grabado como entregado:
+      // ahí ningún reintento de MP volvería a intentar, y sería plata cobrada con producto jamás
+      // entregado.
+      await prisma.$transaction(async (tx) => {
+        await activar(tx, linea.kind, linea.resourceId, pago.deviceId, linea.amount)
+        await tx.paymentItem.update({ where: { id: linea.id }, data: { deliveredAt: new Date() } })
+      })
+    } catch (err) {
+      // No se pudo entregar ESTA línea: se deshace el claim (vuelve a `pending`, y `mpPaymentId`
+      // a null) para que el PRÓXIMO reintento de MP —que llega porque la ruta devuelve 5xx, ver
+      // mp.ts, P0-C— pueda volver a intentarlo, en vez de quedar trabado para siempre. Vuelve a
+      // `pending` y no a `expired`: hay un pago aprobado de verdad dando vueltas, así que el
+      // comprador NO debería poder generarse un segundo cobro para estos recursos mientras tanto
+      // (y las líneas siguen con closedAt = null, que es lo que lo impide).
+      //
+      // Las líneas que YA se entregaron en esta pasada conservan su `deliveredAt`: son entregas
+      // reales, no hay que deshacerlas ni repetirlas.
+      console.error(
+        '[mpWebhookService] no se pudo activar una línea de un pago aprobado — se deshace el claim para que MP pueda reintentar',
+        {
+          paymentId: pago.id,
+          lineaQueFalló: { kind: linea.kind, resourceId: linea.resourceId },
+          entregadas: pago.items.filter((i) => i.deliveredAt !== null).map((i) => `${i.kind}:${i.resourceId}`),
+          sinEntregar: noEntregadas.map((i) => `${i.kind}:${i.resourceId}`),
+          deviceId: pago.deviceId,
+          mpPaymentId,
+        },
+        err instanceof Error ? err.stack : err,
+      )
+      await prisma.payment.updateMany({
+        where: { id: pago.id, mpPaymentId },
+        data: { mpPaymentId: null, status: 'pending' },
+      })
+      throw err
+    }
   }
 
-  // Entregado. El estado ya quedó en `approved` con el claim; esto guarda el detalle del pago tal
-  // como lo devolvió MP (queda para reconciliar a mano si alguna vez hay que discutir un cobro).
-  await prisma.payment.update({
-    where: { id: pago.id },
-    data: { status: 'approved', raw: pagoMp as never },
-  })
+  // Todo entregado. `cerrarPago` (y no un `update` suelto) porque además de guardar el detalle
+  // que devolvió MP hay que SELLAR las líneas (`closedAt`): el claim de arriba dejó la cabecera
+  // en `approved` con las líneas todavía vivas, y ese hueco es la única ventana en la que el
+  // invariante del espejo queda abierto. Si el proceso se cae justo acá, lo repara el barrido de
+  // `repararEspejo` en el próximo checkout de esos recursos.
+  await cerrarPago(pago.id, 'approved', { raw: pagoMp as never })
 }

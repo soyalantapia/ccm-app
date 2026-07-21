@@ -14,6 +14,22 @@ interface PendingCheckout {
   orders: TicketOrder[]
   total: number
   mpLink: string
+  /** El link no es de un cobro nuevo: es un pago que el comprador ya tenía abierto y va a retomar. */
+  retomando?: boolean
+}
+
+/**
+ * Link manual del plan (mpLink), la red de seguridad de siempre para cuando no hay checkout real.
+ *
+ * ⚠️ SOLO sirve para UNA entrada de UN plan: es una URL de precio fijo de Mercado Pago. Con dos
+ * planes en el carrito, o con cantidad > 1, mandar ahí al comprador le cobra una fracción de lo
+ * que compró — exactamente el bug que este cambio viene a cerrar, entrando por la puerta de
+ * atrás. En ese caso devuelve '' y `goToMp` muestra "no disponible" sin marcar nada como
+ * redirigido: cobrar de menos es peor que no cobrar.
+ */
+function fallbackManual(selected: TicketPlan[], totalQty: number): string {
+  if (selected.length > 1 || totalQty > 1) return ''
+  return selected.find((p) => p.mpLink)?.mpLink ?? ''
 }
 
 /**
@@ -64,14 +80,45 @@ export function TicketSelector({ className }: { className?: string }) {
       if (!ok) return
       const selected = vipPlans.filter((p) => (qty[p.id] ?? 0) > 0)
       if (selected.length === 0) return
-      const orders = selected.map((p) => store.createOrder(p.id, qty[p.id]!))
-      // Total real de las órdenes creadas (no del render, que pudo cambiar durante el await).
+
+      // AWAIT de verdad: `createOrder` es fire-and-forget y el checkout de abajo puede llegar al
+      // server ANTES que las órdenes (→ RESOURCE_NOT_FOUND → link manual mal cobrado).
+      let orders: TicketOrder[]
+      try {
+        orders = await store.createOrders(selected.map((p) => ({ planId: p.id, qty: qty[p.id]! })))
+      } catch {
+        toast('No pudimos registrar tu compra. Revisá tu conexión y probá de nuevo.', 'info')
+        return
+      }
+      // Total real de las órdenes creadas (no el del render, que pudo cambiar durante el await).
       const orderedTotal = orders.reduce((acc, o) => acc + o.total, 0)
-      // Checkout real por la PRIMERA orden; si no hay conexión con MP (o el checkout no se pudo
-      // generar), cae al link manual del plan — la venta nunca se corta.
-      const real = await store.startCheckout('ticket_order', orders[0].id)
-      const mpLink = real ?? selected.find((p) => p.mpLink)?.mpLink ?? ''
-      setPending({ orders, total: orderedTotal, mpLink })
+
+      // UN solo cobro que cubre TODAS las órdenes: una preferencia de MP por el total. Antes se
+      // pedía el cobro de la PRIMERA orden nada más, así que un carrito de dos planes pagaba uno
+      // y se llevaba los dos.
+      let real: { initPoint: string; amount: number } | null
+      try {
+        real = await store.startCheckout(orders.map((o) => ({ kind: 'ticket_order' as const, resourceId: o.id })))
+      } catch (err) {
+        // COBRO_SOLAPADO: alguna de estas órdenes ya está adentro de otro pago en curso. No se
+        // resuelve solo y NO hay que darle el link manual (cobra otra cosa): se le ofrece
+        // retomar el pago que ya tiene abierto.
+        const enCurso = (err as { details?: { initPoint?: string } })?.details?.initPoint
+        if (enCurso) {
+          setPending({ orders, total: orderedTotal, mpLink: enCurso, retomando: true })
+        } else {
+          toast('Ya tenés un pago en curso para estas entradas. Esperá unos minutos y probá de nuevo.', 'info')
+        }
+        return
+      }
+
+      // Si el server cobra distinto de lo que el comprador vio en pantalla, NO se redirige.
+      if (real && real.amount !== orderedTotal) {
+        toast('Los precios cambiaron, revisá tu compra antes de pagar.', 'info')
+        return
+      }
+
+      setPending({ orders, total: orderedTotal, mpLink: real?.initPoint ?? fallbackManual(selected, totalQty) })
     } finally {
       busyRef.current = false
       setBusy(false)
@@ -213,9 +260,19 @@ export function TicketSelector({ className }: { className?: string }) {
         {pending && (
           <div>
             <p className="text-[15px] leading-relaxed text-ink-soft">
-              Tu orden por{' '}
-              <span className="font-semibold text-ink">{formatMoney(pending.total)}</span> ya quedó
-              registrada: completá el pago en Mercado Pago y confirmamos tu lugar.
+              {pending.retomando ? (
+                <>
+                  Ya tenías un pago en curso que incluye estas entradas. Para no cobrarte dos
+                  veces, te llevamos a <span className="font-semibold text-ink">ese mismo pago</span>{' '}
+                  en vez de generar uno nuevo.
+                </>
+              ) : (
+                <>
+                  Tu orden por{' '}
+                  <span className="font-semibold text-ink">{formatMoney(pending.total)}</span> ya
+                  quedó registrada: completá el pago en Mercado Pago y confirmamos tu lugar.
+                </>
+              )}
             </p>
             <ul className="mt-4 space-y-1.5 border-t border-line pt-4">
               {pending.orders.map((o) => {
@@ -232,7 +289,8 @@ export function TicketSelector({ className }: { className?: string }) {
               })}
             </ul>
             <Button size="lg" className="mt-6 w-full" onClick={goToMp}>
-              Ir a Mercado Pago <ArrowUpRight size={16} strokeWidth={2.25} aria-hidden />
+              {pending.retomando ? 'Retomar el pago en curso' : 'Ir a Mercado Pago'}{' '}
+              <ArrowUpRight size={16} strokeWidth={2.25} aria-hidden />
             </Button>
             <p className="eyebrow mt-4 text-center text-[10px] text-ink-soft/70">
               Pago seguro con Mercado Pago
