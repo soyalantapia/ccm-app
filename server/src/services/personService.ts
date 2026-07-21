@@ -342,6 +342,16 @@ export interface PersonaFicha extends PersonaListItem {
   consentimientos: { terms: string | null; news: string | null; sponsors: string | null }
   inscripcionesDetalle: { id: string; eventId: string; blockId: string | null; status: string; ts: string }[]
   postulacionesDetalle: { id: string; convocatoriaId: string; status: string; ts: string; data: unknown }[]
+  /** Qué entradas compró. `planTitle` viaja resuelto para que la ficha no muestre un id opaco. */
+  ordenesDetalle: {
+    id: string
+    planId: string
+    planTitle: string
+    status: string
+    qty: number
+    total: number
+    ts: string
+  }[]
   membresia: { tier: string; since: string | null } | null
   actividad: { type: string; ts: string; meta: unknown }[]
 }
@@ -355,6 +365,7 @@ export async function getPerson(id: string): Promise<PersonaFicha | null> {
           fields: true,
           membership: true,
           registrations: { orderBy: { ts: 'desc' } },
+          orders: { orderBy: { ts: 'desc' }, include: { plan: { select: { name: true } } } },
           _count: { select: { registrations: true } },
         },
       },
@@ -413,6 +424,16 @@ export async function getPerson(id: string): Promise<PersonaFicha | null> {
     postulacionesDetalle: p.applications.map((a) => ({
       id: a.id, convocatoriaId: a.convocatoriaId, status: a.status, ts: a.ts.toISOString(), data: a.data,
     })),
+    // El orderBy del include ordena dentro de CADA dispositivo; con dos dispositivos el flatMap
+    // los concatena y el resultado deja de estar ordenado. Se reordena sobre el total, que es lo
+    // que la ficha promete mostrar: las compras de la persona, de la más nueva a la más vieja.
+    ordenesDetalle: p.devices
+      .flatMap((d) => d.orders)
+      .sort((a, b) => b.ts.getTime() - a.ts.getTime())
+      .map((o) => ({
+        id: o.id, planId: o.planId, planTitle: o.plan.name, status: o.status,
+        qty: o.qty, total: o.total, ts: o.ts.toISOString(),
+      })),
     membresia: membership ? { tier: membership.tier, since: membership.since?.toISOString() ?? null } : null,
     // AnalyticsEvent no tiene columnas `type`/`meta`: son `event` y `payload`.
     actividad: analytics.map((a) => ({ type: a.event, ts: a.ts.toISOString(), meta: a.payload })),

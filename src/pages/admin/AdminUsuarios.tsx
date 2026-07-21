@@ -71,7 +71,8 @@ export default function AdminUsuarios() {
         {anonimos > 0 && (
           <p className="mt-8 border-t border-line pt-5 text-xs text-ink-soft">
             Además, {anonimos} dispositivo{anonimos > 1 ? 's' : ''} anónimo
-            {anonimos > 1 ? 's' : ''} visitó la app sin dejar datos.
+            {anonimos > 1 ? 's' : ''} {anonimos > 1 ? 'visitaron' : 'visitó'} la app sin dejar
+            datos.
           </p>
         )}
       </div>
