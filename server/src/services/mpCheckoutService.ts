@@ -131,6 +131,62 @@ async function guardarPreferenciaConReintentos(paymentId: string, pref: { id: st
   return false
 }
 
+/**
+ * Decide qué hacer con un Payment `pending` viejo que quedó SIN mpPreferenceId. Esa fila puede
+ * haber quedado así por caminos con consecuencias opuestas:
+ *
+ *   a) `createPreference` falló, o el proceso murió antes de llamarla (un deploy en el momento
+ *      justo) → en MP no hay NADA. Cerrar la fila es seguro y necesario.
+ *   b) `createPreference` funcionó pero el `update` que la guardaba no (ver
+ *      `guardarPreferenciaConReintentos`) → en MP hay una preferencia VIVA, y en (b2) el
+ *      comprador incluso se llevó el link. Crear otra sería un segundo link pagable: doble cobro.
+ *
+ * Desde la base son indistinguibles, así que se le pregunta a MP, que es el único que sabe. El
+ * `external_reference` con el que se buscó es el Payment.id, que es también lo que reconcilia el
+ * webhook — la misma clave, no una paralela que pueda desincronizarse.
+ *
+ * Devuelve el `initPoint` recuperado si había una preferencia viva (caso b: se le devuelve al
+ * comprador EL MISMO link, nunca uno nuevo), o `null` si MP confirmó que no hay ninguna (caso a),
+ * dejando la fila cerrada para liberar el índice único parcial. Si no se pudo preguntar, TIRA:
+ * ante la duda no se toca nada, que es el comportamiento conservador de siempre.
+ */
+async function resolverHuerfanoContraMp(token: string, paymentId: string): Promise<string | null> {
+  let busqueda: mpApi.BusquedaPreferencia
+  try {
+    busqueda = await mpApi.buscarPreferenciaPorReferencia(token, paymentId)
+  } catch (err) {
+    console.error(
+      `[mpCheckoutService] no se pudo consultar a MP si el Payment ${paymentId} dejó una preferencia viva; se mantiene el bloqueo conservador`,
+      err instanceof Error ? err.message : err,
+    )
+    throw conflict(
+      'CHECKOUT_EN_CURSO',
+      'No pudimos verificar el estado de un cobro anterior para esto. Reintentá en unos minutos; si el problema sigue, contactanos.',
+    )
+  }
+
+  if (busqueda.hallada) {
+    // Se recupera lo que se había perdido. El `update` puede fallar de nuevo (quizá la base sigue
+    // mal, que es lo que causó todo esto): no importa, el link se devuelve igual y la próxima vez
+    // se vuelve a recuperar por el mismo camino.
+    await prisma.payment
+      .update({ where: { id: paymentId }, data: { mpPreferenceId: busqueda.id || null, initPoint: busqueda.init_point } })
+      .catch((err) => {
+        console.error(`[mpCheckoutService] preferencia recuperada de MP pero no se pudo guardar en el Payment ${paymentId}`, err)
+      })
+    return busqueda.init_point
+  }
+
+  // MP contestó que no conoce ninguna preferencia para esta referencia. La fila es basura: se
+  // cierra como `rejected` (el enum PaymentStatus no tiene un estado 'expired' y agregarlo pedía
+  // una migración solo para esto) y así deja de trabar el índice único parcial.
+  await prisma.payment.update({ where: { id: paymentId }, data: { status: 'rejected' } })
+  console.warn(
+    `[mpCheckoutService] Payment ${paymentId} quedó pending sin preferencia y MP confirmó que no hay ninguna viva: se cierra como rejected para destrabar el recurso`,
+  )
+  return null
+}
+
 export async function createCheckout(
   kind: PaymentKind,
   resourceId: string,
@@ -156,21 +212,27 @@ export async function createCheckout(
   // ampliando el `where` del `findFirst` de arriba, porque el `if (existente?.initPoint)` de
   // arriba de todas formas filtra las filas sin `initPoint` — hace falta esta consulta aparte,
   // ANTES de intentar crear, para cortar con un 409 en vez de arriesgar un segundo link pagable.
-  const riesgoso = await prisma.payment.findFirst({
-    where: {
-      kind,
-      resourceId,
-      status: 'pending',
-      mpPreferenceId: null,
-      createdAt: { gte: new Date(Date.now() - VENTANA_RIESGO_SIN_PREFERENCIA_MS) },
-    },
+  const huerfano = await prisma.payment.findFirst({
+    where: { kind, resourceId, status: 'pending', mpPreferenceId: null },
     orderBy: { createdAt: 'desc' },
   })
-  if (riesgoso) {
-    throw conflict(
-      'CHECKOUT_EN_CURSO',
-      'Puede haber un cobro en curso para esto. Esperá unos minutos y volvé a intentar; si el problema sigue, contactanos.',
-    )
+  if (huerfano) {
+    const recien = huerfano.createdAt.getTime() >= Date.now() - VENTANA_RIESGO_SIN_PREFERENCIA_MS
+    if (recien) {
+      throw conflict(
+        'CHECKOUT_EN_CURSO',
+        'Puede haber un cobro en curso para esto. Esperá unos minutos y volvé a intentar; si el problema sigue, contactanos.',
+      )
+    }
+    // Pasada la ventana, el 409 de arriba deja de proteger y pasa a ser una condena: el índice
+    // único parcial sigue rechazando cualquier `create` para este (kind, resourceId), pero esta
+    // fila no tiene ningún `initPoint` que ofrecer en su lugar. Sin lo que sigue, el recurso
+    // queda IMPAGABLE PARA SIEMPRE (no hay ningún job que expire los pending abandonados).
+    const link = await resolverHuerfanoContraMp(token, huerfano.id)
+    if (link) return { initPoint: link, paymentId: huerfano.id }
+    // MP confirmó que no hay ninguna preferencia viva para esta fila: no existe ningún link
+    // pagable dando vueltas, así que cerrarla no puede provocar un doble cobro y libera el
+    // índice único para que el `create` de abajo funcione.
   }
 
   // Defecto A: que la BASE elija un único ganador antes de llamar a MP, no el `findFirst` de

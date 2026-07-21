@@ -96,6 +96,43 @@ export function createPreference(
   return post<{ id: string; init_point: string }>('/checkout/preferences', body, accessToken)
 }
 
+/**
+ * Busca en MP la preferencia creada para un `external_reference` (que en este proyecto ES el
+ * Payment.id — ver createCheckout). Sirve para un caso puntual: cuando la preferencia se creó
+ * bien en MP pero el `update` que la guardaba en la base falló, el `pref.id` se perdió de nuestro
+ * lado y MP es el ÚNICO que sabe si hay un link vivo y pagable para ese cobro.
+ *
+ * Distingue con intención dos cosas que no se pueden confundir:
+ *   - `{ hallada: false }` → MP contestó y NO tiene ninguna preferencia para esa referencia.
+ *   - tira ApiError            → no se pudo preguntar (red, 4xx, cuerpo con otra forma).
+ * Quien llama tiene que tratar el error como "no sé", nunca como "no hay": actuar sobre un "no
+ * sé" es exactamente lo que genera un segundo link pagable para algo que ya tenía uno.
+ */
+export type BusquedaPreferencia = { hallada: true; id: string; init_point: string } | { hallada: false }
+
+export async function buscarPreferenciaPorReferencia(
+  accessToken: string,
+  externalReference: string,
+): Promise<BusquedaPreferencia> {
+  return conTimeout(async (signal) => {
+    const url = `${AUTH_BASE}/checkout/preferences/search?external_reference=${encodeURIComponent(externalReference)}`
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }, signal })
+    if (!res.ok) {
+      throw new ApiError(502, 'MP_API_ERROR', `Mercado Pago respondió ${res.status} al buscar la preferencia`)
+    }
+    const cuerpo = (await res.json()) as { elements?: { id?: string; init_point?: string }[] }
+    // Un cuerpo sin `elements` NO es "no hay ninguna": es una respuesta que no entendemos (una
+    // versión distinta de la API, un proxy que devolvió otra cosa). Tirar es lo correcto — deja
+    // que el caller se quede en el camino conservador en vez de deducir un "no hay" de la nada.
+    if (!Array.isArray(cuerpo.elements)) {
+      throw new ApiError(502, 'MP_API_ERROR', 'Mercado Pago devolvió una búsqueda de preferencias con una forma inesperada')
+    }
+    const viva = cuerpo.elements.find((e) => typeof e?.init_point === 'string' && e.init_point)
+    if (!viva?.init_point) return { hallada: false }
+    return { hallada: true, id: viva.id ?? '', init_point: viva.init_point }
+  })
+}
+
 /** Consulta el estado REAL de un pago. Nunca se le cree al cuerpo del webhook. */
 export async function getPayment(accessToken: string, paymentId: string): Promise<MpPayment> {
   return conTimeout(async (signal) => {

@@ -8,7 +8,7 @@ vi.mock('../lib/prisma.js', () => ({
   },
 }))
 vi.mock('./mpOAuthService.js', () => ({ getValidToken: vi.fn() }))
-vi.mock('../lib/mpApi.js', () => ({ createPreference: vi.fn() }))
+vi.mock('../lib/mpApi.js', () => ({ createPreference: vi.fn(), buscarPreferenciaPorReferencia: vi.fn() }))
 
 import { prisma } from '../lib/prisma.js'
 import * as mpApi from '../lib/mpApi.js'
@@ -28,6 +28,9 @@ beforeEach(() => {
   // filtrando hacia tests posteriores que no lo esperan.
   vi.mocked(prisma.payment.update).mockResolvedValue({} as never)
   vi.mocked(mpApi.createPreference).mockResolvedValue({ id: 'pref_1', init_point: 'https://mp/checkout/pref_1' })
+  // Default: MP no conoce ninguna preferencia para la referencia consultada. Solo se llega a
+  // consultarle cuando hay un pending huérfano viejo, así que este default no afecta al resto.
+  vi.mocked(mpApi.buscarPreferenciaPorReferencia).mockResolvedValue({ hallada: false })
 })
 
 /** Lee el monto que se le mandó a MP en la preferencia. */
@@ -213,6 +216,15 @@ function crearPaymentStoreEnMemoria() {
       Object.assign(fila, data)
       return { ...fila }
     },
+    /**
+     * Retrasa el `createdAt` de todo lo que ya está guardado, para simular el paso del tiempo sin
+     * fake timers (que acá no sirven: el servicio hace `dormir()` de verdad entre reintentos y con
+     * timers falsos esas esperas nunca resuelven). Es lo que permite distinguir el 409 legítimo
+     * de "hay un checkout en curso ahora mismo" del 409 permanente de un pending abandonado.
+     */
+    envejecer: (ms: number) => {
+      for (const f of filas) f.createdAt = new Date(f.createdAt.getTime() - ms)
+    },
   }
 }
 
@@ -287,6 +299,100 @@ describe('mpCheckoutService — el reintento del comprador tras un fallo de pers
     await expect(createCheckout('ticket_order', 'ord_1', 'dev_1')).rejects.toMatchObject({ code: 'CHECKOUT_EN_CURSO' })
 
     expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * El caso de arriba (defecto B) verifica el 409 DENTRO de la ventana de riesgo, donde es la
+ * respuesta correcta: puede haber una preferencia viva recién creada que la base no alcanzó a
+ * registrar, y darle un segundo link al comprador sería arriesgar un doble cobro.
+ *
+ * Este describe cubre lo que pasa DESPUÉS de esa ventana. Ahí el mismo 409 deja de proteger y
+ * pasa a ser una traba: el índice único parcial `(kind, resourceId) WHERE status = 'pending'`
+ * sigue rechazando el `create`, pero ya no hay ningún `initPoint` que devolver en su lugar. El
+ * recurso queda impagable de forma PERMANENTE — y como no existe ningún job que expire los
+ * pending abandonados, nada lo destraba solo.
+ */
+describe('mpCheckoutService — un pending abandonado sin preferencia no puede trabar el recurso para siempre', () => {
+  it('pasada la ventana de riesgo, el comprador puede volver a pedir el link (hoy: 409 para siempre)', async () => {
+    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
+
+    const store = crearPaymentStoreEnMemoria()
+    vi.mocked(prisma.payment.create).mockImplementation(store.create as never)
+    vi.mocked(prisma.payment.findFirst).mockImplementation(store.findFirst as never)
+    vi.mocked(prisma.payment.update).mockImplementation(store.update as never)
+
+    // Primer intento: MP nunca llega a responder (timeout de red). El servicio marca el Payment
+    // como `rejected`... salvo que el `update` que lo marca también falle, que es justo lo que
+    // pasa cuando lo que se cayó es la base. Peor todavía: si el proceso muere entre el `create`
+    // y el `update` —un deploy en el momento exacto—, el Payment queda `pending` sin preferencia
+    // y sin que ninguna línea de código llegue nunca a limpiarlo.
+    vi.mocked(mpApi.createPreference).mockRejectedValueOnce(new Error('timeout contra MP'))
+    vi.mocked(prisma.payment.update).mockRejectedValueOnce(new Error('la base se cayó justo acá'))
+    await expect(createCheckout('ticket_order', 'ord_1', 'dev_1')).rejects.toMatchObject({ code: 'MP_API_ERROR' })
+
+    // Media hora después el comprador vuelve. No hay ninguna preferencia viva en MP (la creación
+    // falló), así que no hay ningún riesgo de doble cobro: darle un link nuevo es lo correcto.
+    store.envejecer(30 * 60_000)
+
+    vi.mocked(mpApi.createPreference).mockResolvedValue({ id: 'pref_2', init_point: 'https://mp/checkout/pref_2' })
+    const r = await createCheckout('ticket_order', 'ord_1', 'dev_1')
+    expect(r.initPoint).toBe('https://mp/checkout/pref_2')
+  })
+
+  // El contracaso del anterior, y el que de verdad importa: destrabar el recurso NO puede
+  // convertirse en una fábrica de segundos links pagables.
+  it('si MP SÍ tiene una preferencia viva para esa fila, devuelve ESE link y no crea otro (nada de doble cobro)', async () => {
+    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
+
+    const store = crearPaymentStoreEnMemoria()
+    vi.mocked(prisma.payment.create).mockImplementation(store.create as never)
+    vi.mocked(prisma.payment.findFirst).mockImplementation(store.findFirst as never)
+    vi.mocked(prisma.payment.update).mockImplementation(store.update as never)
+
+    // Primer intento: la preferencia se crea BIEN en MP, pero guardarla en la base falla siempre.
+    // El comprador se va con un link vivo en la mano y la base no registra ninguno.
+    vi.mocked(mpApi.createPreference).mockResolvedValue({ id: 'pref_1', init_point: 'https://mp/checkout/pref_1' })
+    vi.mocked(prisma.payment.update).mockRejectedValue(new Error('la base no vuelve más'))
+    const r1 = await createCheckout('ticket_order', 'ord_1', 'dev_1')
+    expect(r1.initPoint).toBe('https://mp/checkout/pref_1')
+
+    // Media hora después vuelve a pedir el link. La base sigue sin saber nada de pref_1, pero MP
+    // sí: es la única fuente de verdad, y por eso se le pregunta antes de tocar nada.
+    vi.mocked(prisma.payment.update).mockImplementation(store.update as never)
+    store.envejecer(30 * 60_000)
+    vi.mocked(mpApi.buscarPreferenciaPorReferencia).mockResolvedValue({ hallada: true, id: 'pref_1', init_point: 'https://mp/checkout/pref_1' })
+
+    const r2 = await createCheckout('ticket_order', 'ord_1', 'dev_1')
+
+    expect(r2.initPoint).toBe('https://mp/checkout/pref_1')
+    // Lo esencial: una sola preferencia viva en MP para esta orden, en los dos pedidos.
+    expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
+  })
+
+  it('si no se puede preguntar a MP, se mantiene el bloqueo conservador en vez de arriesgar un segundo link', async () => {
+    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
+
+    const store = crearPaymentStoreEnMemoria()
+    vi.mocked(prisma.payment.create).mockImplementation(store.create as never)
+    vi.mocked(prisma.payment.findFirst).mockImplementation(store.findFirst as never)
+    vi.mocked(prisma.payment.update).mockImplementation(store.update as never)
+
+    vi.mocked(mpApi.createPreference).mockRejectedValueOnce(new Error('timeout contra MP'))
+    vi.mocked(prisma.payment.update).mockRejectedValueOnce(new Error('la base se cayó justo acá'))
+    await expect(createCheckout('ticket_order', 'ord_1', 'dev_1')).rejects.toMatchObject({ code: 'MP_API_ERROR' })
+
+    store.envejecer(30 * 60_000)
+    // MP no contesta la búsqueda: NO sabemos si hay un link vivo. Un "no sé" jamás puede
+    // tratarse como un "no hay".
+    vi.mocked(mpApi.buscarPreferenciaPorReferencia).mockRejectedValue(new Error('MP caído'))
+    vi.mocked(mpApi.createPreference).mockResolvedValue({ id: 'pref_2', init_point: 'https://mp/checkout/pref_2' })
+    // Se descarta el intento fallido de arriba: lo que se mide es si el SEGUNDO pedido crea algo.
+    vi.mocked(mpApi.createPreference).mockClear()
+
+    await expect(createCheckout('ticket_order', 'ord_1', 'dev_1')).rejects.toMatchObject({ code: 'CHECKOUT_EN_CURSO' })
+    // Ni una sola preferencia nueva mientras la duda esté abierta.
+    expect(mpApi.createPreference).not.toHaveBeenCalled()
   })
 })
 
