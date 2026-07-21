@@ -28,6 +28,9 @@ export function OpsApplicationCard({ app, tab }: { app: Application; tab: Applic
         <h3 className="type-serif text-xl text-ink">{title}</h3>
         <div className="flex items-center gap-3">
           <span className="text-xs text-ink-soft">{relativeTime(app.ts)}</span>
+          {/* La lista ya las agrupa aparte bajo un rótulo; esto es un segundo aviso a nivel
+           *  card, para que "Ejemplo" sea visible aunque se mire una card suelta. */}
+          {app.fromSeed && <Badge tone="neutral">Ejemplo</Badge>}
           <Badge tone={meta.tone}>{meta.label}</Badge>
         </div>
       </div>
