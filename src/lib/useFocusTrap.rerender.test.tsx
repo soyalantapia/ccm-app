@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useRef, useState } from 'react'
 import { render, fireEvent, cleanup, act } from '@testing-library/react'
 import { useFocusTrap } from './useFocusTrap'
@@ -37,12 +37,34 @@ function DialogoConCampo({ onCerrar }: { onCerrar: () => void }) {
 const quienTieneElFoco = () => document.activeElement?.getAttribute('aria-label') ?? '(ninguno)'
 
 /**
- * jsdom no calcula layout, así que `offsetParent` es null en TODO. `getFocusable` filtra por
- * ese campo, con lo cual sin este parche no encuentra ningún elemento, el trap nunca mueve el
- * foco y los tests pasan sin ejercitar nada — un verde que no prueba nada.
+ * Los rAF pendientes, ejecutados a mano.
+ *
+ * El trap reenfoca dentro de un `requestAnimationFrame`. Esperar rAF *reales* hacía el test
+ * intermitente: con 24 archivos de test en paralelo, el frame puede tardar más que la espera y
+ * el test pasaba sin haber dado oportunidad al reenfoque — o fallaba por ruido de scheduling.
+ * Interceptando rAF y disparándolo nosotros, el momento del reenfoque es determinístico.
  */
+let rafsPendientes: FrameRequestCallback[] = []
+
+function correrFrames(veces = 3) {
+  for (let i = 0; i < veces; i++) {
+    const pendientes = rafsPendientes
+    rafsPendientes = []
+    pendientes.forEach((cb) => cb(performance.now()))
+  }
+}
+
 beforeEach(() => {
   cleanup()
+  rafsPendientes = []
+  // jsdom no calcula layout: `offsetParent` es null en TODO y `getFocusable` filtra por ese
+  // campo. Sin el parche de abajo no encuentra ningún elemento, el trap nunca mueve el foco y
+  // los tests pasan sin ejercitar nada — un verde que no prueba nada (me pasó al escribirlos).
+  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+    rafsPendientes.push(cb)
+    return rafsPendientes.length
+  })
+  vi.stubGlobal('cancelAnimationFrame', () => {})
   Object.defineProperty(HTMLElement.prototype, 'offsetParent', {
     configurable: true,
     get() {
@@ -51,10 +73,19 @@ beforeEach(() => {
   })
 })
 
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
 describe('useFocusTrap — escribir no puede robar el foco', () => {
   it('tipear en un campo NO manda el foco al botón de cerrar', async () => {
     const { findByLabelText } = render(<DialogoConCampo onCerrar={() => {}} />)
     const campo = (await findByLabelText('Nombre')) as HTMLInputElement
+
+    // Drenar el foco inicial ANTES de empezar: al montar, el trap encola un focusFirst que va a
+    // la cruz (correcto y esperado). Si queda pendiente, se dispara con el primer correrFrames()
+    // y parece que escribir robó el foco — que es justo lo que este test tiene que distinguir.
+    act(() => correrFrames())
 
     campo.focus()
     expect(quienTieneElFoco()).toBe('Nombre')
@@ -64,9 +95,7 @@ describe('useFocusTrap — escribir no puede robar el foco', () => {
       act(() => {
         fireEvent.change(campo, { target: { value: campo.value + letra } })
       })
-      await act(async () => {
-        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
-      })
+      act(() => correrFrames())
       expect(quienTieneElFoco(), `el foco se escapó al escribir "${letra}"`).toBe('Nombre')
     }
 
@@ -76,9 +105,7 @@ describe('useFocusTrap — escribir no puede robar el foco', () => {
   it('el foco inicial SÍ entra al diálogo (no rompemos lo que funcionaba)', async () => {
     const { findByLabelText } = render(<DialogoConCampo onCerrar={() => {}} />)
     await findByLabelText('Nombre')
-    await act(async () => {
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
-    })
+    act(() => correrFrames())
     // Al abrir sí corresponde mover el foco adentro: el primer focusable es la cruz.
     expect(quienTieneElFoco()).toBe('Cerrar')
   })
