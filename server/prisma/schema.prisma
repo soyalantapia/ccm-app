@@ -741,6 +741,15 @@ model Application {
   fromSeed       Boolean           @default(false)
   ts             DateTime          @default(now())
   decidedAt      DateTime?
+  /// EMAIL del admin que decidió. Sin FK a propósito (igual criterio que AdminUser.invitedBy):
+  /// si esa persona se da de baja, la decisión que tomó no debe desaparecer ni bloquear el borrado.
+  decidedBy    String?
+  /// Nota INTERNA del equipo. Nunca viaja al postulante.
+  decisionNote String?   @db.Text
+  /// Cuándo salió el aviso. null = no se mandó (ver notifyError para saber si fue por un fallo).
+  notifiedAt   DateTime?
+  /// Por qué no salió, si falló. Se muestra en la ficha con opción de reintentar.
+  notifyError  String?
 
   convocatoria Convocatoria @relation(fields: [convocatoriaId], references: [id], onDelete: Cascade)
   device       Device?      @relation(fields: [deviceId], references: [id], onDelete: SetNull)
