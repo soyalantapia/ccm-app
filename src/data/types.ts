@@ -350,9 +350,21 @@ export interface Application {
    * (`toApplication`) solo la incluye en la ruta admin, nunca en "Mis postulaciones".
    */
   decidedBy?: string
+  /**
+   * Nota INTERNA del equipo sobre la decisión — nunca viaja al postulante (el mail no la
+   * incluye). Mismo criterio que `decidedBy`: el serializador del server solo la manda en la
+   * ruta admin, nunca en "Mis postulaciones".
+   */
+  decisionNote?: string
   /** Cuándo salió el aviso al postulante. Ausente junto a notifyError = nunca se intentó. */
   notifiedAt?: string
-  /** Por qué falló el aviso, si falló. Ausente junto a notifiedAt = nunca se intentó. */
+  /**
+   * Por qué falló el aviso, si falló. Ausente junto a notifiedAt = nunca se intentó.
+   *
+   * PII/infra interna (puede traer host, puerto o el cuerpo de la respuesta del proveedor de
+   * mail): solo viaja en la ruta admin, igual que `decidedBy` y `decisionNote`. Nunca a
+   * "Mis postulaciones" del propio postulante.
+   */
   notifyError?: string
 }
 

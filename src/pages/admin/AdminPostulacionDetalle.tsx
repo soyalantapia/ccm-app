@@ -231,6 +231,16 @@ function AdminPostulacionDetalleFicha({ id }: { id: string }) {
                     No se avisó a la persona (sin más detalle disponible).
                   </p>
                 )}
+                {/* Nota interna del equipo al decidir — el server solo la manda en esta ruta
+                 *  (forAdmin): el postulante NUNCA la ve, ni por acá ni por mail. Si nadie la
+                 *  muestra, escribirla es un gesto vacío — por eso va junto al resto del
+                 *  registro de la decisión. */}
+                {app.decisionNote && (
+                  <p className="text-ink-soft">
+                    <span className="eyebrow text-[10px] text-ink-soft/70">Nota interna: </span>
+                    {app.decisionNote}
+                  </p>
+                )}
               </div>
             )}
           </section>

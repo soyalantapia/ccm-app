@@ -108,6 +108,7 @@ function baseApplication(overrides: Record<string, unknown> = {}) {
     fromSeed: false,
     decidedAt: new Date('2026-06-11T09:00:00.000Z'),
     decidedBy: 'gaston@ccm.test',
+    decisionNote: null,
     notifiedAt: null,
     notifyError: null,
     ...overrides,
@@ -130,19 +131,54 @@ describe('toApplication — gate de decidedBy (admin vs. postulante)', () => {
     expect('decidedBy' in out).toBe(false)
   })
 
-  it('notifiedAt y notifyError viajan en AMBOS modos: son sobre el aviso de la propia postulación', () => {
+  it('notifiedAt viaja en AMBOS modos: es sobre el aviso de la propia postulación, no expone nada', () => {
     const notificada = baseApplication({ notifiedAt: new Date('2026-06-11T09:05:00.000Z') })
     expect(toApplication(notificada as never).notifiedAt).toBe('2026-06-11T09:05:00.000Z')
     expect(toApplication(notificada as never, true).notifiedAt).toBe('2026-06-11T09:05:00.000Z')
-
-    const fallida = baseApplication({ notifyError: 'SMTP caído' })
-    expect(toApplication(fallida as never).notifyError).toBe('SMTP caído')
-    expect(toApplication(fallida as never, true).notifyError).toBe('SMTP caído')
   })
 
-  it('sin notifiedAt ni notifyError, no manda ninguna de las dos claves (nunca se intentó avisar)', () => {
+  it('sin notifiedAt, no manda la clave (nunca se intentó avisar)', () => {
     const out = toApplication(baseApplication() as never)
     expect('notifiedAt' in out).toBe(false)
+  })
+})
+
+describe('toApplication — gate de decisionNote (nota interna, nunca al postulante)', () => {
+  it('sin forAdmin (default), OMITE decisionNote — el postulante nunca la ve', () => {
+    const out = toApplication(baseApplication({ decisionNote: 'ya la conocemos de otra edición' }) as never)
+    expect('decisionNote' in out).toBe(false)
+  })
+
+  it('con forAdmin=true, incluye decisionNote — solo el panel del organizador la lee', () => {
+    const out = toApplication(
+      baseApplication({ decisionNote: 'ya la conocemos de otra edición' }) as never,
+      true,
+    )
+    expect(out.decisionNote).toBe('ya la conocemos de otra edición')
+  })
+
+  it('con forAdmin=true pero sin nota en la fila, no inventa la clave', () => {
+    const out = toApplication(baseApplication({ decisionNote: null }) as never, true)
+    expect('decisionNote' in out).toBe(false)
+  })
+})
+
+describe('toApplication — gate de notifyError (detalle de infra, nunca al postulante)', () => {
+  it('sin forAdmin (default), OMITE notifyError — puede traer host/puerto/usuario del SMTP', () => {
+    const out = toApplication(baseApplication({ notifyError: 'connect ECONNREFUSED 10.0.0.5:587' }) as never)
+    expect('notifyError' in out).toBe(false)
+  })
+
+  it('con forAdmin=true, incluye notifyError — el panel lo necesita para decidir si reintentar', () => {
+    const out = toApplication(
+      baseApplication({ notifyError: 'connect ECONNREFUSED 10.0.0.5:587' }) as never,
+      true,
+    )
+    expect(out.notifyError).toBe('connect ECONNREFUSED 10.0.0.5:587')
+  })
+
+  it('con forAdmin=true pero sin notifyError en la fila, no inventa la clave', () => {
+    const out = toApplication(baseApplication({ notifyError: null }) as never, true)
     expect('notifyError' in out).toBe(false)
   })
 })
