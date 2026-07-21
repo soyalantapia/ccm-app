@@ -48,6 +48,13 @@ export interface EventItem {
   past?: boolean
   /** Capacitación/evento reservado a la membresía Socio CCM (niveles de suscripción). */
   socioOnly?: boolean
+  /**
+   * ¿Está a la vista del público? Un evento nace borrador y se publica como acto aparte.
+   *
+   * Opcional porque el seed de la demo no lo trae: ahí todo lo cargado se muestra. Quien
+   * decide de verdad es el backend, que ni siquiera devuelve los borradores en la ruta pública.
+   */
+  published?: boolean
 }
 
 export interface EventBlock {

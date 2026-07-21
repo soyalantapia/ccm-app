@@ -224,3 +224,54 @@ describe('RemoteDataStore — el cupo cacheado se revalida al vencer', () => {
     vi.restoreAllMocks()
   })
 })
+
+/**
+ * Cuando el backend rechaza una escritura del panel, explica POR QUÉ con un mensaje escrito para
+ * que lo lea una persona: "No se puede borrar: tiene 12 inscripciones confirmadas". Ese motivo es
+ * lo único que le permite al organizador corregir el problema.
+ *
+ * Antes se descartaba y el aviso decía siempre "revisá la conexión" — engañoso además de inútil,
+ * porque el servidor había contestado perfecto con un 409.
+ */
+describe('el motivo del rechazo llega hasta el aviso', () => {
+  /** Corre una escritura contra un backend que rechaza con `motivo` y devuelve lo que se avisó. */
+  async function escrituraRechazada(status: number, motivo?: { code: string; message: string }) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: { method?: string }) =>
+        Promise.resolve(
+          (init?.method ?? 'GET') === 'GET'
+            ? { ok: false, status: 500, json: () => Promise.resolve({}) }
+            : { ok: false, status, json: () => Promise.resolve(motivo ? { error: motivo } : {}) },
+        ),
+      ),
+    )
+    const { bus } = await import('../../lib/bus')
+    const avisos: unknown[] = []
+    const off = bus.on((key, detail) => {
+      if (key === 'admin:write-failed') avisos.push(detail)
+    })
+    const s = new RemoteDataStore('https://api.test')
+    s.deleteEvent('ev_1')
+    await new Promise((r) => setTimeout(r, 20))
+    off()
+    return avisos
+  }
+
+  it('pasa el mensaje que escribió el backend', async () => {
+    const avisos = await escrituraRechazada(409, {
+      code: 'EVENT_HAS_REGISTRATIONS',
+      message: 'No se puede borrar: tiene 12 inscripciones confirmadas.',
+    })
+    expect(avisos).toHaveLength(1)
+    expect(avisos[0]).toMatchObject({
+      message: 'No se puede borrar: tiene 12 inscripciones confirmadas.',
+    })
+  })
+
+  it('si el backend no explicó nada, avisa igual (sin motivo) para que el toast use su genérico', async () => {
+    const avisos = await escrituraRechazada(500)
+    expect(avisos).toHaveLength(1)
+    expect((avisos[0] as { message?: string } | undefined)?.message).toBeUndefined()
+  })
+})

@@ -8,6 +8,7 @@ import { useEvents, useRegistrations } from '../data/queries'
 import { IDS } from '../data/ids'
 import { EventCard } from '../features/eventos/EventCard'
 import { formatMoney } from '../features/tickets/format'
+import { estaPorVenir } from '../lib/eventDate'
 import { EVENT_TYPE_ORDER, EVENT_TYPE_TABS } from '../features/eventos/eventMeta'
 import {
   CorazonesCta,
@@ -36,8 +37,14 @@ export default function Eventos() {
   const principal = events.find((e) => e.type === 'principal')
   // Un evento especial (capacitación destacada) se muestra como lanzamiento-card
   // y se excluye de la lista de Caminos para no duplicarlo.
-  const especial = events.find((e) => e.type === 'capacitacion' && !e.past)
-  const rest = events.filter((e) => e.type !== 'principal' && e.id !== especial?.id)
+  const especial = events.find((e) => e.type === 'capacitacion' && estaPorVenir(e))
+  // La grilla muestra sólo lo que TODAVÍA no pasó. Antes no miraba la fecha ni el tilde de
+  // finalizado, así que un evento vencido seguía acá con "Cupo limitado" y botón de inscribirse
+  // —que después el backend rechazaba con 409—. Pasó de verdad: dos Caminos de junio siguieron
+  // ofreciéndose 32 días después. Ahora lo decide la fecha (ver lib/eventDate).
+  const rest = events.filter(
+    (e) => e.type !== 'principal' && e.id !== especial?.id && estaPorVenir(e),
+  )
 
   /** Inscripto al evento o a alguno de sus bloques (toda registration lleva eventId). */
   const registeredEventIds = useMemo(

@@ -106,6 +106,7 @@ export function toEventItem(ev: Event & { sponsors?: { sponsorId: string }[] }):
     ...(sponsorIds.length ? { sponsorIds } : {}),
     past: ev.past,
     socioOnly: ev.socioOnly,
+    published: ev.published,
   }
 }
 

@@ -2,6 +2,8 @@ import type { Prisma, ProfileFieldKey } from '@prisma/client'
 import { prisma } from '../lib/prisma.js'
 import { toDeviceProfile } from '../lib/serialize.js'
 import type { DeviceProfile } from '@domain/types'
+import { normalizeEmail, normalizeDni } from '../domain/personIdentity.js'
+import { linkPerson } from './personService.js'
 
 /** Lee Device + ProfileField y devuelve el shape DeviceProfile del front. */
 export async function getProfile(deviceId: string): Promise<DeviceProfile> {
@@ -34,6 +36,19 @@ export async function saveFields(
       }),
     ),
   )
+
+  // Si entró un email o un DNI, este dispositivo ya es identificable: se engancha a su Persona.
+  // Va DESPUÉS de la transacción a propósito: que falle el enganche no debe perder el dato.
+  const email = normalizeEmail(values.email)
+  const dni = normalizeDni(values.dni)
+  if (email || dni) {
+    try {
+      const personId = await linkPerson({ email, dni })
+      if (personId) await prisma.device.update({ where: { id: deviceId }, data: { personId } })
+    } catch (err) {
+      console.error('[personas] no se pudo enganchar el dispositivo', deviceId, err)
+    }
+  }
 
   return getProfile(deviceId)
 }

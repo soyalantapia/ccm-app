@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import * as eventService from '../services/eventService.js'
+import { requirePermission } from '../middlewares/admin.js'
 
 export const eventsRouter = Router()
 
@@ -7,6 +8,16 @@ export const eventsRouter = Router()
 eventsRouter.get('/events', async (_req, res, next) => {
   try {
     res.json(await eventService.getEvents())
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** GET /api/v1/admin/events — TODOS los eventos, borradores incluidos. El panel necesita ver
+ *  lo que todavía no publicó; la ruta pública /events sólo devuelve lo publicado. */
+eventsRouter.get('/admin/events', requirePermission('events:write'), async (_req, res, next) => {
+  try {
+    res.json(await eventService.getAllEvents())
   } catch (err) {
     next(err)
   }

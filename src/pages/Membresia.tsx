@@ -5,14 +5,17 @@ import { Badge, Button, ButtonLink, QR, SectionTitle } from '../components/ui'
 import { store, useStore } from '../data/store'
 import { formatMoney } from '../features/tickets/format'
 import { FREE_PLAN, SOCIO_PLAN, SOCIO_PRICE } from '../features/membresia/plans'
+import { estaPorVenir } from '../lib/eventDate'
 
 type Step = 'plans' | 'pay' | 'done'
 
 /** Lista de capacitaciones premium con su candado — se destraba en vivo al hacerse Socio. */
 function PremiumList() {
   const socio = useStore((s) => s.isSocio())
+  // Sólo las que todavía se pueden aprovechar: ofrecer una capacitación vencida como beneficio
+  // de la membresía sería venderle a alguien algo a lo que ya no puede entrar.
   const capacitaciones = useStore((s) =>
-    s.getEvents().filter((e) => e.socioOnly && !e.past),
+    s.getEvents().filter((e) => e.socioOnly && estaPorVenir(e)),
   )
   if (capacitaciones.length === 0) return null
 

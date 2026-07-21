@@ -14,6 +14,7 @@ export type Permission =
   | 'convocatorias:write'
   | 'applications:read'
   | 'applications:decide'
+  | 'people:read'
   | 'catalog:write'
   | 'content:write'
   | 'sponsors:write'

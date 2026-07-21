@@ -6,6 +6,7 @@ import type { CatalogProfile } from '../../data/types'
 import { CorePageHeader } from '../../features/admin/CorePageHeader'
 import { OpsCatalogForm } from '../../features/admin/OpsCatalogForm'
 import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
+import { AVISO_BORRADO } from '../../features/admin/copyDestructivo'
 
 export default function AdminCatalogo() {
   const catalog = useStore((s) => s.getCatalog())
@@ -85,8 +86,7 @@ export default function AdminCatalogo() {
         title="¿Eliminar este expositor?"
       >
         <p className="text-[15px] leading-relaxed text-ink-soft">
-          Se elimina <em className="text-accent">{deleteTarget?.name}</em> del Catálogo. Podés
-          recrearlo o reiniciar la demo para volver a los datos originales.
+          Se elimina <em className="text-accent">{deleteTarget?.name}</em> del Catálogo. {AVISO_BORRADO}
         </p>
         <div className="mt-6 flex flex-col gap-2.5">
           <OpsDangerButton

@@ -243,11 +243,26 @@ function PasoCodigo({
     }
   }
 
+  /**
+   * Reparte lo que entre en una casilla a partir de ella, en vez de quedarse con un dígito.
+   *
+   * Antes hacía `.slice(-1)`: si en un mismo evento de input llegaban los seis dígitos,
+   * conservaba el último y tiraba los otros cinco — quedaba "7·····" y el login era imposible.
+   * No es un caso raro: pasa al tipear rápido (el foco se mueve en el re-render, más lento que
+   * el teclado) y, sobre todo, con el autocompletado de `one-time-code`, que en iOS inyecta el
+   * código entero en UN campo. El atributo puesto para facilitar el ingreso lo rompía.
+   */
   function escribir(i: number, v: string) {
-    const c = v.replace(/\D/g, '').slice(-1)
+    const limpio = v.replace(/\D/g, '')
     const siguiente = [...digitos]
-    siguiente[i] = c
-    if (c && i < 5) refs.current[i + 1]?.focus()
+    if (!limpio) {
+      siguiente[i] = '' // borrar la casilla
+      confirmar(siguiente)
+      return
+    }
+    for (let k = 0; k < limpio.length && i + k < 6; k++) siguiente[i + k] = limpio[k]
+    // El foco va a la casilla siguiente a la última que se llenó (o se queda en la 6ª).
+    refs.current[Math.min(i + limpio.length, 5)]?.focus()
     confirmar(siguiente)
   }
 
@@ -307,7 +322,8 @@ function PasoCodigo({
       </div>
 
       <div className="mt-4 flex items-center justify-between text-xs">
-        <span className={vencido ? 'text-danger' : restan <= 60 ? 'text-warn' : 'text-night-ink/50'}>
+        {/* El último minuto se marca con el acento, no con rojo: todavía no pasó nada malo. */}
+        <span className={vencido ? 'text-danger' : restan <= 60 ? 'text-accent' : 'text-night-ink/50'}>
           {vencido ? 'El código venció' : <>Vence en <span className="font-bold tabular-nums">{mmss}</span></>}
         </span>
         <button
@@ -320,8 +336,11 @@ function PasoCodigo({
         </button>
       </div>
 
+      {/* El verde del tema (#2e7d4f) está calibrado para fondo claro: sobre esta pantalla
+          oscura da 2.9:1 y no llega a AA. La señal de "salió bien" la da el fondo teñido;
+          el texto va en el color legible de la superficie oscura (12.9:1). */}
       {aviso && (
-        <p className="mt-3 rounded-lg bg-ok/15 px-3 py-2 text-xs text-ok" role="status">
+        <p className="mt-3 rounded-lg bg-success/15 px-3 py-2 text-xs text-night-ink" role="status">
           {aviso}
         </p>
       )}

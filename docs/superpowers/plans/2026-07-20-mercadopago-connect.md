@@ -14,7 +14,7 @@
 - **El monto NUNCA viene del cliente.** Cualquier `total`/`paid`/`amount` que llegue en un request se ignora; se recalcula server-side. Este es el defecto que el plan cierra, no una preferencia de estilo.
 - **Los tokens de MP no salen por ninguna ruta.** `getStatus()` devuelve estado, cuenta y vencimiento; nunca `accessToken` ni `refreshToken`.
 - **Degradación sin corte:** sin conexión MP, la venta sigue con el link manual (`TicketPlan.mpLink`). Ninguna tarea puede dejar la compra inutilizable.
-- **Migraciones aditivas.** Nada de `DROP`/`ALTER ... NOT NULL` sobre columnas con datos. La próxima migración es `9_mp_connection` (van numeradas: `5_nota`, `6_sponsor_banner`, `7_catalog_kind_projects`, `8_convocatoria_logos`).
+- **Migraciones aditivas.** Nada de `DROP`/`ALTER ... NOT NULL` sobre columnas con datos. La próxima migración libre es `12_mp_connection`: main ya tiene hasta `11_person` (`9_admin_auth` el login del panel, `10_event_published` el borrador de eventos, `11_person` el CRM).
 - **Tests:** front `npm test` (vitest + jsdom, `src/**/*.test.{ts,tsx}`); server `cd server && npm test` (vitest + node, `src/**/*.test.ts` co-locados, con `server/test/setup.ts`). Ambos deben quedar verdes.
 - **Typecheck:** front `npx tsc -b`; server `cd server && npm run typecheck`. El server usa `verbatimModuleSyntax` + `NodeNext`: los imports relativos llevan extensión `.js`.
 - **Auth del panel: NO existe `ADMIN_TOKEN`.** Se entra con sesión personal (login por código). Cada ruta `/admin/*` declara su permiso con `requirePermission(<Permission>)` — hay un test estructural (`server/src/routes/adminGuards.test.ts`) que falla si alguna queda sin guard. Las rutas de conexión con Mercado Pago exigen **`team:manage`**: elegir la cuenta donde entra la plata es la acción más sensible del panel.
@@ -38,7 +38,7 @@
 
 **Modificados:**
 - `server/prisma/schema.prisma` — modelo `MpConnection`.
-- `server/prisma/migrations/9_mp_connection/migration.sql`.
+- `server/prisma/migrations/12_mp_connection/migration.sql`.
 - `server/src/lib/env.ts` — `MP_CLIENT_ID`, `MP_CLIENT_SECRET`, `MP_REDIRECT_URI`.
 - `server/src/app.ts` — montar `mpRouter`.
 - `server/src/routes/memberships.ts` + `server/src/services/membershipService.ts` — sacar `paid` del cliente.
@@ -260,7 +260,7 @@ relativa igual que htmlPolicy.ts."
 
 **Files:**
 - Modify: `server/prisma/schema.prisma`
-- Create: `server/prisma/migrations/9_mp_connection/migration.sql`
+- Create: `server/prisma/migrations/12_mp_connection/migration.sql`
 - Modify: `server/src/lib/env.ts:43-44`
 - Create: `server/src/lib/mpApi.ts`
 - Create: `server/src/services/mpOAuthService.ts`
@@ -412,7 +412,7 @@ model MpConnection {
 }
 ```
 
-Crear `server/prisma/migrations/9_mp_connection/migration.sql`:
+Crear `server/prisma/migrations/12_mp_connection/migration.sql`:
 
 ```sql
 CREATE TABLE "MpConnection" (
@@ -647,7 +647,7 @@ Expected: `All migrations have been successfully applied.` (crear la base antes 
 
 ```bash
 cd ~/dev/ccm-app
-git add server/prisma/schema.prisma server/prisma/migrations/9_mp_connection \
+git add server/prisma/schema.prisma server/prisma/migrations/12_mp_connection \
         server/src/lib/env.ts server/src/lib/mpApi.ts \
         server/src/services/mpOAuthService.ts server/src/services/mpOAuthService.test.ts
 git commit -m "feat(mp): conexion OAuth con Mercado Pago (tabla + servicio)

@@ -507,6 +507,11 @@ export class LocalDataStore implements DataStore {
     return this.getContents()
   }
 
+  /** En modo demo no hay borradores: todo lo cargado se ve, así que el panel usa la misma lista. */
+  getAdminEvents(): EventItem[] {
+    return this.getEvents()
+  }
+
   getAdminNotas(): Nota[] {
     return mergeOverlay(seedNotas, K.notasOverlay).sort(
       (a, b) => a.order - b.order || b.publishedAt.localeCompare(a.publishedAt),
@@ -736,6 +741,11 @@ export class LocalDataStore implements DataStore {
 
   /** No falló: es que no hay backend. Son cosas distintas y el Dashboard las muestra distinto. */
   statsFailed(): boolean {
+    return false
+  }
+
+  /** Esta es la capa de la DEMO: seed + localStorage, sin backend. */
+  hasBackend(): boolean {
     return false
   }
 
