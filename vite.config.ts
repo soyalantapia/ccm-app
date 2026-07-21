@@ -8,7 +8,17 @@ import { resolve } from 'node:path'
 // Base path y URL pública configurables por env: GH Pages usa '/ccm-app/'; Railway (un
 // solo servicio que sirve el front desde la raíz) usa '/' vía VITE_BASE=/.
 const BASE = process.env.VITE_BASE || '/ccm-app/'
-const SITE = process.env.VITE_OG_SITE || 'https://soyalantapia.github.io/ccm-app'
+
+// Origen público al que apuntan los meta de preview (og:url, og:image, twitter:image).
+// El default es Railway porque es donde vive la app: GH Pages quedó retirado a un stub de
+// redirección, así que un preview apuntado ahí devuelve el HTML del stub —404 disfrazado— en
+// vez de una imagen, y la tarjeta de WhatsApp/Instagram sale en blanco.
+const SITE = process.env.VITE_OG_SITE || 'https://ccm-api-production-91a9.up.railway.app'
+
+/** El origen que index.html trae escrito a mano; se reemplaza por SITE en el build.
+ *  Las URLs de og TIENEN que ser absolutas (el crawler no resuelve relativas), así que el
+ *  HTML fuente necesita un host escrito, y este es el que se reescribe. */
+const SITE_EN_FUENTE = 'https://soyalantapia.github.io/ccm-app'
 
 /**
  * Rutas con preview propio al compartir (WhatsApp/redes). Como WhatsApp lee los
@@ -30,7 +40,15 @@ function spaFallback(): Plugin {
     name: 'spa-404-fallback',
     closeBundle() {
       const distIndex = resolve(__dirname, 'dist/index.html')
-      const base = readFileSync(distIndex, 'utf8')
+
+      // Reapuntar TODOS los meta de preview al origen real, no solo og:url. Antes acá se
+      // reemplazaba únicamente el nombre del archivo (og-image.jpg → og-app.jpg) y el host
+      // quedaba con el que trae index.html escrito a mano, así que og:image y twitter:image
+      // seguían colgados del dominio viejo aunque se setease VITE_OG_SITE: la env var arreglaba
+      // la URL canónica y dejaba la imagen rota igual. Se reescribe el origen entero, y primero
+      // el index —que es el que sirve la home y del que se derivan las demás rutas—.
+      const base = readFileSync(distIndex, 'utf8').split(SITE_EN_FUENTE).join(SITE)
+      writeFileSync(distIndex, base)
       copyFileSync(distIndex, resolve(__dirname, 'dist/404.html'))
 
       const setAttr = (html: string, re: RegExp, value: string) =>
