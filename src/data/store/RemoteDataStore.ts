@@ -1123,7 +1123,7 @@ export class RemoteDataStore extends LocalDataStore {
     return this.adminOrders ?? this.orders ?? super.getAdminOrders()
   }
 
-  override createOrder(planId: PlanId, qty = 1): TicketOrder {
+  override createOrder(planId: PlanId, qty = 1, groupId?: string): TicketOrder {
     // El optimista usa el precio local para no dejar la UI en blanco; el server manda y la
     // re-hidratación lo corrige si el precio cambió mientras tanto.
     const plan = this.getPlan(planId)
@@ -1136,6 +1136,7 @@ export class RemoteDataStore extends LocalDataStore {
       status: 'iniciada',
       qty,
       total: unit * qty,
+      ...(groupId ? { groupId } : {}),
       ...(profile.fields.email?.value ? { buyerEmail: profile.fields.email.value } : {}),
     }
     if (this.orders) this.orders = [order, ...this.orders]
@@ -1146,6 +1147,7 @@ export class RemoteDataStore extends LocalDataStore {
         id: order.id,
         planId,
         qty,
+        ...(groupId ? { groupId } : {}),
         ...(order.buyerEmail ? { buyerEmail: order.buyerEmail } : {}),
       })
       .then(() => this.refetchOrders())

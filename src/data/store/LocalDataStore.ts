@@ -289,7 +289,7 @@ export class LocalDataStore implements DataStore {
     writeJSON(K.planOverrides, overrides)
   }
 
-  createOrder(planId: PlanId, qty = 1): TicketOrder {
+  createOrder(planId: PlanId, qty = 1, groupId?: string): TicketOrder {
     const profile = this.getProfile()
     const plan = this.getPlan(planId)
     const unit = (plan?.price ?? 0) + (plan?.serviceCharge ?? 0)
@@ -302,6 +302,7 @@ export class LocalDataStore implements DataStore {
       buyerEmail: profile.fields.email?.value,
       qty,
       total: unit * qty,
+      ...(groupId ? { groupId } : {}),
     }
     writeJSON(K.orders, [...this.getOrders(), order])
     this.track('ticket_order_created', { planId, orderId: order.id, qty, total: order.total })

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('../lib/prisma.js', () => ({
   prisma: {
-    ticketOrder: { findUnique: vi.fn() },
+    ticketOrder: { findUnique: vi.fn(), findMany: vi.fn() },
     adCampaign: { findUnique: vi.fn() },
     payment: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn() },
   },
@@ -119,6 +119,50 @@ describe('mpCheckoutService — no permite doble cobro (defecto crítico 1)', ()
 
     expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
     expect(r2.initPoint).toBe(r1.initPoint)
+  })
+})
+
+/**
+ * Elegir dos tipos de entrada crea una orden por tipo. Antes se generaba el cobro por la PRIMERA
+ * nomás mientras al comprador se le mostraba el total de las dos: veía un precio y le cobraban
+ * otro (menor), y las entradas del segundo tipo no llegaban nunca. Ahora las órdenes de una misma
+ * compra comparten groupId y se cobran juntas en un único pago.
+ */
+describe('mpCheckoutService — varias entradas se cobran JUNTAS, por el total real', () => {
+  const ordenA = { id: 'ord_a', total: 33000, qty: 1, planId: 'p1', status: 'iniciada', deviceId: 'dev_1', groupId: 'grp_1' }
+  const ordenB = { id: 'ord_b', total: 55000, qty: 1, planId: 'p2', status: 'iniciada', deviceId: 'dev_1', groupId: 'grp_1' }
+
+  it('cobra la SUMA del grupo, no sólo la orden por la que se pidió el link', async () => {
+    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue(ordenA as never)
+    vi.mocked(prisma.ticketOrder.findMany).mockResolvedValue([ordenA, ordenB] as never)
+
+    await createCheckout('ticket_order', 'ord_a', 'dev_1')
+
+    const body = vi.mocked(mpApi.createPreference).mock.calls[0][1] as { items: { unit_price: number }[] }
+    expect(body.items[0].unit_price).toBe(88000)
+  })
+
+  it('pedir el link por la segunda orden del grupo registra el MISMO Payment (ancla), no uno nuevo', async () => {
+    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue(ordenB as never)
+    vi.mocked(prisma.ticketOrder.findMany).mockResolvedValue([ordenA, ordenB] as never)
+
+    await createCheckout('ticket_order', 'ord_b', 'dev_1')
+
+    // Sin normalizar al ancla, pedir el cobro por ord_a y por ord_b crearía DOS Payment pending
+    // para la misma compra —el índice único parcial es por (kind, resourceId)— y por lo tanto dos
+    // links de pago vivos: doble cobro real.
+    const args = vi.mocked(prisma.payment.create).mock.calls[0][0] as { data: { resourceId: string } }
+    expect(args.data.resourceId).toBe('ord_a')
+  })
+
+  it('una orden suelta (sin grupo) se sigue cobrando sola, como siempre', async () => {
+    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ ...ordenA, groupId: null } as never)
+
+    await createCheckout('ticket_order', 'ord_a', 'dev_1')
+
+    const body = vi.mocked(mpApi.createPreference).mock.calls[0][1] as { items: { unit_price: number }[] }
+    expect(body.items[0].unit_price).toBe(33000)
+    expect(prisma.ticketOrder.findMany).not.toHaveBeenCalled()
   })
 })
 

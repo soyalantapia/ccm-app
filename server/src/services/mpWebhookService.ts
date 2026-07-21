@@ -86,6 +86,24 @@ function mapearEstado(estadoMp: string): EstadoPago {
  */
 async function activar(kind: string, resourceId: string, deviceId: string | null, amount: number): Promise<void> {
   if (kind === 'ticket_order') {
+    // El pago puede cubrir varias órdenes: si el comprador eligió más de un tipo de entrada, se
+    // creó una orden por tipo, todas con el mismo groupId, y mpCheckoutService cobró la SUMA en
+    // un único pago registrado contra la orden ancla. Confirmar sólo el ancla dejaría las
+    // hermanas sin entregar aunque estén pagas.
+    const ancla = await prisma.ticketOrder.findUnique({ where: { id: resourceId } })
+    if (!ancla) {
+      // Que tire: el caller suelta el claim y loguea con contexto, así MP puede reintentar.
+      throw new Error(`ticket_order ${resourceId} no existe: no se puede confirmar lo que se pagó`)
+    }
+    if (ancla.groupId) {
+      const { count } = await prisma.ticketOrder.updateMany({
+        where: { groupId: ancla.groupId, deviceId: ancla.deviceId, status: { not: 'confirmada' } },
+        data: { status: 'confirmada' },
+      })
+      // Si el grupo ya estaba confirmado entero (reintento de MP), `count` da 0 y está bien.
+      if (count === 0) await prisma.ticketOrder.update({ where: { id: resourceId }, data: { status: 'confirmada' } })
+      return
+    }
     await prisma.ticketOrder.update({ where: { id: resourceId }, data: { status: 'confirmada' } })
     return
   }

@@ -7,6 +7,7 @@ import { store, useStore } from '../../data/store'
 import { IDS } from '../../data/ids'
 import type { TicketOrder, TicketPlan } from '../../data/types'
 import { registerFree } from '../../lib/actions'
+import { newId } from '../../lib/storage'
 import { requireProfile } from '../../lib/profileRequest'
 import { formatMoney } from './format'
 
@@ -64,10 +65,17 @@ export function TicketSelector({ className }: { className?: string }) {
       if (!ok) return
       const selected = vipPlans.filter((p) => (qty[p.id] ?? 0) > 0)
       if (selected.length === 0) return
-      const orders = selected.map((p) => store.createOrder(p.id, qty[p.id]!))
+      // Todas las órdenes de esta compra comparten un grupo, así el server cobra la SUMA en un
+      // único pago y confirma el grupo entero al acreditarse. Antes se creaba una orden por tipo
+      // y se generaba el cobro por la PRIMERA nomás, mientras acá abajo se le mostraba al
+      // comprador el total de todas: veía un precio y le cobraban otro (menor), y las entradas de
+      // los demás tipos no llegaban nunca.
+      const groupId = selected.length > 1 ? newId('grp') : undefined
+      const orders = selected.map((p) => store.createOrder(p.id, qty[p.id]!, groupId))
       // Total real de las órdenes creadas (no del render, que pudo cambiar durante el await).
       const orderedTotal = orders.reduce((acc, o) => acc + o.total, 0)
-      // Checkout real por la PRIMERA orden; si no hay conexión con MP (o el checkout no se pudo
+      // El checkout se pide por la primera orden, pero el server resuelve el grupo entero: el
+      // monto que cobra es la suma de todas. Si no hay conexión con MP (o el checkout no se pudo
       // generar), cae al link manual del plan — la venta nunca se corta.
       const real = await store.startCheckout('ticket_order', orders[0].id)
       const mpLink = real ?? selected.find((p) => p.mpLink)?.mpLink ?? ''

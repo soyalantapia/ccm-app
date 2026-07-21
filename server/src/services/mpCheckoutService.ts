@@ -16,6 +16,35 @@ type PaymentKind = 'ticket_order' | 'membership' | 'ad_campaign'
 interface Cobro {
   titulo: string
   monto: number
+  /**
+   * Recurso con el que se registra el Payment. Casi siempre es el `resourceId` que llegó, pero
+   * para un grupo de órdenes es SIEMPRE la misma orden ancla (la de id más chico) sin importar
+   * por cuál de las hermanas se haya pedido el cobro. Es lo que hace que el índice único parcial
+   * `(kind, resourceId) WHERE status='pending'` proteja al grupo entero: si cada hermana se
+   * registrara con su propio id, pedir el link por la orden 1 y por la orden 2 generaría DOS
+   * preferencias vivas por la misma compra.
+   */
+  ancla: string
+}
+
+/**
+ * Las órdenes que se pagan juntas con esta. Sin `groupId` es sólo ella (todas las órdenes
+ * anteriores a la columna quedan así). Se filtra por device además de por grupo: el grupo viene
+ * de la base, pero nunca se cobra ni se entrega algo de otra persona por venir "en el mismo
+ * grupo". Las ya confirmadas se excluyen para no cobrarlas dos veces.
+ */
+async function ordenesDelGrupo(
+  orden: { id: string; groupId: string | null; deviceId: string | null; total: number; qty: number },
+  deviceId?: string,
+): Promise<{ id: string; total: number; qty: number }[]> {
+  if (!orden.groupId) return [orden]
+  const hermanas = await prisma.ticketOrder.findMany({
+    where: { groupId: orden.groupId, deviceId: deviceId ?? null, status: { not: 'confirmada' } },
+    orderBy: { id: 'asc' },
+  })
+  // Si el filtro dejara todo afuera (no debería: `orden` ya pasó los chequeos), se cobra al menos
+  // esta orden en vez de generar una preferencia por $0.
+  return hermanas.length > 0 ? hermanas : [orden]
 }
 
 /**
@@ -33,14 +62,22 @@ async function resolverCobro(kind: PaymentKind, resourceId: string, deviceId?: s
     // de los dos errores le llega.
     if (!orden || orden.deviceId !== deviceId) throw notFound('RESOURCE_NOT_FOUND', 'La orden no existe')
     if (orden.status === 'confirmada') throw conflict('ALREADY_PAID', 'Esa orden ya está paga')
-    return { titulo: `Entradas CCM · ${orden.qty}`, monto: orden.total }
+
+    // El comprador pudo elegir varios tipos de entrada: eso crea una orden por tipo, todas con el
+    // mismo groupId, y se cobran JUNTAS en un único pago. Antes se cobraba sólo esta orden
+    // mientras al comprador se le mostraba el total de todas: veía un precio y le cobraban otro.
+    const hermanas = await ordenesDelGrupo(orden, deviceId)
+    const total = hermanas.reduce((acc, o) => acc + o.total, 0)
+    const entradas = hermanas.reduce((acc, o) => acc + o.qty, 0)
+    const ancla = hermanas[0]?.id ?? orden.id
+    return { titulo: `Entradas CCM · ${entradas}`, monto: total, ancla }
   }
   if (kind === 'membership') {
     // El resourceId ES el device que paga (no hay una fila de "membresía" separada donde
     // mirar pertenencia): si no coincide con el device autenticado, no se deja pagar la
     // membresía de otro.
     if (resourceId !== deviceId) throw notFound('RESOURCE_NOT_FOUND', 'La membresía no existe')
-    return { titulo: 'Membresía Socio CCM', monto: SOCIO_PRICE }
+    return { titulo: 'Membresía Socio CCM', monto: SOCIO_PRICE, ancla: resourceId }
   }
   // ad_campaign: el modelo AdCampaign NO tiene deviceId en el schema, así que acá no hay
   // pertenencia que verificar — es un gap conocido (decisión explícita, no un olvido): con el
@@ -53,6 +90,7 @@ async function resolverCobro(kind: PaymentKind, resourceId: string, deviceId?: s
   return {
     titulo: `Espacio publicitario ${camp.slot} · ${camp.hours} h`,
     monto: priceForCampaign(camp.slot as AdSlot, camp.hours),
+    ancla: resourceId,
   }
 }
 
@@ -194,7 +232,10 @@ export async function createCheckout(
 ): Promise<{ initPoint: string; paymentId: string }> {
   // Primero el token: si no hay conexión, no queremos dejar un Payment huérfano en la base.
   const token = await getValidToken()
-  const { titulo, monto } = await resolverCobro(kind, resourceId, deviceId)
+  const { titulo, monto, ancla } = await resolverCobro(kind, resourceId, deviceId)
+  // De acá para abajo se trabaja SIEMPRE con el ancla, no con el resourceId que llegó: es lo que
+  // hace que dos hermanas del mismo grupo compartan un único Payment (y un único link de pago).
+  resourceId = ancla
 
   // Reusar preferencia existente si ya hay una viva: sin esto, pedir el link dos veces (doble
   // clic, dos pestañas, un reintento del navegador) crea DOS preferencias distintas en MP — si

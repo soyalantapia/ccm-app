@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('../lib/prisma.js', () => ({
   prisma: {
     payment: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-    ticketOrder: { update: vi.fn() },
+    ticketOrder: { update: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
     // findUnique además de update: `activar()` necesita leer AdCampaign.hours (lo comprado) para
     // calcular expiresAt — ese dato no viaja en el Payment (que solo tiene el monto). Sin este
     // mock, "una campaña se pone al aire..." explota con "adCampaign.findUnique is not a function"
@@ -25,6 +25,9 @@ import { createHmac } from 'node:crypto'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // Por default, orden suelta (sin grupo): es como quedan todas las órdenes previas al groupId.
+  vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_x', groupId: null, deviceId: 'dev_1' } as never)
+  vi.mocked(prisma.ticketOrder.updateMany).mockResolvedValue({ count: 1 } as never)
   vi.mocked(getValidToken).mockResolvedValue('ACCESS-1')
   vi.mocked(prisma.payment.findFirst).mockResolvedValue(null as never)
   vi.mocked(prisma.payment.update).mockResolvedValue({} as never)
@@ -325,5 +328,42 @@ describe('webhook — defecto C: reversos y vencimientos NO son "pendiente"', ()
     expect(errSpy).toHaveBeenCalled()
 
     errSpy.mockRestore()
+  })
+})
+
+/**
+ * El pago de una compra con varios tipos de entrada se registra contra UNA orden (el ancla) pero
+ * cubre todo el grupo. Confirmar sólo el ancla dejaría al comprador con las otras entradas sin
+ * entregar, habiéndolas pagado.
+ */
+describe('webhook — un pago que cubre varias órdenes las confirma a todas', () => {
+  it('confirma el grupo entero, no sólo la orden contra la que se registró el pago', async () => {
+    filaFake({ id: 'pay_grupo', kind: 'ticket_order', resourceId: 'ord_a' })
+    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_a', groupId: 'grp_1', deviceId: 'dev_1' } as never)
+    vi.mocked(prisma.ticketOrder.updateMany).mockResolvedValue({ count: 2 } as never)
+    pagoAprobado('pay_grupo')
+
+    await handleNotification('999', true)
+
+    const args = vi.mocked(prisma.ticketOrder.updateMany).mock.calls[0][0] as {
+      where: { groupId: string; deviceId: string }
+      data: { status: string }
+    }
+    expect(args.where.groupId).toBe('grp_1')
+    // Filtrado por device además del grupo: nunca se entrega algo de otra persona por venir "en
+    // el mismo grupo".
+    expect(args.where.deviceId).toBe('dev_1')
+    expect(args.data.status).toBe('confirmada')
+  })
+
+  it('una orden suelta sigue confirmándose sola, sin tocar ningún grupo', async () => {
+    filaFake({ id: 'pay_suelta', kind: 'ticket_order', resourceId: 'ord_z' })
+    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_z', groupId: null, deviceId: 'dev_1' } as never)
+    pagoAprobado('pay_suelta')
+
+    await handleNotification('998', true)
+
+    expect(prisma.ticketOrder.update).toHaveBeenCalledTimes(1)
+    expect(prisma.ticketOrder.updateMany).not.toHaveBeenCalled()
   })
 })

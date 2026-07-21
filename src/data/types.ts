@@ -114,6 +114,12 @@ export interface TicketOrder {
   qty: number
   /** (precio + cargo por servicio) × qty al momento de crear la orden. */
   total: number
+  /**
+   * Órdenes que se pagan JUNTAS en un mismo checkout: elegir dos tipos de entrada crea dos
+   * órdenes con este mismo valor, y el server cobra la suma en un único pago. Ausente en las
+   * órdenes sueltas (y en todas las anteriores a esta función).
+   */
+  groupId?: string
 }
 
 /* ─── Catálogo ─── */

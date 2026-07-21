@@ -35,6 +35,8 @@ interface NuevaOrden {
   id: string
   planId: string
   qty: number
+  /** Compartido por las órdenes de una misma compra, para cobrarlas y confirmarlas juntas. */
+  groupId?: string
   buyerName?: string
   buyerEmail?: string
 }
@@ -55,6 +57,7 @@ export async function createOrder(input: NuevaOrden, deviceId?: string): Promise
       id: input.id,
       planId: plan.id,
       deviceId: deviceId ?? null,
+      groupId: input.groupId ?? null,
       qty,
       total: unit * qty,
       status: 'iniciada',

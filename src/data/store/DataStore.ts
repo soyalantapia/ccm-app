@@ -118,7 +118,12 @@ export interface DataStore {
   getPlans(): TicketPlan[]
   getPlan(id: PlanId): TicketPlan | undefined
   updatePlan(id: PlanId, patch: { price?: number | null; mpLink?: string }): void
-  createOrder(planId: PlanId, qty?: number): TicketOrder
+  /**
+   * `groupId` agrupa las órdenes que se pagan JUNTAS en un mismo checkout (el comprador eligió
+   * varios tipos de entrada). El server cobra la suma del grupo en un único pago y confirma el
+   * grupo entero. Sin él, cada orden es su propia compra.
+   */
+  createOrder(planId: PlanId, qty?: number, groupId?: string): TicketOrder
   markOrderRedirected(orderId: string): void
   setOrderStatus(orderId: string, status: OrderStatus): void
   getOrders(): TicketOrder[]

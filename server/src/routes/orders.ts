@@ -9,6 +9,9 @@ const createOrderSchema = z.object({
   id: z.string().min(1),
   planId: z.string().min(1),
   qty: z.number().int().positive().max(50).default(1),
+  // Órdenes que se pagan juntas (el comprador eligió varios tipos de entrada) comparten este
+  // valor. Sólo agrupa: el monto de cada orden lo sigue calculando el server desde la base.
+  groupId: z.string().min(1).max(64).optional(),
   buyerName: z.string().max(120).optional(),
   buyerEmail: z.string().email().max(160).optional(),
   // El total lo calcula el server con el precio vigente: si viniera del cliente, se podría

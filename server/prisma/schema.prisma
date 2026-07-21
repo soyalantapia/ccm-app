@@ -321,6 +321,11 @@ model TicketOrder {
   id         String      @id // "ord_..."
   deviceId   String?
   planId     String
+  // Órdenes que se pagan JUNTAS en un mismo checkout (el comprador eligió varios tipos de
+  // entrada). El cobro de MP suma el grupo entero y el webhook lo confirma entero; sin esto se
+  // cobraba sólo la primera orden mientras se mostraba el total de todas. NULL = orden suelta,
+  // que es como quedan todas las anteriores a esta columna. Ver migración 9_z_ticket_order_group.
+  groupId    String?
   status     OrderStatus @default(iniciada)
   qty        Int         @default(1)
   total      Int // congelado al crear = (price + serviceCharge) * qty
@@ -336,6 +341,7 @@ model TicketOrder {
   @@index([status, ts])
   @@index([planId])
   @@index([buyerEmail])
+  @@index([groupId])
 }
 
 // Acreditación: estado de uso del QR en puerta. El QR es un JWT firmado con
