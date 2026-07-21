@@ -828,6 +828,12 @@ export class RemoteDataStore extends LocalDataStore {
    * `limit=100` (el máximo que acepta el server) para minimizar la cantidad de requests; si el
    * paginado falla a mitad de camino, se descarta todo (no se deja el caché en un estado
    * "parcial pero sin avisar" — la garantía de esta función es "completo o error", nunca "a medias").
+   *
+   * El loop en sí no confía ciegamente en que el server avanza: si `nextCursor` viniera repetido
+   * (mismo valor que el cursor recién usado) o si se pasara de un tope de páginas razonable, corta
+   * y lo trata IGUAL que el fallo de una página — error, nunca una lista parcial disfrazada de
+   * completa. Hoy el backend avanza bien (verificado incluso con `ts` duplicados); esto es defensa
+   * ante un cambio futuro del server que se quede pisando el mismo cursor.
    */
   private hydrateAdminApplications(): void {
     this.fetchAllAdminApplications()
@@ -846,15 +852,23 @@ export class RemoteDataStore extends LocalDataStore {
   private async fetchAllAdminApplications(): Promise<Application[]> {
     const items: Application[] = []
     let cursor: string | undefined
-    for (;;) {
+    // Tope de páginas: con limit=100 esto cubre 20.000 postulaciones. Si se llega acá es que el
+    // server no está agotando el cursor — cortar es mejor que colgar la pestaña en un loop infinito.
+    const MAX_PAGES = 200
+    for (let pagina = 0; pagina < MAX_PAGES; pagina++) {
       const qs = cursor ? `?limit=100&cursor=${encodeURIComponent(cursor)}` : '?limit=100'
       const page = await this.api.get<{ items: Application[]; nextCursor: string | null }>(
         `/admin/applications${qs}`,
       )
       items.push(...page.items)
       if (!page.nextCursor) return items
+      if (page.nextCursor === cursor) {
+        // El cursor no avanzó: pedir la "próxima" página otra vez traería lo mismo para siempre.
+        throw new Error('fetchAllAdminApplications: el cursor no avanzó entre páginas')
+      }
       cursor = page.nextCursor
     }
+    throw new Error('fetchAllAdminApplications: se superó el tope de páginas sin agotar el cursor')
   }
 
   /** TODAS (vista del organizador): la lista admin si está cargada, si no cae al device/seed. */

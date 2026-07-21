@@ -126,4 +126,76 @@ describe('hydrateAdminApplications — pagina hasta agotar el cursor', () => {
     // ver las primeras 5 como si fueran el total (el mismo engaño que causó el bug original).
     expect(s.getAdminApplications()).toBeNull()
   })
+
+  it('si el cursor se repite (el backend no avanza), corta y expone el error en vez de loopear para siempre', async () => {
+    // El server devuelve SIEMPRE el mismo nextCursor a partir de la segunda página: un bug de
+    // server (o un cambio futuro) que se queda pisando el mismo cursor colgaría la pestaña del
+    // admin en un for(;;) sin este corte.
+    const pagina1 = { items: Array.from({ length: 5 }, (_, i) => app(`app-${i}`)), nextCursor: 'app-4' }
+    const paginaQueNoAvanza = { items: Array.from({ length: 5 }, (_, i) => app(`otra-${i}`)), nextCursor: 'app-4' }
+    const calls: string[] = []
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        const u = String(url)
+        calls.push(u)
+        if (u.includes('/devices')) {
+          return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ deviceId: 'd', token: 't' }) })
+        }
+        if (u.includes('/admin/applications')) {
+          const esPrimera = !u.includes('cursor=')
+          return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(esPrimera ? pagina1 : paginaQueNoAvanza) })
+        }
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) })
+      }),
+    )
+
+    const s = new RemoteDataStore('https://api.test')
+    await vi.waitFor(() => expect(s.applicationsFailed()).toBe(true))
+    expect(s.getAdminApplications()).toBeNull()
+    // Cortó en la SEGUNDA página (cursor repetido), no siguió pidiendo de más.
+    expect(calls.filter((c) => c.includes('/admin/applications'))).toHaveLength(2)
+  })
+
+  it('si el paginado no agota el cursor en un número razonable de páginas, corta en vez de seguir para siempre', async () => {
+    // El cursor SIEMPRE avanza a un valor NUEVO (nunca se repite, así que el corte por cursor
+    // repetido no aplica acá) y el server tarda de más en mandar nextCursor: null — 210 páginas,
+    // por encima del tope de 200. Sin el tope, el front seguiría pidiendo página tras página.
+    //
+    // El mock tiene un techo propio (termina solo en la página 210) A PROPÓSITO: así, si algún día
+    // se rompe el tope de páginas del código, este test falla por una aserción normal (llegó a
+    // 210 llamados en vez de cortar en 200) en vez de colgar el proceso — un mock realmente
+    // infinito, sin tope, cuelga el test runner de verdad (se comprobó al revertir el fix entero:
+    // OOM real, el mismo cuelgue que se busca evitar en el admin).
+    const TECHO_DEL_MOCK = 210
+    const calls: string[] = []
+    let n = 0
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        const u = String(url)
+        calls.push(u)
+        if (u.includes('/devices')) {
+          return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ deviceId: 'd', token: 't' }) })
+        }
+        if (u.includes('/admin/applications')) {
+          const esLaUltima = n >= TECHO_DEL_MOCK
+          const pagina = esLaUltima
+            ? { items: [], nextCursor: null }
+            : { items: [app(`app-${n}`)], nextCursor: `cursor-${n + 1}` }
+          n += 1
+          return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(pagina) })
+        }
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) })
+      }),
+    )
+
+    const s = new RemoteDataStore('https://api.test')
+    await vi.waitFor(() => expect(s.applicationsFailed()).toBe(true), { timeout: 5000 })
+    expect(s.getAdminApplications()).toBeNull()
+    // Cortó en el tope (200 páginas), no llegó a las 210 que el mock hubiera dejado pedir.
+    expect(calls.filter((c) => c.includes('/admin/applications'))).toHaveLength(200)
+  })
 })
