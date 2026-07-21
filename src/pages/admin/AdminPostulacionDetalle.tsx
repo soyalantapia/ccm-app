@@ -111,7 +111,10 @@ export default function AdminPostulacionDetalle() {
           Postulaciones
         </Link>
 
-        {siblings.length > 1 && (
+        {/* index < 0: la postulación decidida desde ACÁ MISMO acaba de salir de este subconjunto
+         *  filtrado (ej. se aceptó mirando "Preinscriptas") — mejor ocultar el contador/flechas
+         *  que mostrar un "0 / N" inerte. */}
+        {siblings.length > 1 && index >= 0 && (
           <div className="flex items-center gap-1">
             <button
               disabled={!prevId}
