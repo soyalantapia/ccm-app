@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowUpRight, Check, Minus, Plus } from 'lucide-react'
 import { Badge, Button, Sheet, toast } from '../../components/ui'
 import { store, useStore } from '../../data/store'
+import { esLinkDePagoReal } from '../../config/plans'
 import { IDS } from '../../data/ids'
 import type { TicketOrder, TicketPlan } from '../../data/types'
 import { registerFree } from '../../lib/actions'
@@ -19,17 +20,24 @@ interface PendingCheckout {
 }
 
 /**
- * Link manual del plan (mpLink), la red de seguridad de siempre para cuando no hay checkout real.
+ * Link manual del plan (mpLink), la red de seguridad para cuando no hay checkout real.
  *
- * ⚠️ SOLO sirve para UNA entrada de UN plan: es una URL de precio fijo de Mercado Pago. Con dos
- * planes en el carrito, o con cantidad > 1, mandar ahí al comprador le cobra una fracción de lo
- * que compró — exactamente el bug que este cambio viene a cerrar, entrando por la puerta de
- * atrás. En ese caso devuelve '' y `goToMp` muestra "no disponible" sin marcar nada como
- * redirigido: cobrar de menos es peor que no cobrar.
+ * Dos condiciones, y las dos son plata:
+ *
+ * 1. SOLO sirve para UNA entrada de UN plan: es una URL de precio fijo de Mercado Pago. Con dos
+ *    planes en el carrito, o con cantidad > 1, mandar ahí al comprador le cobra una fracción de
+ *    lo que compró.
+ * 2. Tiene que ser un link de pago DE VERDAD. El sembrado traía MP_PLACEHOLDER — la portada de
+ *    mercadopago.com.ar — y esta red de seguridad era humo: el guard `if (!pending.mpLink)` no lo
+ *    atrapaba porque no está vacío, así que el comprador aterrizaba en la home de MP mientras la
+ *    UI le decía que su pago se estaba confirmando.
+ *
+ * Si no se cumplen, devuelve '' y el comprador se entera con un aviso honesto, sin que se marque
+ * nada como redirigido. No cobrar es malo; cobrar de menos o mentirle es peor.
  */
 function fallbackManual(selected: TicketPlan[], totalQty: number): string {
   if (selected.length > 1 || totalQty > 1) return ''
-  return selected.find((p) => p.mpLink)?.mpLink ?? ''
+  return selected.find((p) => esLinkDePagoReal(p.mpLink))?.mpLink ?? ''
 }
 
 /**
@@ -118,7 +126,19 @@ export function TicketSelector({ className }: { className?: string }) {
         return
       }
 
-      setPending({ orders, total: orderedTotal, mpLink: real?.initPoint ?? fallbackManual(selected, totalQty) })
+      const mpLink = real?.initPoint ?? fallbackManual(selected, totalQty)
+      // Sin un cobro real no se abre el sheet: ese sheet promete "te llevamos a Mercado Pago" y
+      // después marca las órdenes como redirigidas. Prometerlo sin link es la mentira que este
+      // arreglo viene a sacar. La orden ya quedó registrada, así que se lo decimos tal cual.
+      if (!mpLink) {
+        toast(
+          'No pudimos abrir el pago. Tu pedido quedó registrado pero NO está pago: probá de nuevo en unos minutos o escribinos.',
+          'info',
+        )
+        return
+      }
+
+      setPending({ orders, total: orderedTotal, mpLink })
     } finally {
       busyRef.current = false
       setBusy(false)
@@ -127,8 +147,14 @@ export function TicketSelector({ className }: { className?: string }) {
 
   const goToMp = () => {
     if (!pending) return
-    if (!pending.mpLink) {
-      toast('La venta de entradas no está disponible en este momento. Probá más tarde.', 'info')
+    // Segundo cinturón: ni siquiera un initPoint que llegue del server (o el link de un pago en
+    // curso) se usa si no es un link de pago de verdad. Redirigir a una portada sería igual de
+    // mentiroso viniendo de donde viniera.
+    if (!esLinkDePagoReal(pending.mpLink)) {
+      toast(
+        'No pudimos abrir el pago. Tu pedido quedó registrado pero NO está pago: probá de nuevo en unos minutos o escribinos.',
+        'info',
+      )
       setPending(null)
       return
     }
