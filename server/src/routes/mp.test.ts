@@ -180,6 +180,72 @@ describe('POST /mp/webhook — el 200 significa "procesado"', () => {
 })
 
 /**
+ * REGRESIÓN de la tanda anterior: al reescribir la ruta para procesar-primero-responder-después,
+ * se perdió el filtro por TIPO de aviso. En el panel de MP se pueden habilitar varios topics
+ * además de "Pagos" (el típico es "Órdenes comerciales"): entonces llega
+ * `{ type: 'merchant_order', data: { id } }`, la firma valida IGUAL (se firma sobre data.id, no
+ * sobre el tipo), `getPayment` da 404 sobre un id que no es de pago → ApiError 502 → la ruta
+ * responde 500 → MP reintenta con backoff DURANTE HORAS un aviso que no puede tener éxito nunca.
+ * Y ese canal de reintentos es justo la red de seguridad del arreglo P0-C: si se lo llena de
+ * avisos condenados, deja de servir para lo que importa.
+ */
+describe('POST /mp/webhook — solo se procesan los avisos de PAGO', () => {
+  beforeEach(() => {
+    vi.mocked(webhook.verificarFirma).mockReturnValue(true)
+    // Lo que pasa de verdad si un merchant_order llega a handleNotification: getPayment busca un
+    // id que no es de pago, MP contesta 404 y sale un ApiError 502.
+    vi.mocked(webhook.handleNotification).mockRejectedValue(new Error('Mercado Pago respondió 404 al consultar el pago'))
+  })
+
+  it('un merchant_order (type en el body) responde 200 y NO se procesa: MP no tiene que reintentarlo', async () => {
+    await request(app)
+      .post('/api/v1/mp/webhook')
+      .send({ type: 'merchant_order', data: { id: '555' } })
+      .expect(200)
+
+    expect(webhook.handleNotification).not.toHaveBeenCalled()
+  })
+
+  it('un merchant_order por query string (topic=, el canal IPN) tampoco se procesa', async () => {
+    await request(app)
+      .post('/api/v1/mp/webhook?topic=merchant_order&data.id=556')
+      .send({})
+      .expect(200)
+
+    expect(webhook.handleNotification).not.toHaveBeenCalled()
+  })
+
+  it('cualquier otro topic que MP sume mañana se descarta igual (lista blanca, no lista negra)', async () => {
+    await request(app)
+      .post('/api/v1/mp/webhook')
+      .send({ type: 'topic_claims_integration_wh', data: { id: '557' } })
+      .expect(200)
+
+    expect(webhook.handleNotification).not.toHaveBeenCalled()
+  })
+
+  it('type=payment sí se procesa', async () => {
+    vi.mocked(webhook.handleNotification).mockResolvedValue(undefined)
+    await request(app)
+      .post('/api/v1/mp/webhook')
+      .send({ type: 'payment', data: { id: '558' } })
+      .expect(200)
+
+    expect(webhook.handleNotification).toHaveBeenCalledWith('558', true)
+  })
+
+  it('sin type ni topic se procesa IGUAL: un campo ausente no puede costarnos un aviso de pago', async () => {
+    vi.mocked(webhook.handleNotification).mockResolvedValue(undefined)
+    await request(app)
+      .post('/api/v1/mp/webhook')
+      .send({ data: { id: '559' } })
+      .expect(200)
+
+    expect(webhook.handleNotification).toHaveBeenCalledWith('559', true)
+  })
+})
+
+/**
  * P0-C: la ruta hacía `res.status(200).end()` ANTES de procesar y se comía toda excepción. El
  * catch de handleNotification suelta el claim "para que MP reintente"… pero MP ya había recibido
  * 200 y no reintenta nunca. El pago quedaba cobrado y sin entregar, para siempre.

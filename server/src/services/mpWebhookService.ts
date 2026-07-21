@@ -20,6 +20,10 @@ import * as mpApi from '../lib/mpApi.js'
 import { getValidToken } from './mpOAuthService.js'
 import { becomeSocio } from './membershipService.js'
 import { cerrarPago, cerrarPagoSiSigueEn } from './mpPaymentState.js'
+import { ESTADOS_MP_CON_PLATA_VIVA } from './mpEstados.js'
+// Type-only: se borra en la compilación (verbatimModuleSyntax), así que NO crea dependencia de
+// runtime con el checkout ni afecta a los mocks de los tests.
+import type { PaymentKind } from './mpCheckoutService.js'
 
 /** Log del bloqueo optimista: el estado del pago cambió mientras procesábamos este aviso. */
 function avisarCarreraDeEstado(paymentId: string, estadoLeido: string, estadoDelAviso: string, mpPaymentId: string): void {
@@ -72,6 +76,19 @@ export function verificarFirma(headers: Record<string, string | undefined>, data
 }
 
 type EstadoPago = 'approved' | 'pending' | 'rejected' | 'refunded'
+
+/**
+ * Los valores del enum PaymentStatus de la base (los de `EstadoPago` más `expired`). Se escribe a
+ * mano en vez de importar el tipo generado por Prisma para no meterle a este módulo un import de
+ * `@prisma/client` — mismo criterio que `EstadoCerrado` en mpPaymentState.ts.
+ */
+type EstadoEnBase = EstadoPago | 'expired'
+
+/** Una línea del cobro, con lo mínimo que necesitan los helpers de abajo. */
+type LineaDelCobro = { kind: PaymentKind; resourceId: string; amount: number }
+
+/** Cabecera + líneas, tal como la devuelve el `findUnique ... include: { items: true }`. */
+type CobroConLineas = { id: string; deviceId: string | null; items: LineaDelCobro[] }
 
 /**
  * P0-B: orden de avance de la vida de un cobro. Los avisos de MP NO llegan ordenados (reintentos
@@ -163,6 +180,169 @@ async function activar(
   })
 }
 
+/**
+ * ¿MP conoce algún pago VIVO para esta preferencia? Tres respuestas, no dos: `no_se` (la consulta
+ * falló) NO es `no`. Quien llama tiene que tratar `no_se` como `si` — fail-closed: trabar un
+ * recurso un rato es recuperable, cobrar dos veces no.
+ */
+async function hayPlataVivaEnMp(token: string, paymentId: string): Promise<'si' | 'no' | 'no_se'> {
+  try {
+    const pagos = await mpApi.searchPaymentsByExternalReference(token, paymentId)
+    return pagos.some((p) => ESTADOS_MP_CON_PLATA_VIVA.has(p.status)) ? 'si' : 'no'
+  } catch (err) {
+    console.error(
+      '[mpWebhookService] no se pudo consultar a MP si quedan pagos vivos para este cobro: NO se liberan las líneas (fail-closed)',
+      { paymentId },
+      err instanceof Error ? err.message : err,
+    )
+    return 'no_se'
+  }
+}
+
+/**
+ * Reclama la entrega de este cobro y devuelve EL ESTADO QUE TENÍA ANTES del claim (o `null` si no
+ * lo pudo reclamar).
+ *
+ * Devolver el estado previo no es un detalle: es lo que permite DESHACER bien si la entrega falla.
+ * Antes el claim era un `updateMany ... WHERE status NOT IN (approved, refunded)` y el `catch`
+ * revertía a `pending` FIJO, sin saber de dónde venía; si el cobro estaba `rejected`/`expired`
+ * —líneas ya cerradas— eso dejaba la cabecera viva con las líneas muertas, que es el lado
+ * peligroso de romper el invariante del espejo (ver `deshacerClaim`).
+ *
+ * Y se lee DENTRO de la misma transacción que reclama, gateando el `UPDATE` por ese estado exacto:
+ * un `findUnique` suelto de antes podría estar rancio y hacernos revertir al estado equivocado.
+ * Como gate de concurrencia es igual de fuerte que el `notIn` anterior — un único
+ * `UPDATE ... WHERE status = <el que leí>` deja pasar a UNO SOLO de dos avisos superpuestos.
+ */
+async function reclamarParaEntregar(ref: string, mpPaymentId: string): Promise<EstadoEnBase | null> {
+  return prisma.$transaction(async (tx) => {
+    const actual = await tx.payment.findUnique({ where: { id: ref } })
+    if (!actual) return null
+    // La pregunta correcta no es "¿conozco este payment_id?" sino "¿ESTA COMPRA ya se entregó?",
+    // y eso lo dice el estado (ver el comentario largo de P0-A más abajo).
+    if (actual.status === 'approved' || actual.status === 'refunded') return null
+    const claim = await tx.payment.updateMany({
+      where: { id: ref, status: actual.status },
+      data: { mpPaymentId, status: 'approved' },
+    })
+    return claim.count === 1 ? actual.status : null
+  })
+}
+
+/**
+ * Deshace el claim cuando la entrega falló. La regla es una sola: **la cabecera sigue a las
+ * líneas**, nunca al revés.
+ *
+ * Por qué así y no "revertir al estado previo y punto" (las dos opciones que había sobre la mesa):
+ * el estado previo puede haber dejado de ser compatible con las líneas mientras entregábamos. Dos
+ * caminos reales llegan ahí:
+ *   1. el cobro venía de `rejected`/`expired` (líneas YA cerradas) y llegó el `approved` tarde;
+ *   2. por CARRERA: entre el claim (cabecera `approved`, líneas todavía vivas) y el cierre final,
+ *      un checkout concurrente corre `repararEspejo` y cierra esas líneas.
+ * En los dos, volver a `pending` a ciegas deja cabecera VIVA con líneas MUERTAS — y esa
+ * combinación es la peor de todas: `buscarCobrosVivos` y `vencerPendientesAbandonados` filtran por
+ * `closedAt: null` y no la ven, `repararEspejo` solo sabe cerrar líneas (no reabrirlas) y no la
+ * repara, y el recurso queda libre mientras hay un pago aprobado de verdad en MP. Doble cobro en
+ * silencio.
+ *
+ * La otra alternativa —forzar las líneas a que sigan a la cabecera— exigiría REABRIR líneas
+ * (`closedAt: null`), y eso puede violar el índice único parcial si en el medio otro cobro ya se
+ * quedó con el recurso: un P2002 en pleno camino de recuperación, justo cuando menos podemos
+ * darnos el lujo de fallar. Derivar la cabecera de las líneas nunca puede fallar por unicidad.
+ *
+ * Resultado: el invariante `closedAt IS NULL ⟺ status = 'pending'` se cumple SIEMPRE, y el
+ * reintento de MP puede volver a entregar desde cualquiera de los dos estados de salida (ni
+ * `pending` ni los terminales bloquean el próximo claim).
+ */
+async function deshacerClaim(
+  pago: CobroConLineas,
+  estadoPrevio: EstadoEnBase,
+  mpPaymentId: string,
+): Promise<void> {
+  const vivas = await prisma.paymentItem.count({ where: { paymentId: pago.id, closedAt: null } })
+  // Con líneas vivas el cobro sigue vivo (`pending`) y el recurso queda reservado: es lo que
+  // impide que el comprador se genere un segundo cobro mientras hay plata aprobada dando vueltas.
+  // Sin líneas vivas la cabecera tiene que ser terminal; se respeta la etiqueta original
+  // (`rejected`/`expired`) y solo se inventa `expired` si venía de `pending`, que ya no aplica.
+  const destino: EstadoEnBase = vivas > 0 ? 'pending' : estadoPrevio === 'pending' ? 'expired' : estadoPrevio
+
+  const cabecera = await prisma.payment.updateMany({
+    where: { id: pago.id, mpPaymentId, status: 'approved' },
+    data: { mpPaymentId: null, status: destino },
+  })
+  // Si no matcheó, otro proceso ya movió esta fila: no se pisa nada.
+  if (cabecera.count !== 1) return
+
+  if (destino !== 'pending') {
+    // Quedó un recurso LIBRE con un pago aprobado de verdad en MP. No es un estado corrupto (el
+    // invariante se cumple) pero sí uno que alguien tiene que mirar: el reintento de MP puede
+    // entregar, y hasta que eso pase el recurso se puede vender de nuevo.
+    console.error(
+      '[mpWebhookService] ALERTA DOBLE COBRO: se soltó el claim de un pago APROBADO y las líneas ya estaban cerradas, así que el recurso quedó libre con plata cobrada en MP',
+      {
+        paymentId: pago.id,
+        estadoPrevio,
+        estadoFinal: destino,
+        mpPaymentId,
+        deviceId: pago.deviceId,
+        recursos: pago.items.map((i) => ({ kind: i.kind, resourceId: i.resourceId, amount: i.amount })),
+      },
+    )
+    return
+  }
+
+  // Cinturón y tirantes para la ventana entre el conteo y la escritura de arriba: si justo ahí un
+  // checkout concurrente cerró las líneas, la cabecera acaba de quedar `pending` sobre líneas
+  // muertas — el estado que este arreglo existe para impedir, y el único que nadie más repara. Se
+  // vuelve a mirar, se corrige moviendo la cabecera a terminal, y se grita.
+  const vivasDespues = await prisma.paymentItem.count({ where: { paymentId: pago.id, closedAt: null } })
+  if (vivasDespues > 0) return
+  await prisma.payment.updateMany({ where: { id: pago.id, status: 'pending' }, data: { status: 'expired' } })
+  console.error(
+    '[mpWebhookService] ALERTA DOBLE COBRO: las líneas se cerraron mientras se soltaba el claim de un pago aprobado; se cierra también la cabecera para no dejar el espejo roto',
+    { paymentId: pago.id, mpPaymentId, recursos: pago.items.map((i) => ({ kind: i.kind, resourceId: i.resourceId })) },
+  )
+}
+
+/**
+ * Detección del DOBLE COBRO REPARTIDO EN DOS FILAS Payment.
+ *
+ * El grito de "SEGUNDO pago aprobado" que ya existía solo salta cuando los dos `approved` caen en
+ * la MISMA fila Payment. Pero el caso más probable es el otro: el comprador reintenta dentro de la
+ * misma preferencia después de un rechazo, y como el rechazo liberó las líneas también se armó un
+ * cobro NUEVO. Terminan dos filas Payment aprobadas sobre el mismo recurso, cada una con su claim
+ * impecable, y hoy eso no dispara absolutamente nada.
+ *
+ * Acá se pregunta lo único que importa: ¿alguno de estos recursos ya lo entregó OTRA fila? Es
+ * puro rastro — no cambia lo que se entrega (revocar o no es una decisión de negocio, igual que
+ * en el caso `refunded`), pero deja el incidente escrito con nombre y apellido para poder
+ * devolver la plata. Nunca tira: un fallo del detector no puede frenar una entrega legítima.
+ */
+async function avisarSiOtroCobroYaEntrego(pago: CobroConLineas, mpPaymentId: string): Promise<void> {
+  try {
+    const yaEntregadas = await prisma.paymentItem.findMany({
+      where: {
+        paymentId: { not: pago.id },
+        deliveredAt: { not: null },
+        OR: pago.items.map((i) => ({ kind: i.kind, resourceId: i.resourceId })),
+      },
+      select: { paymentId: true, kind: true, resourceId: true, amount: true, deliveredAt: true },
+    })
+    if (yaEntregadas.length === 0) return
+    console.error(
+      '[mpWebhookService] ALERTA DOBLE COBRO: llegó un pago aprobado por recursos que OTRO cobro ya entregó — hay dos cobros distintos sobre lo mismo, alguien tiene que devolver esa plata',
+      {
+        paymentId: pago.id,
+        mpPaymentId,
+        deviceId: pago.deviceId,
+        yaEntregadoPorOtroCobro: yaEntregadas,
+      },
+    )
+  } catch (err) {
+    console.error('[mpWebhookService] no se pudo chequear si otro cobro ya entregó estos recursos', { paymentId: pago.id }, err)
+  }
+}
+
 export async function handleNotification(mpPaymentId: string, firmaValida: boolean): Promise<void> {
   if (!firmaValida) return
 
@@ -230,6 +410,34 @@ export async function handleNotification(mpPaymentId: string, firmaValida: boole
       return
     }
 
+    // HUECO HERMANO: un `rejected` NO alcanza para dar el cobro por muerto. En Checkout Pro el
+    // comprador puede reintentar DENTRO DE LA MISMA PREFERENCIA después de que le rebota una
+    // tarjeta. Si al primer rechazo liberamos las líneas, ese mismo comprador puede además armarse
+    // un cobro NUEVO por lo mismo y terminar pagando los dos: dos filas Payment aprobadas sobre el
+    // mismo recurso. Antes de liberar se le pregunta a MP —la única fuente que sabe si quedó plata
+    // en juego— igual que hace `vencerPendientesAbandonados` antes de vencer.
+    //
+    // Solo aplica cuando el cobro está `pending`, que es el único estado en el que las líneas
+    // están vivas: sobre un cobro ya terminal, "mantenerlo vivo" rompería el espejo.
+    if (estado === 'rejected' && pago.status === 'pending') {
+      const plataViva = await hayPlataVivaEnMp(token, pago.id)
+      if (plataViva !== 'no') {
+        // Se guarda el detalle de MP y NADA MÁS: la cabecera sigue `pending` y las líneas vivas,
+        // así el recurso queda reservado hasta que el intento en curso se acredite o venza.
+        //
+        // ⚠️ NO se graba `mpPaymentId`. `vencerPendientesAbandonados` filtra por `mpPaymentId: null`
+        // para elegir candidatos: anotarle acá el id del pago RECHAZADO sacaría esta fila de esa
+        // lista para siempre y el recurso quedaría trabado sin nada que lo destrabe. Dejándolo en
+        // null, el próximo checkout vuelve a preguntarle a MP y el caso se resuelve solo.
+        const escrito = await prisma.payment.updateMany({
+          where: { id: pago.id, status: 'pending' },
+          data: { raw: pagoMp as never },
+        })
+        if (escrito.count !== 1) avisarCarreraDeEstado(pago.id, pago.status, estado, mpPaymentId)
+        return
+      }
+    }
+
     // rejected / refunded: el cobro terminó. Cabecera y líneas se cierran JUNTAS (`cerrarPago…`),
     // que es lo que libera el índice único parcial y deja al comprador reintentar la compra.
     const cerrado = await cerrarPagoSiSigueEn(pago.id, pago.status, estado, { mpPaymentId, raw: pagoMp as never })
@@ -267,11 +475,11 @@ export async function handleNotification(mpPaymentId: string, firmaValida: boole
   // reintentos de MP lo ven entregado. Es la misma ventana que ya tenía el claim por
   // `mpPaymentId` (un reintento tampoco podía volver a pasar), y toda falla que no sea una caída
   // dura se revierte abajo, en el `catch`.
-  const claim = await prisma.payment.updateMany({
-    where: { id: ref, status: { notIn: ['approved', 'refunded'] } },
-    data: { mpPaymentId, status: 'approved' },
-  })
-  if (claim.count !== 1) {
+  //
+  // El claim devuelve EL ESTADO PREVIO (ver `reclamarParaEntregar`), que es lo que le permite a
+  // `deshacerClaim` no romper el espejo si la entrega falla.
+  const estadoPrevio = await reclamarParaEntregar(ref, mpPaymentId)
+  if (estadoPrevio === null) {
     // No se pudo reclamar. Hay tres motivos posibles y solo uno amerita despertar a alguien.
     const actual = await prisma.payment.findUnique({ where: { id: ref }, include: { items: true } })
     if (actual && actual.status === 'approved' && actual.mpPaymentId !== mpPaymentId) {
@@ -296,6 +504,10 @@ export async function handleNotification(mpPaymentId: string, firmaValida: boole
   const pago = await prisma.payment.findUnique({ where: { id: ref }, include: { items: true } })
   if (!pago) return // no debería pasar: el updateMany de arriba matcheó justo esta fila
 
+  // Antes de entregar: ¿estos recursos ya los entregó OTRA fila Payment? Si sí, esto es un doble
+  // cobro repartido y no puede pasar en silencio.
+  await avisarSiOtroCobroYaEntrego(pago, mpPaymentId)
+
   // Entrega LÍNEA POR LÍNEA (un cobro puede cubrir varias órdenes). Cada línea se entrega y se
   // marca en la MISMA transacción, así que una entrega parcial queda registrada: el reintento de
   // MP saltea lo ya entregado en vez de re-activarlo. Antes de `deliveredAt`, un reintento sobre
@@ -315,12 +527,11 @@ export async function handleNotification(mpPaymentId: string, firmaValida: boole
         await tx.paymentItem.update({ where: { id: linea.id }, data: { deliveredAt: new Date() } })
       })
     } catch (err) {
-      // No se pudo entregar ESTA línea: se deshace el claim (vuelve a `pending`, y `mpPaymentId`
-      // a null) para que el PRÓXIMO reintento de MP —que llega porque la ruta devuelve 5xx, ver
-      // mp.ts, P0-C— pueda volver a intentarlo, en vez de quedar trabado para siempre. Vuelve a
-      // `pending` y no a `expired`: hay un pago aprobado de verdad dando vueltas, así que el
-      // comprador NO debería poder generarse un segundo cobro para estos recursos mientras tanto
-      // (y las líneas siguen con closedAt = null, que es lo que lo impide).
+      // No se pudo entregar ESTA línea: se deshace el claim (se suelta `mpPaymentId` y la
+      // cabecera sale de `approved`) para que el PRÓXIMO reintento de MP —que llega porque la
+      // ruta devuelve 5xx, ver mp.ts, P0-C— pueda volver a intentarlo, en vez de quedar trabado
+      // para siempre. A qué estado vuelve NO es fijo: lo decide `deshacerClaim` mirando las
+      // líneas, para que el espejo `closedAt` nunca quede roto (ahí está el porqué completo).
       //
       // Las líneas que YA se entregaron en esta pasada conservan su `deliveredAt`: son entregas
       // reales, no hay que deshacerlas ni repetirlas.
@@ -336,10 +547,7 @@ export async function handleNotification(mpPaymentId: string, firmaValida: boole
         },
         err instanceof Error ? err.stack : err,
       )
-      await prisma.payment.updateMany({
-        where: { id: pago.id, mpPaymentId },
-        data: { mpPaymentId: null, status: 'pending' },
-      })
+      await deshacerClaim(pago, estadoPrevio, mpPaymentId)
       throw err
     }
   }

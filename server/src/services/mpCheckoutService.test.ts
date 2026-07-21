@@ -24,7 +24,13 @@ import { prisma } from '../lib/prisma.js'
 import * as mpApi from '../lib/mpApi.js'
 import { getValidToken } from './mpOAuthService.js'
 import { env } from '../lib/env.js'
-import { createCheckout } from './mpCheckoutService.js'
+import {
+  createCheckout,
+  FALLOS_CONSECUTIVOS_PARA_ALERTAR,
+  saludDeLaConsultaAMp,
+  TIMEOUT_CONSULTA_VENCIMIENTO_MS,
+  TOPE_CANDIDATOS_POR_CHECKOUT,
+} from './mpCheckoutService.js'
 
 /* ────────────────────────────────────────────────────────────────────────────
  *  Store en memoria de Payment + PaymentItem
@@ -201,14 +207,23 @@ function crearStore() {
         where,
         include,
         select,
+        orderBy,
+        take,
       }: {
         where: Record<string, unknown>
         include?: { items?: boolean }
         select?: Record<string, boolean>
+        orderBy?: { createdAt?: 'asc' | 'desc' }
+        take?: number
       }) {
         const encontradas = payments.filter((p) => paymentCumple(p, where ?? {}))
-        encontradas.sort((a, b) => b.seq - a.seq) // orderBy createdAt desc, con desempate estable
-        return encontradas.map((p) => {
+        // `seq` desempata de forma estable y respeta el orden de creación (el vencimiento pide
+        // `createdAt: 'asc'` para atacar primero lo más viejo; el resto de la suite, `desc`).
+        const asc = orderBy?.createdAt === 'asc'
+        encontradas.sort((a, b) => (asc ? a.seq - b.seq : b.seq - a.seq))
+        // `take` NO es decorativo: es el tope de candidatos que el vencimiento consulta contra MP.
+        const recortadas = typeof take === 'number' ? encontradas.slice(0, take) : encontradas
+        return recortadas.map((p) => {
           if (select) {
             const out: Record<string, unknown> = {}
             for (const k of Object.keys(select)) out[k] = (p as unknown as Record<string, unknown>)[k]
@@ -784,6 +799,128 @@ describe('mpCheckoutService — vencimiento perezoso de pendings abandonados', (
     expect(mpApi.searchPaymentsByExternalReference).not.toHaveBeenCalled()
     expect(mpApi.createPreference).not.toHaveBeenCalled()
     expect(r.initPoint).toBe('https://mp/checkout/pref_reciente')
+  })
+
+  /**
+   * El costo de este barrido está EN EL CAMINO CALIENTE: el comprador está esperando su link de
+   * pago mientras corre. Antes se consultaba a MP candidato por candidato, SECUENCIALMENTE, con el
+   * timeout general de 10 s: con MP lento eso son 10 s POR CANDIDATO antes de que el comprador vea
+   * nada. Y el fail-closed (correcto: ante un error de consulta no se vence) deja el recurso
+   * trabado mientras la consulta siga fallando, con un `console.error` por incidente como único
+   * rastro — invisible si el que falla es MP de forma sostenida.
+   */
+  describe('el barrido no puede costarle 10 s × N al comprador', () => {
+    beforeEach(() => {
+      saludDeLaConsultaAMp.fallosConsecutivos = 0
+      saludDeLaConsultaAMp.desde = null
+    })
+
+    /** Siembra `n` pendings viejos, uno por orden, y devuelve el carrito que los toca a todos. */
+    function sembrarViejos(n: number) {
+      const defs = Array.from({ length: n }, (_, i) => ({ id: `ord_v${i}`, total: 1000 }))
+      ordenes(...defs)
+      for (const d of defs) {
+        store.sembrar(
+          { mpPreferenceId: `pref_${d.id}`, initPoint: `https://mp/checkout/${d.id}`, createdAt: HACE_31_MIN() },
+          [{ kind: 'ticket_order', resourceId: d.id }],
+        )
+      }
+      return defs.map((d) => ({ kind: 'ticket_order' as const, resourceId: d.id }))
+    }
+
+    it(`consulta como mucho ${TOPE_CANDIDATOS_POR_CHECKOUT} candidatos: el resto lo barre el próximo checkout`, async () => {
+      const carrito = sembrarViejos(TOPE_CANDIDATOS_POR_CHECKOUT + 3)
+
+      await createCheckout(carrito, 'dev_1').catch(() => {})
+
+      expect(vi.mocked(mpApi.searchPaymentsByExternalReference).mock.calls.length).toBeLessThanOrEqual(
+        TOPE_CANDIDATOS_POR_CHECKOUT,
+      )
+    })
+
+    it('las consultas van EN PARALELO, no una atrás de otra', async () => {
+      const carrito = sembrarViejos(3)
+      let enVuelo = 0
+      let maxEnVuelo = 0
+      vi.mocked(mpApi.searchPaymentsByExternalReference).mockImplementation(async () => {
+        enVuelo += 1
+        maxEnVuelo = Math.max(maxEnVuelo, enVuelo)
+        await new Promise((r) => setTimeout(r, 20))
+        enVuelo -= 1
+        return []
+      })
+
+      await createCheckout(carrito, 'dev_1').catch(() => {})
+
+      // Secuencial daría 1: nunca hay dos consultas abiertas a la vez.
+      expect(maxEnVuelo).toBeGreaterThan(1)
+    })
+
+    it('usa un timeout PROPIO y más corto que el general de 10 s (el comprador está esperando)', async () => {
+      const carrito = sembrarViejos(1)
+
+      await createCheckout(carrito, 'dev_1').catch(() => {})
+
+      expect(mpApi.searchPaymentsByExternalReference).toHaveBeenCalledWith(
+        'ACCESS-1',
+        expect.any(String),
+        TIMEOUT_CONSULTA_VENCIMIENTO_MS,
+      )
+      expect(TIMEOUT_CONSULTA_VENCIMIENTO_MS).toBeLessThan(10_000)
+    })
+
+    it('el fail-closed se mantiene: si la consulta falla, no se vence nada', async () => {
+      const carrito = sembrarViejos(1)
+      vi.mocked(mpApi.searchPaymentsByExternalReference).mockRejectedValue(new Error('MP no responde'))
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      await createCheckout(carrito, 'dev_1').catch(() => {})
+
+      expect(store.pagos().every((p) => p.status === 'pending')).toBe(true)
+      errSpy.mockRestore()
+    })
+
+    it('un fallo AISLADO no dispara alerta: sería ruido de fondo', async () => {
+      const carrito = sembrarViejos(1)
+      vi.mocked(mpApi.searchPaymentsByExternalReference).mockRejectedValue(new Error('blip'))
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      await createCheckout(carrito, 'dev_1').catch(() => {})
+
+      expect(errSpy.mock.calls.map((c) => String(c[0])).filter((s) => s.includes('ALERTA'))).toHaveLength(0)
+      errSpy.mockRestore()
+    })
+
+    it('un fail-closed SOSTENIDO es una condición de alerta, no un log perdido', async () => {
+      vi.mocked(mpApi.searchPaymentsByExternalReference).mockRejectedValue(new Error('MP caído'))
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      // Cada checkout falla su consulta; a partir del umbral tiene que gritar.
+      for (let i = 0; i < FALLOS_CONSECUTIVOS_PARA_ALERTAR; i++) {
+        ordenes({ id: `ord_al${i}`, total: 1000 })
+        store.sembrar(
+          { mpPreferenceId: `pref_al${i}`, initPoint: `https://mp/al${i}`, createdAt: HACE_31_MIN() },
+          [{ kind: 'ticket_order', resourceId: `ord_al${i}` }],
+        )
+        await createCheckout([{ kind: 'ticket_order', resourceId: `ord_al${i}` }], 'dev_1').catch(() => {})
+      }
+
+      const alerta = errSpy.mock.calls.map((c) => String(c[0])).find((s) => s.includes('ALERTA'))
+      expect(alerta).toBeDefined()
+      expect(saludDeLaConsultaAMp.fallosConsecutivos).toBeGreaterThanOrEqual(FALLOS_CONSECUTIVOS_PARA_ALERTAR)
+      errSpy.mockRestore()
+    })
+
+    it('una consulta exitosa borra el contador: la alerta es de fallos CONSECUTIVOS', async () => {
+      saludDeLaConsultaAMp.fallosConsecutivos = 99
+      saludDeLaConsultaAMp.desde = new Date()
+      const carrito = sembrarViejos(1)
+
+      await createCheckout(carrito, 'dev_1').catch(() => {})
+
+      expect(saludDeLaConsultaAMp.fallosConsecutivos).toBe(0)
+      expect(saludDeLaConsultaAMp.desde).toBeNull()
+    })
   })
 
   it('el vencimiento es por cobro ENTERO: un carrito de 2 abandonado libera las 2 órdenes juntas', async () => {

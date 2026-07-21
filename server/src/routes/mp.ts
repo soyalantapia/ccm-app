@@ -111,6 +111,22 @@ export const webhookConfig = {
   timeoutMs: 10_000,
 }
 
+/**
+ * Tipo de aviso, mirando TODOS los lugares donde MP lo puede poner: el canal "Webhooks" lo manda
+ * como `type` en el cuerpo y el canal IPN clásico como `topic` en la query string. Se aceptan los
+ * cuatro cruces a propósito (body/query × type/topic): cuál llega depende de qué canal quedó
+ * configurado en el panel, y no queremos que la ruta dependa de eso.
+ *
+ * Devuelve '' si no vino ninguno, que NO es lo mismo que "es de otro tipo" — ver el uso abajo.
+ */
+function tipoDeAviso(body: unknown, query: Record<string, unknown>): string {
+  const b = (body ?? {}) as { type?: unknown; topic?: unknown }
+  const candidato = [b.type, b.topic, query.type, query.topic].find(
+    (v): v is string => typeof v === 'string' && v.length > 0,
+  )
+  return candidato ?? ''
+}
+
 /** Corre `promesa` con un tope de tiempo. Si se pasa, rechaza (y no deja el timer colgado). */
 function conTimeout<T>(promesa: Promise<T>, ms: number): Promise<T> {
   let timer: NodeJS.Timeout
@@ -152,6 +168,28 @@ mpRouter.post('/mp/webhook', async (req, res) => {
   // Sin identificador no hay nada que procesar NI que reintentar: 200 y listo (un 5xx acá solo
   // le pediría a MP que nos vuelva a mandar el mismo mensaje vacío).
   if (!dataId) return void res.status(200).end()
+
+  // Solo los avisos de PAGO se procesan. En el panel de MP se pueden habilitar otros topics
+  // ("Órdenes comerciales" es el que se prende sin querer con más frecuencia) y entonces llega
+  // `{ type: 'merchant_order', data: { id } }` sobre ESTA misma URL. La firma valida igual —se
+  // calcula sobre data.id, que no dice de qué es— así que sin este filtro el aviso seguía de
+  // largo hasta `getPayment`, que consulta /v1/payments/<id de una orden comercial> y recibe un
+  // 404 → ApiError 502 → la ruta devuelve 500 → MP lo reintenta con backoff durante horas. Un
+  // aviso que NO puede tener éxito nunca, ocupando el canal de reintentos que es exactamente la
+  // red de seguridad del arreglo P0-C. 200 y a otra cosa: no hay nada que procesar ni que volver
+  // a mandar.
+  //
+  // El chequeo va ANTES de la firma a propósito: no importa si un merchant_order viene bien o mal
+  // firmado, no lo vamos a procesar en ninguno de los dos casos, y así el log de "firma inválida"
+  // sigue siendo una señal limpia sobre el tráfico que sí nos interesa.
+  //
+  // Lista BLANCA ('payment'), no lista negra: si MP suma un topic nuevo mañana, cae del lado
+  // seguro (se descarta) en vez de entrar a un camino que no lo contempla.
+  //
+  // Y el tipo AUSENTE se procesa igual: no hay ningún caso en el que valga la pena perder un
+  // aviso de plata por un campo que no vino. Lo que se filtra es un tipo presente y distinto.
+  const tipo = tipoDeAviso(req.body, req.query as Record<string, unknown>)
+  if (tipo && tipo !== 'payment') return void res.status(200).end()
 
   const headers = req.headers as Record<string, string | undefined>
   if (!verificarFirma(headers, dataId)) {

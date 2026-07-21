@@ -33,9 +33,9 @@ export interface MpPayment {
  * si lo limpiáramos apenas resuelve el `fetch()` inicial (como pasaba antes), un cuerpo que
  * nunca llega quedaría sin nada que lo aborte: MP manda los headers y se cuelga transmitiendo.
  */
-async function conTimeout<T>(op: (signal: AbortSignal) => Promise<T>): Promise<T> {
+async function conTimeout<T>(op: (signal: AbortSignal) => Promise<T>, timeoutMs: number = TIMEOUT_MS): Promise<T> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     return await op(controller.signal)
   } catch (err) {
@@ -107,10 +107,16 @@ export function createPreference(
  *
  * Una preferencia puede tener VARIOS pagos (la tarjeta rebotó y reintentó con otra), por eso
  * devuelve la lista entera y decide el que llama.
+ *
+ * `timeoutMs` es opcional porque esta consulta tiene DOS usos con urgencias distintas: en el
+ * webhook nadie está mirando y conviene el tope general de 10 s, pero en el checkout corre con el
+ * comprador esperando su link y ahí se usa uno mucho más corto (ver
+ * `TIMEOUT_CONSULTA_VENCIMIENTO_MS` en mpCheckoutService).
  */
 export async function searchPaymentsByExternalReference(
   accessToken: string,
   externalReference: string,
+  timeoutMs?: number,
 ): Promise<MpPayment[]> {
   return conTimeout(async (signal) => {
     const url = `${AUTH_BASE}/v1/payments/search?external_reference=${encodeURIComponent(externalReference)}&sort=date_created&criteria=desc`
@@ -123,7 +129,7 @@ export async function searchPaymentsByExternalReference(
     }
     const cuerpo = (await res.json()) as { results?: MpPayment[] }
     return cuerpo.results ?? []
-  })
+  }, timeoutMs)
 }
 
 /** Consulta el estado REAL de un pago. Nunca se le cree al cuerpo del webhook. */

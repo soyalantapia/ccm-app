@@ -4,7 +4,9 @@ vi.mock('../lib/prisma.js', () => {
   const prisma = {
     payment: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     // Las líneas del cobro: un Payment cubre N recursos y la entrega se marca por línea.
-    paymentItem: { update: vi.fn(), updateMany: vi.fn() },
+    // `count` lo usa el deshacer del claim (para que la cabecera siga a las líneas) y `findMany`
+    // la detección del doble cobro repartido en DOS filas Payment.
+    paymentItem: { update: vi.fn(), updateMany: vi.fn(), count: vi.fn(), findMany: vi.fn() },
     ticketOrder: { update: vi.fn() },
     // findUnique además de update: `activar()` necesita leer AdCampaign.hours (lo comprado) para
     // calcular expiresAt — ese dato no viaja en el Payment (que solo tiene el monto).
@@ -21,7 +23,7 @@ vi.mock('../lib/prisma.js', () => {
   return { prisma }
 })
 vi.mock('./mpOAuthService.js', () => ({ getValidToken: vi.fn() }))
-vi.mock('../lib/mpApi.js', () => ({ getPayment: vi.fn() }))
+vi.mock('../lib/mpApi.js', () => ({ getPayment: vi.fn(), searchPaymentsByExternalReference: vi.fn() }))
 vi.mock('./membershipService.js', () => ({ becomeSocio: vi.fn() }))
 
 import { prisma } from '../lib/prisma.js'
@@ -34,6 +36,11 @@ import { createHmac } from 'node:crypto'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // `clearAllMocks` borra las llamadas pero NO las implementaciones: un `mockRejectedValue` (sin
+  // `Once`) puesto por un test para simular una entrega fallida se filtraba a los siguientes y
+  // los hacía fallar por un motivo que no tenía nada que ver con lo que probaban. Se resetea acá,
+  // una vez, en vez de pedirle a cada test que se acuerde de limpiar.
+  vi.mocked(prisma.ticketOrder.update).mockReset()
   vi.mocked(getValidToken).mockResolvedValue('ACCESS-1')
   vi.mocked(prisma.payment.findFirst).mockResolvedValue(null as never)
   vi.mocked(prisma.payment.update).mockResolvedValue({} as never)
@@ -42,6 +49,13 @@ beforeEach(() => {
   vi.mocked(prisma.payment.updateMany).mockResolvedValue({ count: 1 } as never)
   vi.mocked(prisma.paymentItem.update).mockResolvedValue({} as never)
   vi.mocked(prisma.paymentItem.updateMany).mockResolvedValue({ count: 0 } as never)
+  vi.mocked(prisma.paymentItem.count).mockResolvedValue(0 as never)
+  // Por default NINGUNA otra fila Payment entregó estos recursos (el detector de doble cobro
+  // repartido no encuentra nada). Los tests que reproducen ese caso lo pisan.
+  vi.mocked(prisma.paymentItem.findMany).mockResolvedValue([] as never)
+  // Por default MP no conoce ningún pago vivo para la preferencia: un rechazo es un rechazo y
+  // punto. Los tests del reintento dentro de la misma preferencia lo pisan.
+  vi.mocked(mpApi.searchPaymentsByExternalReference).mockResolvedValue([] as never)
 })
 
 function pagoAprobado(ref: string, status: string = 'approved') {
@@ -141,8 +155,24 @@ function cobroFake(overrides: Partial<Record<string, unknown>> = {}, lineasDef: 
     }
     return { count }
   }) as never)
+  // Conteo de líneas VIVAS, sobre los MISMOS objetos: es lo que le permite al deshacer del claim
+  // mirar el estado real de las líneas (que un proceso concurrente pudo haber cerrado en el
+  // medio) en vez de suponerlo.
+  vi.mocked(prisma.paymentItem.count).mockImplementation((async (args: { where: { paymentId?: string; closedAt?: null } }) => {
+    return items.filter((it) => {
+      if (args.where.paymentId && it.paymentId !== args.where.paymentId) return false
+      if ('closedAt' in args.where && args.where.closedAt === null) return it.closedAt === null
+      return true
+    }).length
+  }) as never)
 
   return { fila, items }
+}
+
+/** El invariante del espejo, escrito una sola vez: `closedAt IS NULL` ⟺ `status = 'pending'`. */
+function invarianteDelEspejo(fila: Record<string, unknown>, items: { closedAt: Date | null }[]): boolean {
+  const hayVivas = items.some((i) => i.closedAt === null)
+  return hayVivas === (fila.status === 'pending')
 }
 
 describe('webhook — verificación de firma', () => {
@@ -373,6 +403,193 @@ describe('webhook — defecto B: un fallo de entrega nunca queda grabado como en
     expect(fila.mpPaymentId).toBeNull() // no debe quedar bloqueado tampoco
     expect(errSpy).toHaveBeenCalled()
 
+    errSpy.mockRestore()
+  })
+})
+
+/**
+ * REGRESIÓN de la tanda anterior. El `catch` que deshace el claim volvía a `pending` FIJO, sin
+ * mirar de qué estado venía. Si el Payment estaba `rejected`/`expired` —sus líneas ya tienen
+ * `closedAt` seteado— y después llega el `approved` y la entrega falla, quedaba
+ * `status = 'pending'` CON LAS LÍNEAS CERRADAS. Ese es el lado peligroso de romper el invariante:
+ *
+ *   · `buscarCobrosVivos` y `vencerPendientesAbandonados` filtran por `closedAt: null` → la fila
+ *     se vuelve INVISIBLE para las dos;
+ *   · `repararEspejo` solo sabe CERRAR líneas, no reabrirlas → no lo repara nunca;
+ *   · el recurso queda LIBRE mientras existe un pago aprobado de verdad en MP → segundo cobro,
+ *     en silencio.
+ */
+describe('webhook — deshacer el claim NUNCA puede romper el espejo closedAt', () => {
+  it('venía de rejected (líneas cerradas), llega el approved y la entrega falla: NO queda pending con las líneas muertas', async () => {
+    const { fila, items } = cobroFake({ id: 'pay_RV', status: 'rejected', mpPaymentId: '900' }, [
+      { kind: 'ticket_order', resourceId: 'ord_RV' },
+    ])
+    // El escenario de partida: la tarjeta rebotó, se cerró el cobro y se liberaron las líneas.
+    expect(items.every((i) => i.closedAt !== null)).toBe(true)
+    pagoAprobado('pay_RV')
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(prisma.ticketOrder.update).mockRejectedValue(new Error('P2025 simulado: la orden ya no existe'))
+
+    await expect(handleNotification('111', true)).rejects.toThrow()
+
+    // Lo único inaceptable: cabecera viva con líneas muertas. Esa combinación es invisible para
+    // buscarCobrosVivos y para vencerPendientesAbandonados, y repararEspejo no la puede arreglar.
+    expect(invarianteDelEspejo(fila, items)).toBe(true)
+    // Y el claim igual quedó suelto: el reintento de MP tiene que poder volver a entregar.
+    expect(fila.status).not.toBe('approved')
+    expect(fila.mpPaymentId).toBeNull()
+    errSpy.mockRestore()
+  })
+
+  it('el reintento de MP después de ese revert vuelve a entregar (el cobro no quedó trabado)', async () => {
+    const { fila, items } = cobroFake({ id: 'pay_RV2', status: 'rejected', mpPaymentId: '900' }, [
+      { kind: 'ticket_order', resourceId: 'ord_RV2' },
+    ])
+    pagoAprobado('pay_RV2')
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(prisma.ticketOrder.update).mockRejectedValueOnce(new Error('P2025 simulado'))
+
+    await expect(handleNotification('111', true)).rejects.toThrow()
+    await handleNotification('111', true)
+
+    expect(fila.status).toBe('approved')
+    expect(items.every((i) => i.deliveredAt !== null)).toBe(true)
+    expect(invarianteDelEspejo(fila, items)).toBe(true)
+    errSpy.mockRestore()
+  })
+
+  it('por CARRERA: un checkout concurrente cierra las líneas entre el claim y la entrega, y la entrega falla', async () => {
+    const { fila, items } = cobroFake({ id: 'pay_RC' }, [{ kind: 'ticket_order', resourceId: 'ord_RC' }])
+    pagoAprobado('pay_RC')
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(prisma.ticketOrder.update).mockImplementation((async () => {
+      // Esto es exactamente lo que hace `repararEspejo` de mpCheckoutService desde otro request:
+      // ve la cabecera en `approved` (el claim) con las líneas todavía vivas y las cierra. Justo
+      // después, nuestra entrega falla.
+      for (const it of items) it.closedAt = new Date()
+      throw new Error('P2025 simulado: la orden ya no existe')
+    }) as never)
+
+    await expect(handleNotification('111', true)).rejects.toThrow()
+
+    expect(invarianteDelEspejo(fila, items)).toBe(true)
+    expect(fila.status).not.toBe('approved')
+    errSpy.mockRestore()
+  })
+
+  it('el caso normal no cambia: venía de pending con líneas vivas → vuelve a pending con líneas vivas', async () => {
+    const { fila, items } = cobroFake({ id: 'pay_RN' }, [{ kind: 'ticket_order', resourceId: 'ord_RN' }])
+    pagoAprobado('pay_RN')
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(prisma.ticketOrder.update).mockRejectedValue(new Error('P2025 simulado'))
+
+    await expect(handleNotification('111', true)).rejects.toThrow()
+
+    expect(fila.status).toBe('pending')
+    expect(items.every((i) => i.closedAt === null)).toBe(true)
+    expect(invarianteDelEspejo(fila, items)).toBe(true)
+    errSpy.mockRestore()
+  })
+})
+
+/**
+ * El HUECO HERMANO. La rama `rejected` cerraba las líneas sin preguntarle NADA a MP. En Checkout
+ * Pro el comprador puede reintentar DENTRO DE LA MISMA PREFERENCIA después de un rechazo: con las
+ * líneas ya liberadas puede, además, armarse un cobro nuevo — y terminar pagando los dos. Resultado:
+ * dos filas Payment aprobadas sobre el mismo recurso.
+ */
+describe('webhook — un rechazo no libera el recurso si MP todavía tiene un pago vivo', () => {
+  it('MP reporta un pago vivo para esa preferencia: las líneas NO se cierran y el cobro sigue vivo', async () => {
+    const { fila, items } = cobroFake({ id: 'pay_HH' }, [{ kind: 'ticket_order', resourceId: 'ord_HH' }])
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 900, status: 'rejected', external_reference: 'pay_HH' } as never)
+    // El comprador ya volvió a intentar dentro de la misma preferencia: hay otro pago en curso.
+    vi.mocked(mpApi.searchPaymentsByExternalReference).mockResolvedValue([
+      { id: 900, status: 'rejected' },
+      { id: 901, status: 'in_process' },
+    ] as never)
+
+    await handleNotification('900', true)
+
+    expect(fila.status).toBe('pending')
+    expect(items.every((i) => i.closedAt === null)).toBe(true)
+    expect(invarianteDelEspejo(fila, items)).toBe(true)
+  })
+
+  it('en ese caso NO se anota el mpPaymentId del rechazado: si no, el cobro no vencería nunca más', async () => {
+    // `vencerPendientesAbandonados` filtra por `mpPaymentId: null`. Si al mantener vivo el cobro
+    // le grabáramos el id del pago RECHAZADO, esa fila dejaría de ser candidata a vencer para
+    // siempre y el recurso quedaría trabado sin que nada lo destrabe.
+    const { fila } = cobroFake({ id: 'pay_HH2' }, [{ kind: 'ticket_order', resourceId: 'ord_HH2' }])
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 900, status: 'rejected', external_reference: 'pay_HH2' } as never)
+    vi.mocked(mpApi.searchPaymentsByExternalReference).mockResolvedValue([{ id: 901, status: 'pending' }] as never)
+
+    await handleNotification('900', true)
+
+    expect(fila.mpPaymentId).toBeNull()
+  })
+
+  it('si la consulta a MP falla, tampoco se libera (fail-closed) y queda rastro', async () => {
+    const { fila, items } = cobroFake({ id: 'pay_HH3' }, [{ kind: 'ticket_order', resourceId: 'ord_HH3' }])
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 900, status: 'rejected', external_reference: 'pay_HH3' } as never)
+    vi.mocked(mpApi.searchPaymentsByExternalReference).mockRejectedValue(new Error('MP no responde'))
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await handleNotification('900', true)
+
+    expect(fila.status).toBe('pending')
+    expect(items.every((i) => i.closedAt === null)).toBe(true)
+    expect(errSpy).toHaveBeenCalled()
+    errSpy.mockRestore()
+  })
+
+  it('sin ningún pago vivo en MP el rechazo SÍ libera (si no, una tarjeta rebotada trabaría la orden para siempre)', async () => {
+    const { fila, items } = cobroFake({ id: 'pay_HH4' }, [{ kind: 'ticket_order', resourceId: 'ord_HH4' }])
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 900, status: 'rejected', external_reference: 'pay_HH4' } as never)
+    vi.mocked(mpApi.searchPaymentsByExternalReference).mockResolvedValue([{ id: 900, status: 'rejected' }] as never)
+
+    await handleNotification('900', true)
+
+    expect(fila.status).toBe('rejected')
+    expect(items.every((i) => i.closedAt !== null)).toBe(true)
+  })
+})
+
+/**
+ * El `console.error` de "SEGUNDO pago aprobado" solo salta cuando los dos approved caen en la
+ * MISMA fila Payment. El doble cobro REPARTIDO EN DOS FILAS (el que produce el hueco hermano de
+ * arriba) no dispara nada: son dos Payment distintos, cada uno con su claim limpio. No se puede
+ * deployar algo que puede cobrar dos veces sin dejar huella.
+ */
+describe('webhook — detección del doble cobro repartido en DOS filas Payment', () => {
+  it('un approved sobre un recurso que YA entregó otra fila Payment deja un rastro inequívoco', async () => {
+    cobroFake({ id: 'pay_D2' }, [{ kind: 'ticket_order', resourceId: 'ord_D' }])
+    pagoAprobado('pay_D2')
+    // Otra fila Payment (el primer cobro, ya aprobado y entregado) tiene esta misma orden.
+    vi.mocked(prisma.paymentItem.findMany).mockResolvedValue([
+      { id: 'it_otro', paymentId: 'pay_D1', kind: 'ticket_order', resourceId: 'ord_D', amount: 1000, deliveredAt: new Date() },
+    ] as never)
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await handleNotification('111', true)
+
+    const grito = errSpy.mock.calls.map((c) => String(c[0])).find((s) => s.includes('DOBLE COBRO'))
+    expect(grito).toBeDefined()
+    // El log tiene que decir CUÁL es el otro cobro: sin eso el operador no puede devolver nada.
+    const contexto = errSpy.mock.calls.flat().find(
+      (a) => typeof a === 'object' && a !== null && 'yaEntregadoPorOtroCobro' in (a as object),
+    ) as { yaEntregadoPorOtroCobro: { paymentId: string; resourceId: string }[] }
+    expect(contexto.yaEntregadoPorOtroCobro[0]).toMatchObject({ paymentId: 'pay_D1', resourceId: 'ord_D' })
+    errSpy.mockRestore()
+  })
+
+  it('sin otra fila involucrada no grita nada (el detector no puede ser ruido de fondo)', async () => {
+    cobroFake({ id: 'pay_D3' }, [{ kind: 'ticket_order', resourceId: 'ord_D3' }])
+    pagoAprobado('pay_D3')
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await handleNotification('111', true)
+
+    expect(errSpy.mock.calls.map((c) => String(c[0])).filter((s) => s.includes('DOBLE COBRO'))).toHaveLength(0)
     errSpy.mockRestore()
   })
 })

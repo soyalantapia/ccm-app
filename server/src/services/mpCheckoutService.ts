@@ -14,6 +14,7 @@ import { ApiError, notFound, conflict, badRequest } from '../lib/errors.js'
 import * as mpApi from '../lib/mpApi.js'
 import { getValidToken } from './mpOAuthService.js'
 import { cerrarPago } from './mpPaymentState.js'
+import { ESTADOS_MP_CON_PLATA_VIVA } from './mpEstados.js'
 import { SOCIO_PRICE, priceForCampaign } from '../../../src/lib/pricing.js'
 import type { AdSlot } from '@domain/types'
 
@@ -169,17 +170,76 @@ const VENTANA_RIESGO_SIN_PREFERENCIA_MS = 5 * 60_000
 const UMBRAL_VENCIMIENTO_PENDIENTE_MS = 30 * 60_000
 
 /**
- * Estados de MP que significan "hay un pago VIVO para este cobro": mientras exista uno de estos,
- * el Payment NO se vence, por más viejo que sea. `pending`/`in_process` son el cupón de
- * efectivo/Rapipago esperando acreditación; `authorized` es una tarjeta autorizada sin capturar;
- * `approved` es plata ya cobrada (y además significa que se perdió un webhook: se loguea fuerte).
+ * Cuántos candidatos consulta contra MP UN checkout. El barrido corre en el CAMINO CALIENTE de la
+ * compra —el comprador está esperando su link— así que su costo tiene que estar acotado por
+ * diseño, no por suerte.
  *
- * Lo que NO está en esta lista —`rejected`, `cancelled`, `charged_back`, `refunded`— son intentos
- * TERMINADOS: si todos los pagos del cobro están así, el cobro está muerto de verdad y vencerlo
- * es lo correcto. Meterlos acá trabaría el recurso para siempre con solo hacer rebotar una
- * tarjeta, que es el otro extremo del mismo error.
+ * Por qué 3: el índice único parcial garantiza como mucho UNA línea viva por recurso, así que la
+ * cantidad de candidatos está acotada por el tamaño del carrito (≤ MAX_LINEAS = 10). El carrito
+ * real es de 1 o 2 líneas casi siempre; 3 cubre esa distribución entera y deja el peor caso en 3
+ * consultas en vez de 10. Lo que queda sin barrer no se pierde: este barrido es PEREZOSO —el
+ * próximo intento de compra sobre esos recursos lo vuelve a intentar— así que "no terminar en una
+ * pasada" es un retraso, no una falla.
  */
-const ESTADOS_MP_QUE_BLOQUEAN_EL_VENCIMIENTO = new Set(['pending', 'in_process', 'authorized', 'approved'])
+export const TOPE_CANDIDATOS_POR_CHECKOUT = 3
+
+/**
+ * Timeout propio para la consulta de vencimiento, mucho más corto que el general de 10 s de mpApi.
+ *
+ * Por qué 3 s: acá del otro lado hay una persona esperando el link de pago, y el valor de esperar
+ * cae a plomo con el tiempo. `/v1/payments/search` normalmente contesta en cientos de ms; 3 s ya
+ * es ~10× eso, o sea que si no contestó es que algo anda mal, no que está por contestar. Y el
+ * costo de cortar es bajo: fail-closed significa que el cobro viejo no se vence esta vez —se
+ * reintenta en el próximo checkout— mientras que esperar 10 s le arruina la compra a alguien que
+ * no tiene nada que ver. El tope general de 10 s se mantiene donde la latencia no la sufre nadie
+ * (OAuth, createPreference, el getPayment del webhook).
+ *
+ * Combinado con el tope y el paralelismo: peor caso 3 s de demora agregada, contra los 10 s × N
+ * secuenciales de antes (hasta 100 s con un carrito de 10).
+ */
+export const TIMEOUT_CONSULTA_VENCIMIENTO_MS = 3_000
+
+/**
+ * Cuántas consultas fallidas SEGUIDAS hacen falta para considerar que esto es un incidente y no un
+ * blip. Una sola falla es ruido (un timeout suelto, un 500 de MP); tres seguidas significan que
+ * `/v1/payments/search` está caído de forma sostenida — y ESA es la condición peligrosa, porque el
+ * fail-closed (correcto) deja de vencer NADA y va trabando recursos en silencio, uno por comprador
+ * que abandona. Sin este contador, el único rastro era un `console.error` por incidente, que es
+ * exactamente igual de visible que el de una falla aislada e inofensiva.
+ */
+export const FALLOS_CONSECUTIVOS_PARA_ALERTAR = 3
+
+/**
+ * Salud de la consulta de vencimiento contra MP. Objeto MUTABLE exportado a propósito (mismo
+ * criterio que `webhookConfig` en routes/mp.ts): es estado de proceso, y así los tests pueden
+ * ponerlo en cero sin recargar el módulo.
+ */
+export const saludDeLaConsultaAMp = {
+  /** Consultas fallidas SEGUIDAS. Una sola consulta exitosa lo vuelve a 0. */
+  fallosConsecutivos: 0,
+  /** Desde cuándo viene fallando: sin esto, "3 fallos" no distingue 3 segundos de 3 días. */
+  desde: null as Date | null,
+}
+
+/** Registra el resultado de una consulta y grita si el fail-closed se volvió sostenido. */
+function registrarConsultaAMp(ok: boolean, paymentId: string): void {
+  if (ok) {
+    saludDeLaConsultaAMp.fallosConsecutivos = 0
+    saludDeLaConsultaAMp.desde = null
+    return
+  }
+  saludDeLaConsultaAMp.fallosConsecutivos += 1
+  saludDeLaConsultaAMp.desde ??= new Date()
+  if (saludDeLaConsultaAMp.fallosConsecutivos < FALLOS_CONSECUTIVOS_PARA_ALERTAR) return
+  console.error(
+    '[mpCheckoutService] ALERTA: la consulta de pagos a Mercado Pago viene fallando de forma sostenida. El vencimiento de pendientes está fail-closed, así que los recursos abandonados NO se están liberando y los compradores van a empezar a ver "ya tenés un pago en curso" sin poder comprar. Revisar credenciales/estado de MP.',
+    {
+      fallosConsecutivos: saludDeLaConsultaAMp.fallosConsecutivos,
+      desde: saludDeLaConsultaAMp.desde,
+      ultimoPaymentId: paymentId,
+    },
+  )
+}
 
 /**
  * Vence los Payment `pending` abandonados que toquen alguno de estos recursos, para que dejen de
@@ -221,52 +281,67 @@ async function vencerPendientesAbandonados(pares: LineaPedida[], token: string):
       items: { some: { closedAt: null, OR: pares } },
     },
     select: { id: true },
+    // Los más VIEJOS primero: son los que con más probabilidad están realmente abandonados, y son
+    // los que conviene atacar si el tope de abajo deja alguno afuera.
+    orderBy: { createdAt: 'asc' },
+    take: TOPE_CANDIDATOS_POR_CHECKOUT,
   })
 
-  for (const { id } of candidatos) {
-    let pagosEnMp: { id: number; status: string }[]
-    try {
-      pagosEnMp = await mpApi.searchPaymentsByExternalReference(token, id)
-    } catch (err) {
-      // Fail-closed: si no podemos confirmar con MP que no hay plata en juego, no vencemos.
-      console.error(
-        '[mpCheckoutService] no se pudo consultar a MP si el cobro tiene pagos vivos: NO se vence (se prefiere trabar el recurso un rato antes que arriesgar un doble cobro)',
-        { paymentId: id },
-        err instanceof Error ? err.message : err,
-      )
-      continue
-    }
+  // En PARALELO, no en un `for` secuencial: cada vuelta puede costar hasta un timeout entero, y
+  // encadenarlas convertía el peor caso en 10 s × N con el comprador esperando el link. Son
+  // consultas independientes sobre Payments distintos, así que no hay ningún orden que respetar.
+  await Promise.all(candidatos.map(({ id }) => vencerSiMpNoConoceNingunPagoVivo(id, token)))
+}
 
-    const vivo = pagosEnMp.find((p) => ESTADOS_MP_QUE_BLOQUEAN_EL_VENCIMIENTO.has(p.status))
-    if (vivo) {
-      // Hay un pago real dando vueltas que nuestro webhook nunca llegó a registrar (el caso
-      // típico: cupón de Rapipago generado y aviso todavía en vuelo). Se anota el mpPaymentId
-      // para que la próxima vez ni haga falta preguntar, y el cobro queda VIVO.
-      await prisma.payment.updateMany({
-        where: { id, status: 'pending', mpPaymentId: null },
-        data: { mpPaymentId: String(vivo.id) },
-      })
-      if (vivo.status === 'approved') {
-        console.error(
-          '[mpCheckoutService] MP tiene un pago APROBADO para un cobro que acá figura pending: se perdió un aviso del webhook, hay que entregar a mano o forzar el reenvío',
-          { paymentId: id, mpPaymentId: vivo.id },
-        )
-      }
-      continue
-    }
-
-    // Ningún pago vivo en MP: el comprador se fue. Cabecera y líneas se cierran JUNTAS, y el
-    // `where` vuelve a exigir las mismas condiciones para que una carrera contra el webhook la
-    // pierda este vencimiento, no el pago.
-    await prisma.$transaction(async (tx) => {
-      const cabecera = await tx.payment.updateMany({
-        where: { id, status: 'pending', mpPaymentId: null },
-        data: { status: 'expired' },
-      })
-      if (cabecera.count !== 1) return
-      await tx.paymentItem.updateMany({ where: { paymentId: id, closedAt: null }, data: { closedAt: new Date() } })
-    })
+/** Un candidato: pregunta a MP y, solo si no hay plata en juego, lo vence. */
+async function vencerSiMpNoConoceNingunPagoVivo(id: string, token: string): Promise<void> {
+  let pagosEnMp: { id: number; status: string }[]
+  try {
+    pagosEnMp = await mpApi.searchPaymentsByExternalReference(token, id, TIMEOUT_CONSULTA_VENCIMIENTO_MS)
+    registrarConsultaAMp(true, id)
+  } catch (err) {
+    // Fail-closed: si no podemos confirmar con MP que no hay plata en juego, no vencemos.
+    console.error(
+      '[mpCheckoutService] no se pudo consultar a MP si el cobro tiene pagos vivos: NO se vence (se prefiere trabar el recurso un rato antes que arriesgar un doble cobro)',
+      { paymentId: id },
+      err instanceof Error ? err.message : err,
+    )
+    // El fail-closed en sí está bien; lo que no puede pasar es que sea INVISIBLE cuando se vuelve
+    // sostenido (ahí deja de liberar recursos y nadie se entera hasta que un comprador se queja de
+    // que no puede comprar).
+    registrarConsultaAMp(false, id)
+    return
   }
+
+  const vivo = pagosEnMp.find((p) => ESTADOS_MP_CON_PLATA_VIVA.has(p.status))
+  if (vivo) {
+    // Hay un pago real dando vueltas que nuestro webhook nunca llegó a registrar (el caso típico:
+    // cupón de Rapipago generado y aviso todavía en vuelo). Se anota el mpPaymentId para que la
+    // próxima vez ni haga falta preguntar, y el cobro queda VIVO.
+    await prisma.payment.updateMany({
+      where: { id, status: 'pending', mpPaymentId: null },
+      data: { mpPaymentId: String(vivo.id) },
+    })
+    if (vivo.status === 'approved') {
+      console.error(
+        '[mpCheckoutService] MP tiene un pago APROBADO para un cobro que acá figura pending: se perdió un aviso del webhook, hay que entregar a mano o forzar el reenvío',
+        { paymentId: id, mpPaymentId: vivo.id },
+      )
+    }
+    return
+  }
+
+  // Ningún pago vivo en MP: el comprador se fue. Cabecera y líneas se cierran JUNTAS, y el `where`
+  // vuelve a exigir las mismas condiciones para que una carrera contra el webhook la pierda este
+  // vencimiento, no el pago.
+  await prisma.$transaction(async (tx) => {
+    const cabecera = await tx.payment.updateMany({
+      where: { id, status: 'pending', mpPaymentId: null },
+      data: { status: 'expired' },
+    })
+    if (cabecera.count !== 1) return
+    await tx.paymentItem.updateMany({ where: { paymentId: id, closedAt: null }, data: { closedAt: new Date() } })
+  })
 }
 
 /**
