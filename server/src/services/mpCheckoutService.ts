@@ -108,6 +108,48 @@ const ESPERAS_GUARDADO_PREFERENCIA_MS = [0, 50, 150]
 // después que arriesgarse a generarle un segundo link pagable.
 const VENTANA_RIESGO_SIN_PREFERENCIA_MS = 5 * 60_000
 
+// Umbral de vencimiento para un Payment `pending` abandonado (Tarea 8: cierra el efecto
+// colateral del índice único parcial documentado más abajo). Sale de la vida útil acotada de las
+// preferencias de Checkout Pro: pasada esta ventana no vale la pena seguir tratando la
+// preferencia vieja como "todavía puede completarse en cualquier momento". Subirlo alarga cuánto
+// tiempo un comprador legítimo que volvió tarde sigue viendo "hay un cobro en curso" en vez de
+// un link nuevo; bajarlo arriesga vencer una preferencia que el comprador todavía tiene abierta
+// en otra pestaña, obligándolo a pedir el link de nuevo.
+const UMBRAL_VENCIMIENTO_PENDIENTE_MS = 30 * 60_000
+
+/**
+ * Vence, con UN SOLO `updateMany` condicional (no leer-después-escribir: el propio `WHERE`
+ * decide atómicamente qué filas tocar), los Payment `pending` abandonados de este mismo
+ * (kind, resourceId): más viejos que UMBRAL_VENCIMIENTO_PENDIENTE_MS Y sin que MP haya llegado a
+ * reportar un pago concreto para ellos.
+ *
+ * ⚠️ `mpPaymentId: null` es el corazón de este guard, no un detalle. Un `pending` puede estarlo
+ * porque el comprador abandonó, O porque lo está pagando en efectivo en un Rapipago ahora mismo:
+ * mpWebhookService.handleNotification setea `mpPaymentId` apenas MP reporta CUALQUIER estado
+ * para ese pago — incluido 'pending' (ver el `update` en la rama `estado !== 'approved'` de
+ * `handleNotification`, que corre también para el efectivo recién generado, antes de que se
+ * acredite). Vencer el segundo caso liberaría el índice, el comprador generaría un segundo
+ * cobro, y cuando MP acredite el efectivo tendríamos plata cobrada contra un Payment marcado
+ * `expired`. Por eso: si `mpPaymentId` no es null, MP ya conoce un pago concreto para esto y
+ * jamás se toca, sin importar cuán viejo sea.
+ *
+ * Perezoso a propósito, no un job de fondo: este server corre en un solo contenedor de Railway
+ * sin scheduler — un `setInterval` se pierde en cada redeploy y se duplicaría con más de una
+ * réplica. El propio intento de compra siguiente es el momento natural para esta limpieza.
+ */
+async function vencerPendientesAbandonados(kind: PaymentKind, resourceId: string): Promise<void> {
+  await prisma.payment.updateMany({
+    where: {
+      kind,
+      resourceId,
+      status: 'pending',
+      mpPaymentId: null,
+      createdAt: { lt: new Date(Date.now() - UMBRAL_VENCIMIENTO_PENDIENTE_MS) },
+    },
+    data: { status: 'expired' },
+  })
+}
+
 /**
  * Reintenta el `update` que guarda mpPreferenceId/initPoint con backoff corto. Devuelve `true`
  * si algún intento guardó con éxito, `false` si los agotó todos. Nunca tira: quien llama decide
@@ -139,6 +181,11 @@ export async function createCheckout(
   // Primero el token: si no hay conexión, no queremos dejar un Payment huérfano en la base.
   const token = await getValidToken()
   const { titulo, monto } = await resolverCobro(kind, resourceId, deviceId)
+
+  // Vencer ANTES de buscar/crear (Tarea 8): si el intento anterior quedó `pending` abandonado
+  // (sin que MP haya llegado a reportar un pago concreto), acá se libera solo — ver
+  // `vencerPendientesAbandonados` más arriba para el porqué de `mpPaymentId: null`.
+  await vencerPendientesAbandonados(kind, resourceId)
 
   // Reusar preferencia existente si ya hay una viva: sin esto, pedir el link dos veces (doble
   // clic, dos pestañas, un reintento del navegador) crea DOS preferencias distintas en MP — si
@@ -180,11 +227,14 @@ export async function createCheckout(
   // (`(kind, resourceId) WHERE status = 'pending'`) hace que el SEGUNDO `create` para el mismo
   // par truene con `P2002` en vez de tener éxito — ahí abajo se maneja ese caso.
   //
-  // ⚠️ Efecto colateral: mientras exista un Payment `pending` para este (kind, resourceId) —
-  // incluido uno abandonado (p.ej. el checkout anterior nunca llegó a fallar ni a confirmarse)
-  // — este índice traba la generación de un cobro nuevo para el mismo recurso. Hoy lo único que
-  // cierra un Payment `pending` es el catch de más abajo cuando falla `createPreference`; no hay
-  // ningún job que expire los abandonados (deliberadamente fuera de esta tarea).
+  // ⚠️ Efecto colateral (Tarea 8, YA CERRADO): mientras exista un Payment `pending` para este
+  // (kind, resourceId) — incluido uno abandonado (p.ej. el checkout anterior nunca llegó a
+  // fallar ni a confirmarse) — este índice traba la generación de un cobro nuevo para el mismo
+  // recurso. Antes lo único que cerraba un `pending` era el catch de más abajo cuando fallaba
+  // `createPreference`; ahora también lo cierra `vencerPendientesAbandonados` de más arriba
+  // (llamado al principio de esta función), así que para cuando se llega hasta acá el único
+  // `pending` que puede seguir trabando es uno reciente o uno con `mpPaymentId` (efectivo
+  // pendiente de acreditación) — ambos a propósito, no un bug.
   let pago: { id: string }
   try {
     pago = await prisma.payment.create({

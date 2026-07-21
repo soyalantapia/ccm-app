@@ -117,6 +117,12 @@ enum PaymentStatus {
   approved
   rejected
   refunded
+  // Un `pending` que superó UMBRAL_VENCIMIENTO_PENDIENTE_MS (mpCheckoutService.ts) SIN que MP
+  // llegara a reportar un pago concreto (mpPaymentId sigue null). Distinto de `rejected`: acá
+  // nadie rechazó nada, el comprador simplemente no volvió. Lo vence el propio intento de compra
+  // siguiente (perezoso, sin job de fondo) para liberar el índice único parcial
+  // Payment(kind,resourceId) WHERE status='pending' (migración 9_mp_payment_pending_unique).
+  expired
 }
 
 enum ProfileFieldKey {

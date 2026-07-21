@@ -4,7 +4,7 @@ vi.mock('../lib/prisma.js', () => ({
   prisma: {
     ticketOrder: { findUnique: vi.fn() },
     adCampaign: { findUnique: vi.fn() },
-    payment: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn() },
+    payment: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
   },
 }))
 vi.mock('./mpOAuthService.js', () => ({ getValidToken: vi.fn() }))
@@ -27,6 +27,9 @@ beforeEach(() => {
   // un test que pise `payment.update` con `mockRejectedValue` (no `Once`) dejaría ese fallo
   // filtrando hacia tests posteriores que no lo esperan.
   vi.mocked(prisma.payment.update).mockResolvedValue({} as never)
+  // Sin pendings viejos que vencer por default: el `updateMany` de vencimiento matchea 0 filas
+  // salvo que un test arme un store real (ver `crearPaymentStoreEnMemoria`) que lo implemente.
+  vi.mocked(prisma.payment.updateMany).mockResolvedValue({ count: 0 } as never)
   vi.mocked(mpApi.createPreference).mockResolvedValue({ id: 'pref_1', init_point: 'https://mp/checkout/pref_1' })
 })
 
@@ -159,6 +162,7 @@ function crearPaymentStoreEnMemoria() {
     status: string
     mpPreferenceId: string | null
     initPoint: string | null
+    mpPaymentId: string | null
     createdAt: Date
   }[] = []
 
@@ -174,14 +178,37 @@ function crearPaymentStoreEnMemoria() {
         if (fila.mpPreferenceId === null) return false
       }
     }
+    // A diferencia de mpPreferenceId (arriba, siempre viene envuelto en `{ not: null }`), el
+    // `where` de vencimiento pide `mpPaymentId: null` DIRECTO (sin envolver) — el corazón de la
+    // tarea: jamás vencer un pending que MP ya asoció a un pago concreto (efectivo pendiente de
+    // acreditación).
+    if ('mpPaymentId' in where && where.mpPaymentId === null && fila.mpPaymentId !== null) return false
     if ('createdAt' in where) {
-      const cond = where.createdAt as { gte?: Date }
+      const cond = where.createdAt as { gte?: Date; lt?: Date }
       if (cond?.gte && fila.createdAt.getTime() < cond.gte.getTime()) return false
+      if (cond?.lt && fila.createdAt.getTime() >= cond.lt.getTime()) return false
     }
     return true
   }
 
   return {
+    /** Siembra una fila directo, sin pasar por el chequeo de unicidad de `create` — para armar
+     * el escenario de partida de un test (un Payment `pending` que ya existía antes de la
+     * request bajo prueba), con `createdAt`/`mpPaymentId` a medida. */
+    sembrar: (fila: Partial<(typeof filas)[number]> & { kind: string; resourceId: string }) => {
+      autoincremento += 1
+      filas.push({
+        id: `pay_${autoincremento}`,
+        deviceId: null,
+        amount: 1000,
+        status: 'pending',
+        mpPreferenceId: null,
+        initPoint: null,
+        mpPaymentId: null,
+        createdAt: new Date(),
+        ...fila,
+      })
+    },
     create: async ({ data }: { data: Record<string, unknown> }) => {
       const yaHayPending = filas.some((f) => f.kind === data.kind && f.resourceId === data.resourceId && f.status === 'pending')
       if (yaHayPending) {
@@ -197,6 +224,7 @@ function crearPaymentStoreEnMemoria() {
         status: (data.status as string) ?? 'pending',
         mpPreferenceId: null,
         initPoint: null,
+        mpPaymentId: null,
         createdAt: new Date(),
       }
       filas.push(fila)
@@ -212,6 +240,18 @@ function crearPaymentStoreEnMemoria() {
       if (!fila) throw Object.assign(new Error('Record to update not found.'), { code: 'P2025' })
       Object.assign(fila, data)
       return { ...fila }
+    },
+    /** Simula el `updateMany` condicional de vencimiento: aplica `data` a TODAS las filas que
+     * matchean `where` (así lo haría Postgres), devuelve cuántas tocó. */
+    updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+      let count = 0
+      for (const f of filas) {
+        if (coincide(f, where)) {
+          Object.assign(f, data)
+          count += 1
+        }
+      }
+      return { count }
     },
   }
 }
@@ -260,6 +300,88 @@ describe('mpCheckoutService — atomicidad real ante concurrencia (defecto crít
 
     expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
     expect(r1.initPoint).toBe(r2.initPoint)
+  })
+})
+
+describe('mpCheckoutService — vencimiento perezoso de pendings abandonados (Tarea 8)', () => {
+  it('un pending viejo SIN mpPaymentId no traba: se vence solo y se genera un cobro nuevo', async () => {
+    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
+
+    const store = crearPaymentStoreEnMemoria()
+    // El abandono típico del brief: tocó "comprar", MP le armó una preferencia (mpPreferenceId
+    // + initPoint viven), cerró la pestaña, MP nunca avisó nada (mpPaymentId sigue null). 31
+    // minutos: un toque pasado del umbral de 30.
+    store.sembrar({
+      kind: 'ticket_order',
+      resourceId: 'ord_1',
+      mpPreferenceId: 'pref_viejo',
+      initPoint: 'https://mp/checkout/pref_viejo',
+      mpPaymentId: null,
+      createdAt: new Date(Date.now() - 31 * 60_000),
+    })
+    vi.mocked(prisma.payment.create).mockImplementation(store.create as never)
+    vi.mocked(prisma.payment.findFirst).mockImplementation(store.findFirst as never)
+    vi.mocked(prisma.payment.update).mockImplementation(store.update as never)
+    vi.mocked(prisma.payment.updateMany).mockImplementation(store.updateMany as never)
+    vi.mocked(mpApi.createPreference).mockResolvedValue({ id: 'pref_nuevo', init_point: 'https://mp/checkout/pref_nuevo' })
+
+    const r = await createCheckout('ticket_order', 'ord_1', 'dev_1')
+
+    // No reusa el link viejo: se venció, así que hay que haber pasado por MP de nuevo.
+    expect(mpApi.createPreference).toHaveBeenCalledTimes(1)
+    expect(r.initPoint).toBe('https://mp/checkout/pref_nuevo')
+  })
+
+  it('un pending RECIENTE sigue trabando: se reusa su initPoint, no se crea otra preferencia', async () => {
+    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
+
+    const store = crearPaymentStoreEnMemoria()
+    // 5 minutos: todavía puede tener el checkout de MP abierto en otra pestaña — no hay que
+    // tocarlo.
+    store.sembrar({
+      kind: 'ticket_order',
+      resourceId: 'ord_1',
+      mpPreferenceId: 'pref_reciente',
+      initPoint: 'https://mp/checkout/pref_reciente',
+      mpPaymentId: null,
+      createdAt: new Date(Date.now() - 5 * 60_000),
+    })
+    vi.mocked(prisma.payment.create).mockImplementation(store.create as never)
+    vi.mocked(prisma.payment.findFirst).mockImplementation(store.findFirst as never)
+    vi.mocked(prisma.payment.update).mockImplementation(store.update as never)
+    vi.mocked(prisma.payment.updateMany).mockImplementation(store.updateMany as never)
+
+    const r = await createCheckout('ticket_order', 'ord_1', 'dev_1')
+
+    expect(mpApi.createPreference).not.toHaveBeenCalled()
+    expect(r.initPoint).toBe('https://mp/checkout/pref_reciente')
+  })
+
+  it('un pending viejo CON mpPaymentId (efectivo esperando acreditación) NO se vence nunca, por más viejo que sea', async () => {
+    vi.mocked(prisma.ticketOrder.findUnique).mockResolvedValue({ id: 'ord_1', total: 1000, qty: 1, planId: 'p', status: 'iniciada', deviceId: 'dev_1' } as never)
+
+    const store = crearPaymentStoreEnMemoria()
+    // 10 días: MUCHO más viejo que el umbral, pero mpPaymentId != null significa que MP YA
+    // conoce un pago concreto para esto (p.ej. un boleto de Rapipago pendiente de acreditación).
+    // Vencerlo liberaría el índice, el comprador generaría un segundo cobro, y cuando MP acredite
+    // el efectivo tendríamos plata cobrada contra un Payment marcado 'expired'.
+    store.sembrar({
+      kind: 'ticket_order',
+      resourceId: 'ord_1',
+      mpPreferenceId: 'pref_efectivo',
+      initPoint: 'https://mp/checkout/pref_efectivo',
+      mpPaymentId: 'mp_123456',
+      createdAt: new Date(Date.now() - 10 * 24 * 60 * 60_000),
+    })
+    vi.mocked(prisma.payment.create).mockImplementation(store.create as never)
+    vi.mocked(prisma.payment.findFirst).mockImplementation(store.findFirst as never)
+    vi.mocked(prisma.payment.update).mockImplementation(store.update as never)
+    vi.mocked(prisma.payment.updateMany).mockImplementation(store.updateMany as never)
+
+    const r = await createCheckout('ticket_order', 'ord_1', 'dev_1')
+
+    expect(mpApi.createPreference).not.toHaveBeenCalled()
+    expect(r.initPoint).toBe('https://mp/checkout/pref_efectivo')
   })
 })
 
