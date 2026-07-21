@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { otpEmail, accessGrantedEmail } from './templates.js'
+import { otpEmail, accessGrantedEmail, applicationAcceptedEmail, applicationRejectedEmail } from './templates.js'
 import { ROLE_LABEL } from '../domain/adminRoles.js'
 import type { AdminRole } from '@prisma/client'
 
@@ -122,5 +122,46 @@ describe('forma del mail', () => {
     expect(m.html).toContain('style="')
     expect(m.html).not.toContain('<style')
     expect(m.html).not.toContain('<link')
+  })
+})
+
+describe('applicationAcceptedEmail', () => {
+  const msg = applicationAcceptedEmail({ name: 'Lautaro', convocatoria: 'Camino a CCM 2026' })
+
+  it('saluda por el nombre y nombra la convocatoria', () => {
+    expect(msg.html).toContain('Lautaro')
+    expect(msg.html).toContain('Camino a CCM 2026')
+    expect(msg.text).toContain('Lautaro')
+  })
+
+  it('el asunto dice que quedó seleccionado, sin que haya que abrirlo', () => {
+    expect(msg.subject.toLowerCase()).toContain('camino a ccm 2026')
+  })
+})
+
+describe('applicationRejectedEmail', () => {
+  const msg = applicationRejectedEmail({ name: 'Abril', convocatoria: 'Camino a CCM 2026' })
+
+  it('es cordial y nombra a la persona', () => {
+    expect(msg.html).toContain('Abril')
+    expect(msg.text).toContain('Abril')
+  })
+
+  // El motivo es interno del equipo. Que se filtre a un mail es el peor bug posible acá.
+  it('NUNCA incluye la nota interna, ni aunque se la pasen', () => {
+    const conNota = applicationRejectedEmail({
+      name: 'Abril',
+      convocatoria: 'Camino a CCM 2026',
+      // @ts-expect-error — la firma no acepta nota; el test blinda que siga siendo así
+      note: 'no cumple el perfil, portfolio flojo',
+    })
+    expect(conNota.html).not.toContain('portfolio flojo')
+    expect(conNota.text).not.toContain('portfolio flojo')
+    expect(conNota.subject).not.toContain('portfolio flojo')
+  })
+
+  it('escapa el HTML de lo que venga de la base', () => {
+    const m = applicationRejectedEmail({ name: '<script>x</script>', convocatoria: 'C' })
+    expect(m.html).not.toContain('<script>x</script>')
   })
 })
