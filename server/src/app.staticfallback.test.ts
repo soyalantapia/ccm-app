@@ -18,15 +18,22 @@ import { join } from 'node:path'
  */
 
 let dist: string
+let crearApp: typeof import('./app.js').createApp
 
-beforeAll(() => {
+beforeAll(async () => {
   dist = mkdtempSync(join(tmpdir(), 'ccm-dist-'))
   writeFileSync(join(dist, 'index.html'), '<!doctype html><title>CCM</title>')
   mkdirSync(join(dist, 'img'), { recursive: true })
   writeFileSync(join(dist, 'img', 'existe.jpg'), Buffer.from([0xff, 0xd8, 0xff]))
   process.env.FRONT_DIST = dist
   process.env.DATABASE_URL ??= 'postgresql://localhost:5432/noop'
-})
+  // El import se hace ACÁ, no dentro del primer test: importar app.js arrastra todo el grafo
+  // (routers → servicios → prisma) y compilarlo la primera vez tarda varios segundos. Si eso
+  // cuenta contra el timeout del primer `it`, la suite falla en un clon limpio o en CI —por
+  // frío, no por roto— mientras que en local con caché caliente pasa. FRONT_DIST tiene que
+  // estar seteada antes, porque app.js la lee al construirse.
+  ;({ createApp: crearApp } = await import('./app.js'))
+}, 30_000)
 
 afterAll(() => {
   delete process.env.FRONT_DIST
@@ -34,46 +41,43 @@ afterAll(() => {
 })
 
 describe('fallback de la SPA — no miente sobre archivos que no existen', () => {
-  async function app() {
-    const { createApp } = await import('./app.js')
-    return createApp()
-  }
+  const app = () => crearApp() // el módulo ya se importó en beforeAll
 
   it('una imagen que NO existe devuelve 404, no el index con 200', async () => {
-    const res = await request(await app()).get('/img/no-existe.jpg')
+    const res = await request(app()).get('/img/no-existe.jpg')
     expect(res.status).toBe(404)
     expect(res.headers['content-type'] ?? '').not.toContain('text/html')
   })
 
   it('una subida que no existe devuelve 404', async () => {
-    const res = await request(await app()).get('/uploads/no-existe-abc.jpg')
+    const res = await request(app()).get('/uploads/no-existe-abc.jpg')
     expect(res.status).toBe(404)
   })
 
   it('un asset del bundle que no existe devuelve 404 (no HTML disfrazado de JS)', async () => {
-    const res = await request(await app()).get('/assets/index-VIEJO.js')
+    const res = await request(app()).get('/assets/index-VIEJO.js')
     expect(res.status).toBe(404)
   })
 
   it('una imagen que SÍ existe se sirve normal', async () => {
-    const res = await request(await app()).get('/img/existe.jpg')
+    const res = await request(app()).get('/img/existe.jpg')
     expect(res.status).toBe(200)
   })
 
   it('una ruta del router de la SPA sigue devolviendo el index', async () => {
-    const res = await request(await app()).get('/p/valentina-roldan')
+    const res = await request(app()).get('/p/valentina-roldan')
     expect(res.status).toBe(200)
     expect(res.headers['content-type']).toContain('text/html')
   })
 
   it('la raíz sigue devolviendo el index', async () => {
-    const res = await request(await app()).get('/eventos')
+    const res = await request(app()).get('/eventos')
     expect(res.status).toBe(200)
     expect(res.headers['content-type']).toContain('text/html')
   })
 
   it('/api/* inexistente sigue siendo 404 JSON, no HTML', async () => {
-    const res = await request(await app()).get('/api/v1/no-existe')
+    const res = await request(app()).get('/api/v1/no-existe')
     expect(res.status).toBe(404)
     expect(res.headers['content-type']).toContain('json')
   })
