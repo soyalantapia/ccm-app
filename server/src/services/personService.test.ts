@@ -461,8 +461,40 @@ describe('el buscador encuentra por lo que promete', () => {
     await prisma.application.deleteMany({ where: { id: { startsWith: 'app-busca-' } } })
     await prisma.person.deleteMany({ where: { email: MAIL } })
     const persona = await prisma.person.create({ data: { email: MAIL } })
-    const cv = await prisma.convocatoria.findFirst()
-    if (!cv) return
+    // Antes esto era `findFirst()` + `if (!cv) return`: el bloque dependía de que ALGÚN otro
+    // test (o el seed) hubiera dejado una convocatoria en la base. En una base recién creada no
+    // hay ninguna, así que el `return` silencioso se saltaba la preparación y los tests fallaban
+    // como si el buscador estuviera roto. Peor: pasaban o fallaban según el orden de los
+    // archivos, que es la peor forma de fallar (la suite deja de ser creíble). Ahora se crea lo
+    // que necesita, sin depender del estado que le dejen otros.
+    const cv =
+      (await prisma.convocatoria.findFirst()) ??
+      (await (async () => {
+        const ev = await prisma.event.create({
+          data: {
+            id: 'ev-busca-test',
+            slug: 'ev-busca-test',
+            title: 'Evento de prueba del buscador',
+            dateLabel: 'sin fecha',
+            startDate: new Date('2030-01-01T00:00:00Z'),
+            venue: 'x',
+            address: 'x',
+            mapsUrl: 'x',
+            description: 'x',
+            cover: 'x',
+          },
+        })
+        return prisma.convocatoria.create({
+          data: {
+            id: 'conv-busca-test',
+            slug: 'conv-busca-test',
+            title: 'Convocatoria de prueba',
+            intro: 'x',
+            deadline: new Date('2030-01-01T00:00:00Z'),
+            eventId: ev.id,
+          },
+        })
+      })())
     const creada = await prisma.application.create({
       data: {
         id: 'app-busca-1',
