@@ -17,7 +17,7 @@ import { slugify } from './overlay'
 import { newId, writeJSON } from '../../lib/storage'
 import { createApi, ApiError, type ApiClient } from '../../lib/api'
 import { bus } from '../../lib/bus'
-import { hydrateFromRemote, getDeviceToken, setDeviceCredentials } from '../../lib/identity'
+import { hydrateFromRemote, getDeviceToken, setDeviceCredentials, displayName } from '../../lib/identity'
 import { hasAdminToken } from '../adminSession'
 import type {
   DeviceProfile,
@@ -1169,6 +1169,11 @@ export class RemoteDataStore extends LocalDataStore {
     const plan = this.getPlan(planId)
     const unit = (plan?.price ?? 0) + (plan?.serviceCharge ?? 0)
     const profile = this.getProfile()
+    // Mismo armado que la demo, a propósito: si acá falta un campo que allá sí se guarda, el
+    // dato se pierde sólo en producción y no falla nada a la vista. `buyerName` ya vivió ese
+    // bug — toda compra real quedaba con la columna en NULL y el organizador veía el email
+    // crudo en el panel, sin forma de recuperar el nombre después.
+    const nombre = displayName()
     return {
       id: newId('ord'),
       planId,
@@ -1176,6 +1181,7 @@ export class RemoteDataStore extends LocalDataStore {
       status: 'iniciada',
       qty,
       total: unit * qty,
+      ...(nombre ? { buyerName: nombre } : {}),
       ...(profile.fields.email?.value ? { buyerEmail: profile.fields.email.value } : {}),
     }
   }
@@ -1194,6 +1200,7 @@ export class RemoteDataStore extends LocalDataStore {
         id: order.id,
         planId: order.planId,
         qty: order.qty,
+        ...(order.buyerName ? { buyerName: order.buyerName } : {}),
         ...(order.buyerEmail ? { buyerEmail: order.buyerEmail } : {}),
       })
       .then(() => undefined)

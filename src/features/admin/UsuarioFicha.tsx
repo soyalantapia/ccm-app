@@ -1,6 +1,15 @@
 import { Badge, Sheet } from '../../components/ui'
 import { usePerson } from '../../data/queries'
-import { campoLabel, formatDateTime, formatRelative, sourceLabel, APPLICATION_STATUS_META } from './coreFormat'
+import {
+  campoLabel,
+  formatDateTime,
+  formatMoney,
+  formatRelative,
+  sourceLabel,
+  APPLICATION_STATUS_META,
+  ORDER_STATUS_META,
+} from './coreFormat'
+import type { OrderStatus } from '../../data/types'
 
 interface Props {
   personId: string | null
@@ -28,8 +37,16 @@ export function UsuarioFicha({ personId, onClose }: Props) {
         <div className="space-y-7">
           <div className="flex flex-wrap gap-1.5">
             {data.esSocio && <Badge tone="accent">Socio</Badge>}
-            {data.inscripciones > 0 && <Badge tone="success">{data.inscripciones} inscripciones</Badge>}
-            {data.postulaciones > 0 && <Badge tone="neutral">{data.postulaciones} postulaciones</Badge>}
+            {data.inscripciones > 0 && (
+              <Badge tone="success">
+                {data.inscripciones} {data.inscripciones === 1 ? 'inscripción' : 'inscripciones'}
+              </Badge>
+            )}
+            {data.postulaciones > 0 && (
+              <Badge tone="neutral">
+                {data.postulaciones} {data.postulaciones === 1 ? 'postulación' : 'postulaciones'}
+              </Badge>
+            )}
           </div>
 
           <section>
@@ -71,9 +88,28 @@ export function UsuarioFicha({ personId, onClose }: Props) {
 
           <section>
             <p className="eyebrow text-[9px] text-ink-soft">Entradas y pagos</p>
-            <p className="mt-3 text-sm text-ink-soft">
-              Sin entradas todavía. Se va a llenar cuando esté activo el cobro por Mercado Pago.
-            </p>
+            {data.ordenesDetalle.length === 0 ? (
+              <p className="mt-3 text-sm text-ink-soft">Todavía no compró entradas.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {data.ordenesDetalle.map((o) => (
+                  <li key={o.id} className="rounded-sm border border-line p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                      <span className="text-[13px] text-ink">
+                        {o.planTitle}
+                        {o.qty > 1 && <span className="text-ink-soft"> × {o.qty}</span>}
+                      </span>
+                      <Badge tone={ORDER_STATUS_META[o.status as OrderStatus]?.tone ?? 'neutral'}>
+                        {ORDER_STATUS_META[o.status as OrderStatus]?.label ?? o.status}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-[11px] text-ink-soft">
+                      {formatMoney(o.total)} · {formatDateTime(o.ts)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           {data.postulacionesDetalle.length > 0 && (
