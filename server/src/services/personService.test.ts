@@ -502,3 +502,65 @@ describe('el buscador encuentra por lo que promete', () => {
     expect(true).toBe(true)
   })
 })
+
+/**
+ * La ficha tiene que contar QUÉ COMPRÓ la persona.
+ *
+ * Encontrado auditando la compra real de punta a punta: la sección «Entradas y pagos» de la
+ * ficha estaba escrita a mano con un «Sin entradas todavía. Se va a llenar cuando esté activo
+ * el cobro por Mercado Pago» — un placeholder que envejeció mal. Las órdenes ya existen y ya
+ * se confirman a mano desde el panel, así que el organizador abría la ficha de alguien que
+ * acababa de pagar $ 33.000 y leía que no tenía ninguna entrada.
+ *
+ * La ficha ni siquiera podía mostrarlas: `getPerson` no traía las órdenes.
+ */
+describe('getPerson — entradas compradas', () => {
+  async function crearPlan(sufijo: string) {
+    return prisma.ticketPlan.create({
+      data: {
+        id: `plan-${sufijo}`, name: 'Night VIP test', tagline: 'Desfile de las Estrellas',
+        price: 30000, serviceCharge: 3000, day: 'sabado', kind: 'vip',
+      },
+    })
+  }
+
+  it('devuelve las órdenes de la persona, de la más nueva a la más vieja', async () => {
+    const sufijo = `ord-${Date.now()}`
+    const plan = await crearPlan(sufijo)
+    const device = await prisma.device.create({ data: { publicId: `dev-${sufijo}` } })
+    const persona = await prisma.person.create({ data: { email: `${sufijo}@x.com`, dni: null } })
+    await prisma.device.update({ where: { id: device.id }, data: { personId: persona.id } })
+
+    await prisma.ticketOrder.create({
+      data: {
+        id: `o1-${sufijo}`, deviceId: device.id, planId: plan.id, status: 'confirmada',
+        qty: 1, total: 33000, buyerName: 'Veronica Fixeada', ts: new Date('2026-07-01'),
+      },
+    })
+    await prisma.ticketOrder.create({
+      data: {
+        id: `o2-${sufijo}`, deviceId: device.id, planId: plan.id, status: 'iniciada',
+        qty: 2, total: 66000, ts: new Date('2026-07-15'),
+      },
+    })
+
+    const ficha = await getPerson(persona.id)
+
+    expect(ficha!.ordenesDetalle, 'la ficha no trae las órdenes').toHaveLength(2)
+    expect(ficha!.ordenesDetalle[0].id, 'no vienen de la más nueva a la más vieja').toBe(`o2-${sufijo}`)
+    const confirmada = ficha!.ordenesDetalle.find((o) => o.id === `o1-${sufijo}`)!
+    expect(confirmada.status).toBe('confirmada')
+    expect(confirmada.total).toBe(33000)
+    expect(confirmada.qty).toBe(1)
+    expect(confirmada.planId).toBe(plan.id)
+    // El título del plan viaja resuelto: la ficha muestra «Night VIP test», no un id opaco.
+    expect(confirmada.planTitle).toBe('Night VIP test')
+  })
+
+  it('sin órdenes devuelve una lista vacía, no undefined', async () => {
+    const sufijo = `sinord-${Date.now()}`
+    const persona = await prisma.person.create({ data: { email: `${sufijo}@x.com`, dni: null } })
+    const ficha = await getPerson(persona.id)
+    expect(ficha!.ordenesDetalle).toEqual([])
+  })
+})

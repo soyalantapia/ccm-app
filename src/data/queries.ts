@@ -93,6 +93,15 @@ export interface PersonaFicha extends PersonaListItem {
   consentimientos: { terms: string | null; news: string | null; sponsors: string | null }
   inscripcionesDetalle: { id: string; eventId: string; blockId: string | null; status: string; ts: string }[]
   postulacionesDetalle: { id: string; convocatoriaId: string; status: string; ts: string; data: unknown }[]
+  ordenesDetalle: {
+    id: string
+    planId: string
+    planTitle: string
+    status: string
+    qty: number
+    total: number
+    ts: string
+  }[]
   membresia: { tier: string; since: string | null } | null
   actividad: { type: string; ts: string; meta: unknown }[]
 }
