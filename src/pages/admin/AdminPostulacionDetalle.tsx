@@ -1,10 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react'
-import { Badge, Button, EmptyState, toast } from '../../components/ui'
-import { store, useStore } from '../../data/store'
+import { Badge, Button, EmptyState } from '../../components/ui'
+import { useStore } from '../../data/store'
 import type { ConvocatoriaField } from '../../data/types'
 import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
+import { OpsDecisionSheet } from '../../features/admin/OpsDecisionSheet'
 import { formatDateTime } from '../../features/admin/opsFormat'
 import { APPLICATION_STATUS_META } from '../../features/admin/coreFormat'
 import {
@@ -28,6 +29,7 @@ export default function AdminPostulacionDetalle() {
   const [searchParams] = useSearchParams()
   const tab = parseApplicationTab(searchParams.get('tab'))
   const backTo = `/admin/postulaciones${applicationTabQuery(tab)}`
+  const [decision, setDecision] = useState<'aceptada' | 'rechazada' | null>(null)
 
   const applications = useStore((s) => s.getAdminApplications())
   const fallo = useStore((s) => s.applicationsFailed())
@@ -91,14 +93,6 @@ export default function AdminPostulacionDetalle() {
   const fields: ConvocatoriaField[] = convocatoria?.fields ?? []
   const { title, story, email, telefono, rowKeys, labelOf } = deriveApplicationFields(app, fields)
   const meta = APPLICATION_STATUS_META[app.status]
-
-  const decide = (status: 'aceptada' | 'rechazada') => {
-    store.decideApplication(app.id, status)
-    toast(
-      status === 'aceptada' ? '✓ Postulación aceptada' : 'Postulación rechazada',
-      status === 'aceptada' ? 'success' : 'info',
-    )
-  }
 
   return (
     <div className="px-5 py-8 md:px-10">
@@ -217,22 +211,19 @@ export default function AdminPostulacionDetalle() {
           </section>
 
           {app.status === 'preinscripta' && (
-            <section className="space-y-2.5">
-              <div className="flex gap-2.5">
-                <OpsDangerButton className="flex-1 justify-center" onClick={() => decide('rechazada')}>
-                  Rechazar
-                </OpsDangerButton>
-                <Button className="flex-1 justify-center" onClick={() => decide('aceptada')}>
-                  Aceptar
-                </Button>
-              </div>
-              <p className="text-[11px] leading-relaxed text-ink-soft/80">
-                Al aceptar, en Fase 1 se dispara el mail de invitación + WhatsApp automático.
-              </p>
+            <section className="flex gap-2.5">
+              <OpsDangerButton className="flex-1 justify-center" onClick={() => setDecision('rechazada')}>
+                Rechazar
+              </OpsDangerButton>
+              <Button className="flex-1 justify-center" onClick={() => setDecision('aceptada')}>
+                Aceptar
+              </Button>
             </section>
           )}
         </aside>
       </div>
+
+      {decision && <OpsDecisionSheet app={app} status={decision} open onClose={() => setDecision(null)} />}
     </div>
   )
 }
