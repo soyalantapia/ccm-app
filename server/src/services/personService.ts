@@ -1,6 +1,6 @@
 import { Prisma, type Person } from '@prisma/client'
 import { prisma } from '../lib/prisma.js'
-import type { IdentityKeys } from '../domain/personIdentity.js'
+import { enmascararClave, type IdentityKeys } from '../domain/personIdentity.js'
 
 /** true si es el error de Prisma por violar un índice único (P2002). */
 function esConflictoDeUnicidad(err: unknown): boolean {
@@ -98,10 +98,13 @@ export async function linkPerson(keys: IdentityKeys): Promise<string | null> {
       // emitiéramos antes de intentarlo, y el update fallara más abajo (P2002: la carrera de
       // abajo), el log habría afirmado que esta persona se quedó con la clave cuando en
       // realidad terminó siendo otra. Solo se registra lo que de verdad pasó.
+      // La clave va ENMASCARADA: el log sirve para auditar qué pasó, y para eso alcanza saber
+      // cuál se completó. Escribir el email o el DNI enteros los sacaría de la base —donde están
+      // detrás de un permiso— y los dejaría en los logs, que no tienen control por rol.
       console.warn(
         `[personas] se completó una clave que faltaba en la persona ${duena.id}: ` +
           `${Object.entries(faltantes)
-            .map(([clave, valor]) => `${clave}=${valor}`)
+            .map(([clave, valor]) => enmascararClave(clave, valor as string | null))
             .join(', ')}.`,
       )
     } catch (err) {
@@ -242,6 +245,12 @@ export async function listPeople(opts: { q?: string; cursor?: string; limit?: nu
           { dni: { contains: q } },
           { devices: { some: { fields: { some: { value: { contains: q, mode: 'insensitive' } } } } } },
           { applications: { some: { data: { path: ['nombre'], string_contains: q, mode: 'insensitive' } } } },
+          // El teléfono y el email de la POSTULACIÓN también, no sólo el nombre: cuando alguien
+          // llega por una convocatoria, sus datos viven en este JSON y no en ProfileField. Sin
+          // estas dos ramas, el buscador prometía "teléfono" en su placeholder y devolvía cero
+          // para los 24 teléfonos cargados, porque todos habían entrado por ahí.
+          { applications: { some: { data: { path: ['telefono'], string_contains: q, mode: 'insensitive' } } } },
+          { applications: { some: { data: { path: ['email'], string_contains: q, mode: 'insensitive' } } } },
         ],
       }
     : {}

@@ -64,7 +64,10 @@ describe('linkPerson', () => {
     expect(await prisma.person.count()).toBe(2) // y la otra sigue existiendo
   })
 
-  it('completar una clave faltante en una persona existente deja rastro con console.warn', async () => {
+  it('completar una clave faltante deja rastro, SIN escribir el dato en el log', async () => {
+    // El rastro tiene que existir (es lo que permite auditar una fusión dudosa) pero el valor
+    // va enmascarado: los logs no tienen control de acceso por rol, así que un DNI completo
+    // escrito ahí sale del único lugar donde estaba protegido.
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     try {
       const a = await linkPerson({ email: 'ana@x.com', dni: null })
@@ -72,8 +75,10 @@ describe('linkPerson', () => {
       await linkPerson({ email: 'ana@x.com', dni: '38456120' })
       expect(warnSpy).toHaveBeenCalledTimes(1)
       const mensaje = warnSpy.mock.calls[0]?.[0] as string
-      expect(mensaje).toContain(a!)
-      expect(mensaje).toContain('38456120')
+      expect(mensaje, 'sin la persona, el rastro no sirve para auditar').toContain(a!)
+      expect(mensaje, 'dice QUÉ clave se completó').toContain('dni')
+      expect(mensaje, 'pero NO el documento entero').not.toContain('38456120')
+      expect(mensaje, 'lo justo para reconocer el caso al leerlo').toContain('120')
     } finally {
       warnSpy.mockRestore()
     }
@@ -438,5 +443,62 @@ describe('getPerson', () => {
     const nombre = ficha!.campos.find((c) => c.key === 'nombre')
     expect(nombre!.value).toBe('Alguien')
     expect(nombre!.source).toBe('postulacion')
+  })
+})
+
+/**
+ * El buscador promete en su placeholder "nombre, email, teléfono o DNI". Cuando alguien llega
+ * por una convocatoria, esos datos viven en el JSON de la postulación y no en ProfileField —
+ * de hecho, los 24 teléfonos cargados habían entrado por ahí. Sin buscar dentro de ese JSON,
+ * el campo prometía algo que devolvía cero.
+ */
+describe('el buscador encuentra por lo que promete', () => {
+  const TEL = '+54 358 555-0142'
+  const MAIL = 'buscable.test@ejemplo.com'
+  let appId: string
+
+  beforeEach(async () => {
+    await prisma.application.deleteMany({ where: { id: { startsWith: 'app-busca-' } } })
+    await prisma.person.deleteMany({ where: { email: MAIL } })
+    const persona = await prisma.person.create({ data: { email: MAIL } })
+    const cv = await prisma.convocatoria.findFirst()
+    if (!cv) return
+    const creada = await prisma.application.create({
+      data: {
+        id: 'app-busca-1',
+        convocatoriaId: cv.id,
+        status: 'preinscripta',
+        fromSeed: false,
+        personId: persona.id,
+        data: { nombre: 'Persona Buscable', telefono: TEL, email: MAIL },
+      },
+    })
+    appId = creada.id
+  })
+
+  it('encuentra por el teléfono de la postulación', async () => {
+    const r = await listPeople({ q: '555-0142' })
+    expect(r.items.length, 'el teléfono estaba en el JSON de la postulación').toBeGreaterThan(0)
+  })
+
+  it('encuentra por el email de la postulación', async () => {
+    const r = await listPeople({ q: 'buscable.test' })
+    expect(r.items.length).toBeGreaterThan(0)
+  })
+
+  it('sigue encontrando por nombre, que ya funcionaba', async () => {
+    const r = await listPeople({ q: 'Buscable' })
+    expect(r.items.length).toBeGreaterThan(0)
+  })
+
+  it('no inventa resultados para algo que no existe', async () => {
+    const r = await listPeople({ q: 'zzz-no-existe-zzz' })
+    expect(r.items).toHaveLength(0)
+  })
+
+  it('limpieza', async () => {
+    if (appId) await prisma.application.deleteMany({ where: { id: appId } })
+    await prisma.person.deleteMany({ where: { email: MAIL } })
+    expect(true).toBe(true)
   })
 })

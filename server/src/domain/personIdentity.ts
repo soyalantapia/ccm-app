@@ -51,3 +51,28 @@ export function keysFromApplicationData(data: unknown): IdentityKeys {
     dni: normalizeDni(typeof d.dni === 'string' ? d.dni : null),
   }
 }
+
+/**
+ * Enmascara una clave de identidad para poder escribirla en un log.
+ *
+ * Los logs de la aplicación no tienen control de acceso por rol: quien puede leerlos ve todo.
+ * Escribir ahí un email o un DNI completo saca ese dato del único lugar donde está protegido
+ * —la base, detrás de un permiso— y lo deja en un canal sin permisos. CCM captura DNI, así que
+ * esto además cae bajo la ley de datos personales (25.326).
+ *
+ * Lo que se conserva es lo justo para reconocer un caso al auditarlo: el dominio del email o
+ * los últimos dígitos del documento. Nada de eso alcanza para identificar a alguien por sí solo.
+ */
+export function enmascararClave(clave: string, valor: string | null | undefined): string {
+  if (!valor) return `${clave}=(vacío)`
+  if (clave === 'email') {
+    const [usuario = '', dominio = ''] = valor.split('@')
+    // Una o dos letras iniciales: suficiente para distinguir dos casos al leer el log, muy poco
+    // para reconstruir la dirección.
+    const visible = usuario.slice(0, Math.min(2, usuario.length))
+    return `email=${visible}${'*'.repeat(Math.max(1, usuario.length - visible.length))}@${dominio}`
+  }
+  // Documentos y cualquier otra clave: sólo los últimos 3, como en un resumen bancario.
+  const cola = valor.slice(-3)
+  return `${clave}=${'*'.repeat(Math.max(1, valor.length - cola.length))}${cola}`
+}
