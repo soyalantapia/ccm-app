@@ -14,7 +14,7 @@ import type {
 } from './DataStore'
 import { slugify } from './overlay'
 import { newId, writeJSON } from '../../lib/storage'
-import { createApi, type ApiClient } from '../../lib/api'
+import { createApi, ApiError, type ApiClient } from '../../lib/api'
 import { bus } from '../../lib/bus'
 import { hydrateFromRemote, getDeviceToken, setDeviceCredentials } from '../../lib/identity'
 import { hasAdminToken } from '../adminSession'
@@ -700,13 +700,24 @@ export class RemoteDataStore extends LocalDataStore {
    * con la sensación de haber guardado. Acá el error se avisa siempre (`admin:write-failed`,
    * lo levanta ToastHost) además de deshacer el optimismo.
    *
+   * El aviso viaja CON el motivo que dio el backend. Los mensajes del server están escritos para
+   * que los lea una persona —"No se puede borrar: tiene 12 inscripciones confirmadas", "Ya existe
+   * un recurso con esa clave"— y son justo lo que permite corregir el problema. Sin pasarlos, el
+   * organizador leía siempre "revisá la conexión", que además es falso cuando el server contestó
+   * perfecto con un 409.
+   *
    * @param onOk   qué re-hidratar cuando el backend confirma
    * @param onFail cómo deshacer lo optimista; si se omite, se re-hidrata (el server manda)
    */
   private adminWrite(p: Promise<unknown>, onOk: () => void, onFail?: () => void): void {
-    p.then(() => onOk()).catch(() => {
+    p.then(() => onOk()).catch((err: unknown) => {
       ;(onFail ?? onOk)()
-      bus.emit('admin:write-failed')
+      // Sólo el mensaje que REALMENTE escribió el backend (serverMessage, no userMessage —que ya
+      // trae su propio texto de reserva). Si el server no explicó nada, no mandamos ninguno y el
+      // aviso usa el suyo, que está redactado para el panel; si mandáramos el de reserva del
+      // cliente HTTP, ese genérico nunca se usaría.
+      const message = err instanceof ApiError ? err.serverMessage : undefined
+      bus.emit('admin:write-failed', message ? { message } : undefined)
     })
   }
 

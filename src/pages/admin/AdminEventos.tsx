@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, Plus } from 'lucide-react'
+import { ArrowRight, Plus, AlertTriangle } from 'lucide-react'
 import { Badge, Button } from '../../components/ui'
 import { useStore } from '../../data/store'
 import { CorePageHeader } from '../../features/admin/CorePageHeader'
 import { CoreOccupancyBar } from '../../features/admin/CoreOccupancyBar'
 import { OpsEventForm } from '../../features/admin/OpsEventForm'
 import { EVENT_TYPE_META, percent } from '../../features/admin/coreFormat'
+import { estaPorVenir } from '../../lib/eventDate'
 
 export default function AdminEventos() {
   const navigate = useNavigate()
@@ -71,7 +72,18 @@ export default function AdminEventos() {
                   <Badge tone={EVENT_TYPE_META[event.type].tone}>{EVENT_TYPE_META[event.type].label}</Badge>
                 </td>
                 <td className="py-4 pr-4 text-[13px] text-ink-soft">{event.dateLabel}</td>
-                <td className="py-4 pr-4 text-right text-[13px] tabular-nums text-ink">{blockCount}</td>
+                <td className="py-4 pr-4 text-right text-[13px] tabular-nums text-ink">
+                  {blockCount === 0 && estaPorVenir(event) ? (
+                    <span
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-accent-strong"
+                      title="El cupo vive en los bloques. Sin ninguno, la gente se anota al evento y no hay tope: entran todos los que quieran."
+                    >
+                      <AlertTriangle size={12} strokeWidth={2} aria-hidden /> sin cupo
+                    </span>
+                  ) : (
+                    blockCount
+                  )}
+                </td>
                 <td className="type-serif py-4 pr-4 text-right text-lg tabular-nums text-ink">{registered}</td>
                 <td className="py-4 pr-4">
                   <div className="flex items-center gap-3">
@@ -110,9 +122,15 @@ export default function AdminEventos() {
               <Badge tone={EVENT_TYPE_META[event.type].tone}>{EVENT_TYPE_META[event.type].label}</Badge>
             </div>
             <div className="mt-4 flex items-baseline gap-5 border-t border-line pt-3">
-              <p className="text-[12px] text-ink-soft">
-                <span className="type-serif text-base text-ink">{blockCount}</span> bloques
-              </p>
+              {blockCount === 0 && estaPorVenir(event) ? (
+                <p className="inline-flex items-center gap-1 text-[12px] font-medium text-accent-strong">
+                  <AlertTriangle size={13} strokeWidth={2} aria-hidden /> sin cupo
+                </p>
+              ) : (
+                <p className="text-[12px] text-ink-soft">
+                  <span className="type-serif text-base text-ink">{blockCount}</span> bloques
+                </p>
+              )}
               <p className="text-[12px] text-ink-soft">
                 <span className="type-serif text-base text-ink">{registered}</span> inscriptos
               </p>
