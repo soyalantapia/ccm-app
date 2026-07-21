@@ -11,6 +11,7 @@ import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
 import { OpsEventForm } from '../../features/admin/OpsEventForm'
 import { OpsBlockForm } from '../../features/admin/OpsBlockForm'
 import { EVENT_TYPE_META, formatDateTime, percent } from '../../features/admin/coreFormat'
+import { AVISO_BORRADO } from '../../features/admin/copyDestructivo'
 
 export default function AdminEventoDetalle() {
   const { id = '' } = useParams()
@@ -222,7 +223,7 @@ export default function AdminEventoDetalle() {
       <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title="¿Eliminar este evento?">
         <p className="text-[15px] leading-relaxed text-ink-soft">
           Se elimina <em className="text-accent">{event.title}</em> y todos sus bloques. Desaparece de
-          la app. Podés recrearlo, o reiniciar la demo para volver a los datos originales.
+          la app. {AVISO_BORRADO}
         </p>
         <div className="mt-6 flex flex-col gap-2.5">
           <OpsDangerButton

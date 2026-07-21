@@ -6,6 +6,7 @@ import type { ContentItem } from '../../data/types'
 import { CorePageHeader } from '../../features/admin/CorePageHeader'
 import { OpsContentForm } from '../../features/admin/OpsContentForm'
 import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
+import { AVISO_BORRADO } from '../../features/admin/copyDestructivo'
 
 export default function AdminContenido() {
   // Lista SIN el gate de socio: si no, los videos solo-socios llegan con el youtubeId vacío
@@ -89,8 +90,7 @@ export default function AdminContenido() {
 
       <Sheet open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="¿Eliminar este video?">
         <p className="text-[15px] leading-relaxed text-ink-soft">
-          Se elimina <em className="text-accent">{deleteTarget?.title}</em> de Contenido. Podés
-          recrearlo o reiniciar la demo para volver a los datos originales.
+          Se elimina <em className="text-accent">{deleteTarget?.title}</em> de Contenido. {AVISO_BORRADO}
         </p>
         <div className="mt-6 flex flex-col gap-2.5">
           <OpsDangerButton
