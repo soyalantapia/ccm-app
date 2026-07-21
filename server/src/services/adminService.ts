@@ -4,6 +4,7 @@ import { toEventItem, toEventBlock, toContentItem, toSponsor, toGallery, toCatal
 import { conflict, badRequest } from '../lib/errors.js'
 import { parseDate } from '../lib/dates.js'
 import { cleanStoredUrl } from '../lib/url.js'
+import { normalizarYoutubeId } from '../lib/youtube.js'
 import type { EventItem, EventBlock, ContentItem, Sponsor, Gallery, CatalogProfile, PlanId, Convocatoria } from '@domain/types'
 
 /**
@@ -132,7 +133,8 @@ export async function deleteBlock(id: string): Promise<void> {
 export async function createContent(c: ContentItem): Promise<ContentItem> {
   const row = await prisma.contentItem.create({
     data: {
-      id: c.id, type: c.type, title: c.title, description: c.description, youtubeId: c.youtubeId,
+      id: c.id, type: c.type, title: c.title, description: c.description,
+      youtubeId: normalizarYoutubeId(c.youtubeId),
       duration: c.duration ?? null, platform: c.platform ?? null, sponsorId: c.sponsorId ?? null,
       publishedAt: parseDate(c.publishedAt, 'fecha de publicación'), socioOnly: c.socioOnly ?? false,
     },
@@ -142,9 +144,11 @@ export async function createContent(c: ContentItem): Promise<ContentItem> {
 
 export async function updateContent(id: string, patch: Partial<ContentItem>): Promise<ContentItem> {
   const data: Record<string, unknown> = {}
-  for (const k of ['title', 'description', 'youtubeId', 'duration', 'platform', 'sponsorId', 'socioOnly'] as const) {
+  for (const k of ['title', 'description', 'duration', 'platform', 'sponsorId', 'socioOnly'] as const) {
     if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   }
+  // Fuera del loop: se normaliza a un id de YouTube en vez de copiarse tal cual (ver lib/youtube).
+  if ('youtubeId' in patch) data.youtubeId = normalizarYoutubeId(patch.youtubeId)
   if (patch.publishedAt) data.publishedAt = parseDate(patch.publishedAt, 'fecha de publicación')
   const row = await prisma.contentItem.update({ where: { id }, data })
   return toContentItem(row)

@@ -14,7 +14,7 @@ import type {
 } from './DataStore'
 import { slugify } from './overlay'
 import { newId, writeJSON } from '../../lib/storage'
-import { createApi, type ApiClient } from '../../lib/api'
+import { createApi, ApiError, type ApiClient } from '../../lib/api'
 import { bus } from '../../lib/bus'
 import { hydrateFromRemote, getDeviceToken, setDeviceCredentials } from '../../lib/identity'
 import { hasAdminToken } from '../adminSession'
@@ -700,13 +700,20 @@ export class RemoteDataStore extends LocalDataStore {
    * con la sensación de haber guardado. Acá el error se avisa siempre (`admin:write-failed`,
    * lo levanta ToastHost) además de deshacer el optimismo.
    *
+   * El MOTIVO del rechazo viaja en el detail del evento. El backend ya redacta mensajes
+   * pensados para el organizador ("Ya existe una nota con ese slug", "El precio debe ser un
+   * número entre 0 y…"), y ApiError los conserva en `userMessage`; sin propagarlos, el catch
+   * los tiraba y el toast caía siempre al genérico "revisá la conexión" — engañoso cuando el
+   * server contestó perfecto con un 409 y el problema es del dato, no de la red.
+   *
    * @param onOk   qué re-hidratar cuando el backend confirma
    * @param onFail cómo deshacer lo optimista; si se omite, se re-hidrata (el server manda)
    */
   private adminWrite(p: Promise<unknown>, onOk: () => void, onFail?: () => void): void {
-    p.then(() => onOk()).catch(() => {
+    p.then(() => onOk()).catch((e: unknown) => {
       ;(onFail ?? onOk)()
-      bus.emit('admin:write-failed')
+      const detalle = e instanceof ApiError ? { message: e.userMessage, code: e.code } : undefined
+      bus.emit('admin:write-failed', detalle)
     })
   }
 
