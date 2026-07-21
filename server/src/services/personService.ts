@@ -197,6 +197,32 @@ function camposDesdePostulacion(
   return campos
 }
 
+/**
+ * Los datos de una persona con la precedencia ya resuelta: primero los ProfileField y, para las
+ * claves que falten, la postulación más reciente.
+ *
+ * Existe para que haya UNA sola respuesta a "cuál es el teléfono de esta persona". Antes la ficha
+ * armaba este array por un lado y los atributos sueltos (`telefono`) se leían solo de ProfileField
+ * por otro, así que el mismo payload se contradecía: `campos` traía el teléfono de la postulación
+ * y `telefono` venía en null. Como la lista pinta `telefono` y la ficha pinta `campos`, las 24
+ * personas reales —todas de postulaciones, sin un solo ProfileField— figuraban "Sin contacto" en
+ * la lista y con teléfono al abrirlas.
+ */
+function camposDe(
+  fields: Array<{ key: string; value: string; source: string; capturedAt: Date }>,
+  app: { data: unknown; ts: Date } | undefined,
+): PersonaCampo[] {
+  return [
+    ...fields.map((f) => ({
+      key: f.key,
+      value: f.value,
+      source: f.source,
+      capturedAt: f.capturedAt.toISOString(),
+    })),
+    ...camposDesdePostulacion(app, new Set(fields.map((f) => f.key))),
+  ]
+}
+
 export async function listPeople(opts: { q?: string; cursor?: string; limit?: number }): Promise<{
   items: PersonaListItem[]
   nextCursor: string | null
@@ -231,7 +257,6 @@ export async function listPeople(opts: { q?: string; cursor?: string; limit?: nu
           fields: true,
           membership: true,
           _count: { select: { registrations: true } },
-          analytics: { orderBy: { ts: 'desc' }, take: 1 },
         },
       },
       applications: { orderBy: { ts: 'desc' } },
@@ -241,11 +266,38 @@ export async function listPeople(opts: { q?: string; cursor?: string; limit?: nu
   const hayMas = personas.length > limit
   const pagina = hayMas ? personas.slice(0, limit) : personas
 
+  // `ultimaActividad` sale de un groupBy y NO de un `include: { analytics: { take: 1 } }`.
+  //
+  // Prisma solo empuja el `take` de una relación anidada al SQL cuando hay UN padre: con dos o
+  // más emite la consulta SIN LIMIT y recorta en memoria (verificado capturando el SQL: con 1
+  // device sale `... IN ($1) ORDER BY ts DESC LIMIT $2`, con 2 sale `... IN ($1,$2) ORDER BY ts
+  // DESC OFFSET $3`, sin LIMIT). Esta lista trae hasta 51 personas, o sea decenas de devices, así
+  // que caía SIEMPRE en el caso sin LIMIT: para mostrar una fecha por persona se descargaba el
+  // historial COMPLETO de AnalyticsEvent —tabla marcada «ALTO VOLUMEN», con su payload jsonb— de
+  // todos esos dispositivos. Andaba impecable con 24 personas y se caía cuando arranque el evento.
+  // El groupBy devuelve una fila por device, resuelta por el motor.
+  const deviceIds = pagina.flatMap((p) => p.devices.map((d) => d.id))
+  const ultimaPorDevice = new Map<string, Date>()
+  if (deviceIds.length) {
+    const maximos = await prisma.analyticsEvent.groupBy({
+      by: ['deviceId'],
+      where: { deviceId: { in: deviceIds } },
+      _max: { ts: true },
+    })
+    // `deviceId` es nullable en AnalyticsEvent (hay eventos sin dispositivo), así que el groupBy
+    // lo tipa `string | null` aunque el where ya lo acote a los ids de esta página.
+    for (const m of maximos) if (m.deviceId && m._max.ts) ultimaPorDevice.set(m.deviceId, m._max.ts)
+  }
+
   const items: PersonaListItem[] = pagina.map((p) => {
     const fields = p.devices.flatMap((d) => d.fields)
     const appData = p.applications[0]?.data ?? null
-    const campo = (k: string) => fields.find((f) => f.key === k)?.value ?? null
-    const ultimaAct = masReciente(p.devices.flatMap((d) => d.analytics).map((a) => a.ts))
+    // Mismo criterio que la ficha: si el dato no llegó por ProfileField, vale el de la postulación.
+    const campos = camposDe(fields, p.applications[0])
+    const campo = (k: string) => campos.find((c) => c.key === k)?.value ?? null
+    const ultimaAct = masReciente(
+      p.devices.map((d) => ultimaPorDevice.get(d.id)).filter((t): t is Date => t !== undefined),
+    )
     return {
       id: p.id,
       nombre: nombreDe(fields, appData),
@@ -294,7 +346,6 @@ export async function getPerson(id: string): Promise<PersonaFicha | null> {
           fields: true,
           membership: true,
           registrations: { orderBy: { ts: 'desc' } },
-          analytics: { orderBy: { ts: 'desc' }, take: 100 },
           _count: { select: { registrations: true } },
         },
       },
@@ -304,25 +355,29 @@ export async function getPerson(id: string): Promise<PersonaFicha | null> {
   if (!p) return null
 
   const fields = p.devices.flatMap((d) => d.fields)
-  const campo = (k: string) => fields.find((f) => f.key === k)?.value ?? null
+  // applications ya viene ts-desc (ver el include de arriba), así que [0] es la más reciente.
+  const campos = camposDe(fields, p.applications[0])
+  const campo = (k: string) => campos.find((c) => c.key === k)?.value ?? null
   // Los campos de consentimiento son por dispositivo: si la persona tiene más de uno, se
   // muestra el primero que tenga ALGO marcado (en vez de siempre el primer dispositivo a
   // secas, que dejaría la ficha en blanco si justo ese fue el que no consintió nada).
   const primerDevice =
     p.devices.find((d) => d.consentTerms || d.consentNews || d.consentSponsors) ?? p.devices[0] ?? null
   const membership = p.devices.map((d) => d.membership).find(Boolean) ?? null
-  // Igual que en listPeople: NO ordenar AnalyticsEvent[] con .sort() sin comparador — el
-  // string-sort por defecto no es cronológico. Cada device.analytics ya viene ts-desc, pero
-  // flatMap de varios devices no queda globalmente ordenado, así que se reordena bien acá.
-  const analytics = p.devices
-    .flatMap((d) => d.analytics)
-    .sort((a, b) => b.ts.getTime() - a.ts.getTime())
-
-  // applications ya viene ts-desc (ver el include de arriba), así que [0] es la más reciente.
-  const campos: PersonaCampo[] = [
-    ...fields.map((f) => ({ key: f.key, value: f.value, source: f.source, capturedAt: f.capturedAt.toISOString() })),
-    ...camposDesdePostulacion(p.applications[0], new Set(fields.map((f) => f.key))),
-  ]
+  // La actividad se pide aparte y NO como `include: { analytics: { take: 100 } }`, por lo mismo
+  // que en listPeople: Prisma no empuja el take de una relación anidada al SQL cuando hay más de
+  // un padre, así que una persona con dos dispositivos se bajaba su historial ENTERO de
+  // AnalyticsEvent para quedarse con 100 filas. Pidiéndolo derecho sobre la tabla, el take es un
+  // LIMIT de verdad y además el ordenamiento y el recorte quedan globales: antes se traían 100
+  // por dispositivo y recién después se ordenaba en memoria, así que con varios dispositivos la
+  // lista "últimas 100" no era realmente las últimas 100 de la persona.
+  const analytics = p.devices.length
+    ? await prisma.analyticsEvent.findMany({
+        where: { deviceId: { in: p.devices.map((d) => d.id) } },
+        orderBy: { ts: 'desc' },
+        take: 100,
+      })
+    : []
 
   return {
     id: p.id,

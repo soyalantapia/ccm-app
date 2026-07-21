@@ -341,7 +341,7 @@ describe('getPerson', () => {
     const dni = `30${sufijo}`.slice(0, 8)
     const persona = await prisma.person.create({ data: { email, dni: null } })
     const conv = await crearConvocatoria()
-    await prisma.application.create({
+    const app = await prisma.application.create({
       data: {
         id: `app-${sufijo}`, convocatoriaId: conv.id, personId: persona.id, status: 'preinscripta',
         fromSeed: false,
@@ -367,13 +367,41 @@ describe('getPerson', () => {
       expect(c, `falta el campo ${key}`).toBeTruthy()
       expect(c!.value).toBe(value)
       expect(c!.source).toBe('postulacion')
-      expect(c!.capturedAt).toBeTruthy()
+      // La fecha exacta de la postulación, no "cualquier cosa que sea truthy": la ficha dice
+      // CUÁNDO se capturó cada dato, y con toBeTruthy() una fecha inventada (o `new Date()`)
+      // pasaba el test igual.
+      expect(c!.capturedAt).toBe(app.ts.toISOString())
     }
 
     // Los campos propios de la convocatoria (no forman parte del mapeo) no se duplican acá arriba.
     for (const ruido of ['historia', 'extra', 'desfile', 'portfolio', 'acompanante']) {
       expect(ficha!.campos.find((x) => x.key === ruido)).toBeUndefined()
     }
+  })
+
+  it('el teléfono de la postulación también sale por el atributo `telefono`, no solo en campos', async () => {
+    // El payload no se puede contradecir a sí mismo: la lista pinta `telefono` (UsuariosTabla) y
+    // la ficha pinta `campos`. Con `telefono` leyendo solo ProfileField, las 24 personas reales
+    // —todas venidas de postulaciones, sin un solo ProfileField— salían "Sin contacto" en la
+    // lista mientras la ficha mostraba el teléfono ahí nomás.
+    const sufijo = `tel-${Date.now()}`
+    const email = `${sufijo}@x.com`
+    const persona = await prisma.person.create({ data: { email, dni: null } })
+    const conv = await crearConvocatoria()
+    await prisma.application.create({
+      data: {
+        id: `app-${sufijo}`, convocatoriaId: conv.id, personId: persona.id, status: 'preinscripta',
+        fromSeed: false,
+        data: { nombre: 'Quien Sea', email, telefono: '+54 351 111-2222' },
+      },
+    })
+
+    const ficha = await getPerson(persona.id)
+    expect(ficha!.telefono).toBe('+54 351 111-2222')
+
+    const { items } = await listPeople({ q: email })
+    expect(items).toHaveLength(1)
+    expect(items[0].telefono).toBe('+54 351 111-2222')
   })
 
   it('un ProfileField existente le gana a la postulación para la misma clave', async () => {
@@ -396,9 +424,15 @@ describe('getPerson', () => {
     })
 
     const ficha = await getPerson(persona.id)
-    const dni = ficha!.campos.find((c) => c.key === 'dni')
-    expect(dni!.value).toBe('11111111')          // el del ProfileField, no el de la postulación
-    expect(dni!.source).toBe('inscripcion_evento') // procedencia real, no 'postulacion'
+    // Se afirma sobre la CANTIDAD y no sobre el primer match: `campos` es
+    // [...ProfileField, ...postulación], así que un `.find()` devuelve siempre el del
+    // ProfileField y da verde aunque el de la postulación se haya colado detrás. Con la
+    // protección borrada, la ficha devuelve DOS filas "DNI" con valores contradictorios
+    // (11111111 y 99999999) y la UI las pinta a las dos, porque mapea con key `${key}-${i}`.
+    const dnis = ficha!.campos.filter((c) => c.key === 'dni')
+    expect(dnis, 'la postulación no tiene que agregar un segundo dni').toHaveLength(1)
+    expect(dnis[0].value).toBe('11111111')          // el del ProfileField, no el de la postulación
+    expect(dnis[0].source).toBe('inscripcion_evento') // procedencia real, no 'postulacion'
 
     // 'nombre' sí falta en ProfileField, así que ese SÍ se completa desde la postulación.
     const nombre = ficha!.campos.find((c) => c.key === 'nombre')
