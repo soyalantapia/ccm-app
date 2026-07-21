@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Input } from '../../components/ui'
+import { Button, Input } from '../../components/ui'
 import { usePeople } from '../../data/queries'
 import { CorePageHeader } from '../../features/admin/CorePageHeader'
 import { UsuariosTabla } from '../../features/admin/UsuariosTabla'
@@ -16,7 +16,12 @@ export default function AdminUsuarios() {
     return () => clearTimeout(t)
   }, [texto])
 
-  const { data, isLoading, isError, error } = usePeople(q)
+  const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } = usePeople(q)
+
+  // La lista viene paginada de a 50: se aplanan las páginas ya traídas. El total de anónimos
+  // sale de la primera — es global, no por página.
+  const items = data?.pages.flatMap((p) => p.items) ?? []
+  const anonimos = data?.pages[0]?.anonimos ?? 0
 
   return (
     <div className="px-5 py-8 md:px-10">
@@ -44,7 +49,7 @@ export default function AdminUsuarios() {
           </p>
         )}
 
-        {data && data.items.length === 0 && (
+        {data && items.length === 0 && (
           <p className="py-10 text-center text-sm text-ink-soft">
             {q
               ? `Sin resultados para «${q}».`
@@ -52,14 +57,21 @@ export default function AdminUsuarios() {
           </p>
         )}
 
-        {data && data.items.length > 0 && (
-          <UsuariosTabla items={data.items} onAbrir={setAbierta} />
+        {items.length > 0 && <UsuariosTabla items={items} onAbrir={setAbierta} />}
+
+        {hasNextPage && (
+          <div className="mt-6 text-center">
+            <Button variant="outline" onClick={() => void fetchNextPage()} disabled={isFetchingNextPage}>
+              {isFetchingNextPage ? 'Cargando…' : 'Ver más'}
+            </Button>
+            <p className="mt-2 text-xs text-ink-soft">Mostrando {items.length} — hay más.</p>
+          </div>
         )}
 
-        {data && data.anonimos > 0 && (
+        {anonimos > 0 && (
           <p className="mt-8 border-t border-line pt-5 text-xs text-ink-soft">
-            Además, {data.anonimos} dispositivo{data.anonimos > 1 ? 's' : ''} anónimo
-            {data.anonimos > 1 ? 's' : ''} visitó la app sin dejar datos.
+            Además, {anonimos} dispositivo{anonimos > 1 ? 's' : ''} anónimo
+            {anonimos > 1 ? 's' : ''} visitó la app sin dejar datos.
           </p>
         )}
       </div>
