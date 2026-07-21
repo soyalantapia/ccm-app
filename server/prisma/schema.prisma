@@ -195,6 +195,13 @@ model Event {
   price       Int?
   past        Boolean   @default(false)
   socioOnly   Boolean   @default(false) // gate a nivel EVENTO (canon 17); el bloque lo hereda
+  // Un evento nace BORRADOR: se puede cargar de a poco sin que el público lo vea a medio hacer.
+  // Publicar es un acto aparte y explícito. Antes cada alta salía a la app en el mismo instante
+  // en que se apretaba "Crear", sin vuelta atrás — no se podía despublicar y borrar se traba con
+  // la primera inscripción.
+  // ⚠️ La migración pone DEFAULT true para que los eventos que YA existían sigan publicados, y
+  // recién después baja el default a false. Sin ese orden, todo lo que está al aire desaparecía.
+  published   Boolean   @default(false)
 
   blocks        EventBlock[]
   registrations Registration[]
@@ -206,6 +213,8 @@ model Event {
 
   @@index([type, startDate])
   @@index([past])
+  // El público sólo ve lo publicado: el índice acompaña ese filtro, que corre en cada visita.
+  @@index([published])
 }
 
 // EventItem.sponsorIds[] → tabla puente.

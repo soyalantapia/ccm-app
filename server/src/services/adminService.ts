@@ -41,6 +41,8 @@ export async function createEvent(e: EventItem): Promise<EventItem> {
       dateLabel: e.dateLabel, startDate: parseDate(e.startDate, 'fecha del evento'), timeLabel: e.timeLabel ?? null,
       venue: e.venue, address: e.address, mapsUrl: cleanStoredUrl(e.mapsUrl, 'mapa') ?? '', description: e.description,
       cover: e.cover, price: precioValido(e.price, 'precio del evento'), past: e.past ?? false, socioOnly: e.socioOnly ?? false,
+      // Borrador salvo que el panel pida publicarlo: lo que no se decide, no sale al aire.
+      published: e.published ?? false,
     },
   })
   if (e.sponsorIds?.length) {
@@ -54,7 +56,7 @@ export async function createEvent(e: EventItem): Promise<EventItem> {
 
 export async function updateEvent(id: string, patch: Partial<EventItem>): Promise<EventItem> {
   const data: Record<string, unknown> = {}
-  for (const k of ['type', 'title', 'subtitle', 'dateLabel', 'timeLabel', 'venue', 'address', 'description', 'cover', 'past', 'socioOnly', 'slug'] as const) {
+  for (const k of ['type', 'title', 'subtitle', 'dateLabel', 'timeLabel', 'venue', 'address', 'description', 'cover', 'past', 'socioOnly', 'published', 'slug'] as const) {
     if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   }
   if ('price' in patch) data.price = precioValido(patch.price, 'precio del evento')

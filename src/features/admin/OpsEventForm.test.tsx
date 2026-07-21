@@ -168,3 +168,60 @@ describe('la sede de siempre viene puesta', () => {
     expect(lugar.value).toBe('Otro lugar')
   })
 })
+
+/**
+ * Guardar y publicar son actos distintos. Antes no existía la opción de no publicar: cada alta
+ * salía a la app en el mismo instante en que se apretaba "Crear", sin vuelta atrás — no se podía
+ * despublicar y borrar se traba con la primera inscripción.
+ */
+describe('borrador y publicar', () => {
+  const boton = (texto: RegExp) =>
+    [...raiz().querySelectorAll('button')].find((b) => texto.test(b.textContent ?? ''))!
+
+  async function completarYApretar(texto: RegExp) {
+    const { store } = await import('../../data/store')
+    fireEvent.change(fecha(), { target: { value: '2026-10-05' } })
+    fireEvent.change(porPlaceholder('Ej: Camino a CCM · Julio'), { target: { value: 'Nuevo' } })
+    fireEvent.change(raiz().querySelector('textarea') as HTMLTextAreaElement, { target: { value: 'd' } })
+    fireEvent.click(boton(texto))
+    const mock = (store.createEvent as ReturnType<typeof vi.fn>).mock
+    const mockUpd = (store.updateEvent as ReturnType<typeof vi.fn>).mock
+    if (mock.calls.length) return mock.calls[mock.calls.length - 1][0]
+    return mockUpd.calls[mockUpd.calls.length - 1][1]
+  }
+
+  it('un evento nuevo se puede guardar SIN publicar', async () => {
+    montar()
+    expect(await completarYApretar(/Guardar borrador/i)).toMatchObject({ published: false })
+  })
+
+  it('y publicarlo es un solo click, sin pasos de más', async () => {
+    montar()
+    expect(await completarYApretar(/^Publicar$/i)).toMatchObject({ published: true })
+  })
+
+  it('sobre uno ya publicado, el botón principal guarda sin despublicarlo', async () => {
+    const publicado: EventItem = {
+      id: 'ev-1', slug: 'x', type: 'camino', title: 'Pub', dateLabel: 'Lunes 5 de octubre',
+      startDate: '2026-10-05', venue: 'H', address: 'A', mapsUrl: '', description: 'd',
+      cover: 'img/events/principal.jpg', published: true,
+    }
+    montar(publicado)
+    expect(await completarYApretar(/Guardar cambios/i)).toMatchObject({ published: true })
+  })
+
+  it('y se puede DESPUBLICAR, que antes era imposible', async () => {
+    const publicado: EventItem = {
+      id: 'ev-1', slug: 'x', type: 'camino', title: 'Pub', dateLabel: 'Lunes 5 de octubre',
+      startDate: '2026-10-05', venue: 'H', address: 'A', mapsUrl: '', description: 'd',
+      cover: 'img/events/principal.jpg', published: true,
+    }
+    montar(publicado)
+    expect(await completarYApretar(/despublicar/i)).toMatchObject({ published: false })
+  })
+
+  it('avisa que el borrador no lo ve el público', () => {
+    montar()
+    expect(screen.getByText(/no lo ve|sólo para el equipo|Publicar lo pone a la vista/i)).toBeTruthy()
+  })
+})

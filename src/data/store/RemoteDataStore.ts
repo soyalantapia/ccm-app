@@ -111,6 +111,7 @@ export class RemoteDataStore extends LocalDataStore {
   private adminBanners?: Banner[]
   private adminNotas?: Nota[]
   private adminContents?: ContentItem[] // /admin/contents: sin gate de socio (el panel debe ver el youtubeId)
+  private adminEvents?: EventItem[] // /admin/events: incluye BORRADORES, que la ruta pública no devuelve
   private analytics?: AnalyticsEvent[] // analítica real cross-device (GET /admin/analytics), P1
   // Métricas del Dashboard (GET /admin/stats). Sin fallback al seed a propósito.
   private adminStats?: AdminStats
@@ -529,6 +530,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.hydrateAdminApplications() // lista COMPLETA en un caché aparte (no pisa las del device)
     this.hydrateConvocatorias() // lista completa para gestionarlas (antes solo venían del seed)
     this.hydrateAdminContents() // youtubeId sin enmascarar para el panel
+    this.hydrateAdminEvents() // el panel ve también lo que todavía no se publicó
     this.hydrateAdminOrders() // todas las órdenes, no solo las del navegador del organizador
     this.hydrateAnalytics() // analítica REAL — antes Dashboard/SponsorReport leían el seed fabricado (P1)
   }
@@ -1233,6 +1235,20 @@ export class RemoteDataStore extends LocalDataStore {
     this.api.get<ContentItem[]>('/admin/contents').then((c) => { this.adminContents = c; bus.emit('contents') }).catch(() => {})
   }
   private refetchAllContents(): void { this.refetchContents(); this.hydrateAdminContents() }
+  /** Tras una escritura hay que refrescar las DOS listas: la pública y la del panel (que
+   *  incluye borradores). Si sólo se refrescara la pública, un evento recién creado —que nace
+   *  borrador— no aparecería en el panel hasta recargar. */
+  private refetchAllEvents(): void {
+    this.hydrateEvents()
+    this.hydrateAdminEvents()
+  }
+  private hydrateAdminEvents(): void {
+    this.api.get<EventItem[]>('/admin/events').then((e) => { this.adminEvents = e; bus.emit('events') }).catch(() => {})
+  }
+  /** El panel ve los borradores; las páginas públicas usan getEvents(), que trae sólo lo publicado. */
+  override getAdminEvents(): EventItem[] {
+    return this.adminEvents ?? super.getAdminEvents()
+  }
   override getAdminContents(): ContentItem[] {
     return this.adminContents ?? super.getAdminContents()
   }
@@ -1242,14 +1258,14 @@ export class RemoteDataStore extends LocalDataStore {
     if (this.events) this.events = [...this.events, event]
     this.track('admin_event_created', { eventId: event.id, type: event.type })
     bus.emit('events')
-    this.adminWrite(this.api.post('/admin/events', event), () => this.hydrateEvents())
+    this.adminWrite(this.api.post('/admin/events', event), () => this.refetchAllEvents())
     return event
   }
   override updateEvent(id: string, patch: Partial<EventItem>): void {
     if (this.events) this.events = this.events.map((e) => (e.id === id ? { ...e, ...patch } : e))
     this.track('admin_event_updated', { eventId: id })
     bus.emit('events')
-    this.adminWrite(this.api.patch(`/admin/events/${id}`, patch), () => this.hydrateEvents())
+    this.adminWrite(this.api.patch(`/admin/events/${id}`, patch), () => this.refetchAllEvents())
   }
   override deleteEvent(id: string): void {
     const prev = this.events
@@ -1259,10 +1275,10 @@ export class RemoteDataStore extends LocalDataStore {
     bus.emit('events')
     this.adminWrite(
       this.api.del(`/admin/events/${id}`),
-      () => this.hydrateEvents(),
+      () => this.refetchAllEvents(),
       // El server puede rechazar (ej. 409 si el evento ya tiene inscripciones): devolvemos la
       // lista como estaba y el aviso explica por qué "no se borró".
-      () => { if (prev) this.events = prev; this.hydrateEvents(); bus.emit('events') },
+      () => { if (prev) this.events = prev; this.refetchAllEvents(); bus.emit('events') },
     )
   }
 
@@ -1278,7 +1294,7 @@ export class RemoteDataStore extends LocalDataStore {
     }
     this.track('admin_block_created', { blockId: block.id, eventId: block.eventId })
     bus.emit('blocks')
-    this.adminWrite(this.api.post('/admin/blocks', block), () => this.hydrateEvents())
+    this.adminWrite(this.api.post('/admin/blocks', block), () => this.refetchAllEvents())
     return block
   }
   override updateBlock(id: string, patch: Partial<EventBlock>): void {
@@ -1290,7 +1306,7 @@ export class RemoteDataStore extends LocalDataStore {
     }
     this.track('admin_block_updated', { blockId: id })
     bus.emit('blocks')
-    this.adminWrite(this.api.patch(`/admin/blocks/${id}`, patch), () => this.hydrateEvents())
+    this.adminWrite(this.api.patch(`/admin/blocks/${id}`, patch), () => this.refetchAllEvents())
   }
   override deleteBlock(id: string): void {
     // Si el mapa no está hidratado, `cur` viene undefined y el bloque del seed seguiría visible
@@ -1302,7 +1318,7 @@ export class RemoteDataStore extends LocalDataStore {
     if (cur) this.blocksByEvent.set(cur.eventId, (this.blocksByEvent.get(cur.eventId) ?? []).filter((b) => b.id !== id))
     this.track('admin_block_deleted', { blockId: id })
     bus.emit('blocks')
-    this.adminWrite(this.api.del(`/admin/blocks/${id}`), () => this.hydrateEvents())
+    this.adminWrite(this.api.del(`/admin/blocks/${id}`), () => this.refetchAllEvents())
   }
 
   override createContent(input: NewContent): ContentItem {

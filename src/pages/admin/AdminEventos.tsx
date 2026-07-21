@@ -14,7 +14,7 @@ export default function AdminEventos() {
   const [formOpen, setFormOpen] = useState(false)
 
   const rows = useStore((s) =>
-    s.getEvents().map((event) => {
+    s.getAdminEvents().map((event) => {
       const blocks = s.getBlocks(event.id)
       const avail = blocks.map((b) => s.blockAvailability(b.id))
       const capacity = avail.reduce((n, a) => n + a.capacity, 0)
@@ -66,7 +66,14 @@ export default function AdminEventos() {
                   <p className="type-serif truncate text-base text-ink underline-offset-4 decoration-accent group-hover:underline">
                     {event.title}
                   </p>
-                  <p className="mt-0.5 truncate text-[11px] text-ink-soft">{event.venue}</p>
+                  <p className="mt-0.5 flex items-center gap-2 truncate text-[11px] text-ink-soft">
+                    {event.published === false && (
+                      <span className="shrink-0 rounded-sm bg-ink/8 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink-soft">
+                        Borrador
+                      </span>
+                    )}
+                    <span className="truncate">{event.venue}</span>
+                  </p>
                 </td>
                 <td className="py-4 pr-4">
                   <Badge tone={EVENT_TYPE_META[event.type].tone}>{EVENT_TYPE_META[event.type].label}</Badge>
@@ -117,7 +124,14 @@ export default function AdminEventos() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="type-serif truncate text-lg text-ink">{event.title}</p>
-                <p className="mt-0.5 text-[11px] text-ink-soft">{event.dateLabel}</p>
+                <p className="mt-0.5 flex items-center gap-2 text-[11px] text-ink-soft">
+                  {event.published === false && (
+                    <span className="shrink-0 rounded-sm bg-ink/8 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink-soft">
+                      Borrador
+                    </span>
+                  )}
+                  <span className="truncate">{event.dateLabel}</span>
+                </p>
               </div>
               <Badge tone={EVENT_TYPE_META[event.type].tone}>{EVENT_TYPE_META[event.type].label}</Badge>
             </div>

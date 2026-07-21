@@ -500,6 +500,11 @@ export class LocalDataStore implements DataStore {
     return this.getContents()
   }
 
+  /** En modo demo no hay borradores: todo lo cargado se ve, así que el panel usa la misma lista. */
+  getAdminEvents(): EventItem[] {
+    return this.getEvents()
+  }
+
   getAdminNotas(): Nota[] {
     return mergeOverlay(seedNotas, K.notasOverlay).sort(
       (a, b) => a.order - b.order || b.publishedAt.localeCompare(a.publishedAt),

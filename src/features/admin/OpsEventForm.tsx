@@ -126,8 +126,13 @@ export function OpsEventForm({ open, event, onClose }: Props) {
   // No lo bloqueamos: puede haber un texto raro y válido; lo que no puede pasar es que nadie mire.
   const avisoFecha = textoPersonalizado ? textoContradiceLaFecha(f.startDate, f.dateLabel) : null
 
-  const submit = (e: FormEvent) => {
+  /** ¿Este evento ya está a la vista del público? Uno nuevo nace borrador. */
+  const yaPublicado = event?.published ?? false
+
+  const submit = (e: FormEvent | React.MouseEvent, opts?: { publicar?: boolean }) => {
     e.preventDefault()
+    // Sin `opts` es el submit del formulario, que es el botón de publicar/guardar cambios.
+    const publicar = opts?.publicar ?? true
     const required = ['title', 'dateLabel', 'startDate', 'venue', 'address', 'description', 'cover'] as const
     if (required.some((k) => !f[k].trim())) {
       setError('Completá los campos obligatorios.')
@@ -158,13 +163,22 @@ export function OpsEventForm({ open, event, onClose }: Props) {
       // al backend como false, no desaparecer del patch.
       past: f.past,
       socioOnly: f.socioOnly,
+      published: publicar,
     }
     if (event) {
       store.updateEvent(event.id, data)
-      toast('✓ Evento actualizado')
+      toast(
+        publicar
+          ? yaPublicado
+            ? '✓ Cambios guardados'
+            : '✓ Publicado · ya aparece en la app'
+          : yaPublicado
+            ? '✓ Despublicado · queda sólo para el equipo'
+            : '✓ Borrador guardado',
+      )
     } else {
       store.createEvent({ ...data, sponsorIds: [] })
-      toast('✓ Evento creado · ya aparece en la app')
+      toast(publicar ? '✓ Publicado · ya aparece en la app' : '✓ Borrador guardado · no lo ve el público')
     }
     onClose()
   }
@@ -287,14 +301,31 @@ export function OpsEventForm({ open, event, onClose }: Props) {
 
         {error && <p className="text-xs text-danger">{error}</p>}
 
+        {/* Guardar y publicar son actos distintos. Quien lo tiene cerrado publica de una —mismo
+            esfuerzo que antes—; quien lo va armando de a poco guarda y vuelve, sin que el público
+            vea nada a medio hacer. Antes no existía la opción de no publicar. */}
         <div className="flex flex-col gap-2.5 pt-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="ghost" size="lg" onClick={onClose} className="sm:order-1">
             Cancelar
           </Button>
-          <Button type="submit" size="lg" className="sm:order-2">
-            {event ? 'Guardar cambios' : 'Crear evento'}
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={(e) => submit(e, { publicar: false })}
+            className="sm:order-2"
+          >
+            {yaPublicado ? 'Guardar y despublicar' : 'Guardar borrador'}
+          </Button>
+          <Button type="submit" size="lg" className="sm:order-3">
+            {yaPublicado ? 'Guardar cambios' : 'Publicar'}
           </Button>
         </div>
+        {!yaPublicado && (
+          <p className="text-right text-[11px] text-ink-soft/80">
+            El borrador queda sólo para el equipo. Publicar lo pone a la vista de todos.
+          </p>
+        )}
       </form>
     </Sheet>
   )
