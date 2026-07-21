@@ -345,6 +345,15 @@ export interface Application {
   data: Record<string, string>
   fromSeed?: boolean
   decidedAt?: string
+  /**
+   * Email del admin que decidió. PII interna del equipo: el serializador del server
+   * (`toApplication`) solo la incluye en la ruta admin, nunca en "Mis postulaciones".
+   */
+  decidedBy?: string
+  /** Cuándo salió el aviso al postulante. Ausente junto a notifyError = nunca se intentó. */
+  notifiedAt?: string
+  /** Por qué falló el aviso, si falló. Ausente junto a notifiedAt = nunca se intentó. */
+  notifyError?: string
 }
 
 /* ─── Analytics ─── */

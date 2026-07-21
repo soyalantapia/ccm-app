@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { toSponsor, toContentItem, gateSocioContents } from './serialize'
+import { toSponsor, toContentItem, gateSocioContents, toApplication } from './serialize'
 import type { ContentItem } from '@domain/types'
 
 /** Sponsor Prisma mínimo para el mapeo (los campos que toSponsor lee). */
@@ -91,5 +91,58 @@ describe('gateSocioContents — gate server-side de contenido premium', () => {
 
   it('nunca toca el youtubeId de items NO socioOnly', () => {
     expect(gateSocioContents([libre], false)[0].youtubeId).toBe('PUBLIC_ID')
+  })
+})
+
+// toApplication tiene el mismo gate que toContentItem, pero al revés: acá el default (forAdmin
+// implícito false) es el SEGURO — la misma fila alimenta /admin/applications (forAdmin=true) y
+// /applications ("Mis postulaciones", device-scoped, sin el flag). Sin este gate, decidedBy
+// (email del admin) viajaba también a la propia ficha del postulante.
+function baseApplication(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'app-1',
+    convocatoriaId: 'cv-1',
+    ts: new Date('2026-06-10T11:00:00.000Z'),
+    status: 'aceptada',
+    data: { nombre: 'Milagros' },
+    fromSeed: false,
+    decidedAt: new Date('2026-06-11T09:00:00.000Z'),
+    decidedBy: 'gaston@ccm.test',
+    notifiedAt: null,
+    notifyError: null,
+    ...overrides,
+  }
+}
+
+describe('toApplication — gate de decidedBy (admin vs. postulante)', () => {
+  it('sin forAdmin (default), OMITE decidedBy — es lo que recibe "Mis postulaciones"', () => {
+    const out = toApplication(baseApplication() as never)
+    expect('decidedBy' in out).toBe(false)
+  })
+
+  it('con forAdmin=true, incluye decidedBy — solo /admin/applications lo pide así', () => {
+    const out = toApplication(baseApplication() as never, true)
+    expect(out.decidedBy).toBe('gaston@ccm.test')
+  })
+
+  it('con forAdmin=true pero sin decidedBy en la fila, no inventa la clave', () => {
+    const out = toApplication(baseApplication({ decidedBy: null }) as never, true)
+    expect('decidedBy' in out).toBe(false)
+  })
+
+  it('notifiedAt y notifyError viajan en AMBOS modos: son sobre el aviso de la propia postulación', () => {
+    const notificada = baseApplication({ notifiedAt: new Date('2026-06-11T09:05:00.000Z') })
+    expect(toApplication(notificada as never).notifiedAt).toBe('2026-06-11T09:05:00.000Z')
+    expect(toApplication(notificada as never, true).notifiedAt).toBe('2026-06-11T09:05:00.000Z')
+
+    const fallida = baseApplication({ notifyError: 'SMTP caído' })
+    expect(toApplication(fallida as never).notifyError).toBe('SMTP caído')
+    expect(toApplication(fallida as never, true).notifyError).toBe('SMTP caído')
+  })
+
+  it('sin notifiedAt ni notifyError, no manda ninguna de las dos claves (nunca se intentó avisar)', () => {
+    const out = toApplication(baseApplication() as never)
+    expect('notifiedAt' in out).toBe(false)
+    expect('notifyError' in out).toBe(false)
   })
 })

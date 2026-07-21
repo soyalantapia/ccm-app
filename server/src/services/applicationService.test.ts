@@ -37,6 +37,38 @@ describe('getApplications — cola de revisión', () => {
     expect(r.items).toHaveLength(50)
     expect(r.nextCursor).toBe('app-49')
   })
+
+  // Esta cola es EXCLUSIVAMENTE del panel (requirePermission('applications:read')): acá SÍ
+  // tiene que viajar decidedBy, y en TODAS las filas — no solo la primera (ver el test de abajo
+  // sobre por qué "solo la primera" es justo el bug que hay que evitar).
+  it('incluye decidedBy en cada fila decidida, sin importar la posición', async () => {
+    const filas = [
+      { id: 'app-0', convocatoriaId: 'c1', status: 'aceptada', data: {}, ts: new Date(), fromSeed: false, decidedBy: 'a@ccm.test' },
+      { id: 'app-1', convocatoriaId: 'c1', status: 'aceptada', data: {}, ts: new Date(), fromSeed: false, decidedBy: 'b@ccm.test' },
+      { id: 'app-2', convocatoriaId: 'c1', status: 'aceptada', data: {}, ts: new Date(), fromSeed: false, decidedBy: 'c@ccm.test' },
+    ]
+    mockPrisma.application.findMany.mockResolvedValue(filas)
+    const { getApplications } = await import('./applicationService.js')
+    const r = await getApplications()
+    expect(r.items.map((a) => a.decidedBy)).toEqual(['a@ccm.test', 'b@ccm.test', 'c@ccm.test'])
+  })
+})
+
+describe('getDeviceApplications — "Mis postulaciones" del propio postulante', () => {
+  // Regresión: pasar toApplication SUELTO a .map() deja que Array#map le mande el índice como
+  // segundo argumento (forAdmin), y como 1, 2, 3... son truthy, decidedBy (el email del admin
+  // que decidió) se filtraba a partir de la SEGUNDA fila. Con una sola fila el bug no se veía.
+  it('NUNCA incluye decidedBy, en ninguna fila — ni siquiera de la segunda en adelante', async () => {
+    const filas = [
+      { id: 'app-0', convocatoriaId: 'c1', status: 'aceptada', data: {}, ts: new Date(), fromSeed: false, decidedBy: 'a@ccm.test' },
+      { id: 'app-1', convocatoriaId: 'c1', status: 'aceptada', data: {}, ts: new Date(), fromSeed: false, decidedBy: 'b@ccm.test' },
+      { id: 'app-2', convocatoriaId: 'c1', status: 'aceptada', data: {}, ts: new Date(), fromSeed: false, decidedBy: 'c@ccm.test' },
+    ]
+    mockPrisma.application.findMany.mockResolvedValue(filas)
+    const { getDeviceApplications } = await import('./applicationService.js')
+    const items = await getDeviceApplications('device-1')
+    for (const item of items) expect('decidedBy' in item).toBe(false)
+  })
 })
 
 describe('decideApplication — transición condicionada', () => {

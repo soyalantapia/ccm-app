@@ -45,6 +45,7 @@ const Dashboard = lazyWithReload(() => import('./pages/admin/Dashboard'))
 const AdminEventos = lazyWithReload(() => import('./pages/admin/AdminEventos'))
 const AdminEventoDetalle = lazyWithReload(() => import('./pages/admin/AdminEventoDetalle'))
 const AdminPostulaciones = lazyWithReload(() => import('./pages/admin/AdminPostulaciones'))
+const AdminPostulacionDetalle = lazyWithReload(() => import('./pages/admin/AdminPostulacionDetalle'))
 const AdminConvocatorias = lazyWithReload(() => import('./pages/admin/AdminConvocatorias'))
 const AdminUsuarios = lazyWithReload(() => import('./pages/admin/AdminUsuarios'))
 const AdminGalerias = lazyWithReload(() => import('./pages/admin/AdminGalerias'))
@@ -135,6 +136,7 @@ const router = createBrowserRouter(
             { path: 'eventos', element: <SA><AdminEventos /></SA> },
             { path: 'eventos/:id', element: <SA><AdminEventoDetalle /></SA> },
             { path: 'postulaciones', element: <SA><AdminPostulaciones /></SA> },
+            { path: 'postulaciones/:id', element: <SA><AdminPostulacionDetalle /></SA> },
             { path: 'convocatorias', element: <SA><AdminConvocatorias /></SA> },
             { path: 'personas', element: <SA><AdminUsuarios /></SA> },
             { path: 'galerias', element: <SA><AdminGalerias /></SA> },

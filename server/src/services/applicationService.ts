@@ -74,13 +74,19 @@ export async function getApplications(opts: { cursor?: string; limit?: number } 
   })
   const hayMas = rows.length > limit
   const page = hayMas ? rows.slice(0, limit) : rows
-  return { items: page.map(toApplication), nextCursor: hayMas ? page[page.length - 1].id : null }
+  // forAdmin=true: esta cola es EXCLUSIVAMENTE del panel (requirePermission('applications:read')),
+  // así que acá sí viaja decidedBy (email del admin que decidió).
+  return { items: page.map((r) => toApplication(r, true)), nextCursor: hayMas ? page[page.length - 1].id : null }
 }
 
 /** Las postulaciones del PROPIO device (para "Mis postulaciones" en el Perfil). */
 export async function getDeviceApplications(deviceId: string): Promise<Application[]> {
   const rows = await prisma.application.findMany({ where: { deviceId }, orderBy: { ts: 'desc' } })
-  return rows.map(toApplication)
+  // NO pasar toApplication directo a .map(): Array#map llama al callback con (valor, INDEX,
+  // array), y con forAdmin como segundo parámetro el index se colaba ahí — con index=1 (truthy)
+  // decidedBy (email del admin) se filtraba al postulante a partir de la segunda fila. Regresión
+  // real: tsc la marcó, vitest no (transforma sin chequeo de tipos).
+  return rows.map((r) => toApplication(r))
 }
 
 /**
