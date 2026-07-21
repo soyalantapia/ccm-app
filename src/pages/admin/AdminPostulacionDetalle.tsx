@@ -63,6 +63,11 @@ function AdminPostulacionDetalleFicha({ id }: { id: string }) {
       if (decision !== null) return
       // Guard 2: si el foco está escribiendo (la nota interna es un textarea; también cubre
       // inputs y cualquier contenteditable), ↓ es "bajar una línea", no "siguiente postulación".
+      // Hoy este guard es defensa A FUTURO, no cubre un caso hoy alcanzable: el único campo de
+      // escritura de esta ficha es la nota de OpsDecisionSheet, que solo existe en el DOM con el
+      // panel de decisión abierto — ahí Guard 1 (decision !== null) ya corta antes de llegar acá.
+      // Si el día de mañana aparece un input/textarea fuera del panel (ej. un buscador en el
+      // layout admin), este guard es lo que evita que ↓ navegue mientras se escribe ahí.
       const target = e.target as HTMLElement | null
       const tag = target?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
