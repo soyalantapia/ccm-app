@@ -61,6 +61,12 @@ export async function updateEvent(id: string, patch: Partial<EventItem>): Promis
   if ('mapsUrl' in patch) data.mapsUrl = cleanStoredUrl(patch.mapsUrl, 'mapa') ?? '' // valida esquema (no javascript:/data:)
   if (patch.startDate) data.startDate = parseDate(patch.startDate, 'fecha del evento')
   await prisma.$transaction(async (tx) => {
+    // Lock del padre antes de reemplazar sus hijos: dos organizadores guardando la misma
+    // entidad a la vez borran y recrean las mismas filas hijas, y el segundo choca contra la
+    // clave única del primero (P2002 "ya existe un recurso con esa clave" — un mensaje sin
+    // sentido para quien está editando algo que ya existe). Serializa por entidad; mismo
+    // patrón que updateGallery y los delete con pre-chequeo.
+    await tx.$queryRaw`SELECT id FROM "Event" WHERE id = ${id} FOR UPDATE`
     await tx.event.update({ where: { id }, data })
     if (patch.sponsorIds) {
       await tx.eventSponsor.deleteMany({ where: { eventId: id } })
@@ -169,6 +175,12 @@ export async function updateSponsor(id: string, patch: Partial<Sponsor>): Promis
   const data: Record<string, unknown> = {}
   for (const k of ['name', 'industry', 'level', 'exclusive', 'tagline', 'banner'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   await prisma.$transaction(async (tx) => {
+    // Lock del padre antes de reemplazar sus hijos: dos organizadores guardando la misma
+    // entidad a la vez borran y recrean las mismas filas hijas, y el segundo choca contra la
+    // clave única del primero (P2002 "ya existe un recurso con esa clave" — un mensaje sin
+    // sentido para quien está editando algo que ya existe). Serializa por entidad; mismo
+    // patrón que updateGallery y los delete con pre-chequeo.
+    await tx.$queryRaw`SELECT id FROM "Sponsor" WHERE id = ${id} FOR UPDATE`
     await tx.sponsor.update({ where: { id }, data })
     if (patch.creatives) {
       await tx.sponsorCreative.deleteMany({ where: { sponsorId: id } })
@@ -311,6 +323,12 @@ export async function updateCatalogProfile(id: string, patch: Partial<CatalogPro
   const data: Record<string, unknown> = {}
   for (const k of ['slug', 'name', 'role', 'kind', 'platform', 'city', 'bio', 'projects', 'photo', 'instagram', 'whatsapp', 'verified', 'participatesIn'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   await prisma.$transaction(async (tx) => {
+    // Lock del padre antes de reemplazar sus hijos: dos organizadores guardando la misma
+    // entidad a la vez borran y recrean las mismas filas hijas, y el segundo choca contra la
+    // clave única del primero (P2002 "ya existe un recurso con esa clave" — un mensaje sin
+    // sentido para quien está editando algo que ya existe). Serializa por entidad; mismo
+    // patrón que updateGallery y los delete con pre-chequeo.
+    await tx.$queryRaw`SELECT id FROM "CatalogProfile" WHERE id = ${id} FOR UPDATE`
     await tx.catalogProfile.update({ where: { id }, data })
     if (patch.portfolio) {
       // A diferencia de Photo, PortfolioPiece no está referenciada por nadie, así que recrearla es
@@ -418,6 +436,12 @@ export async function updateConvocatoria(id: string, patch: Partial<Convocatoria
   if ('ctaUrl' in patch) data.ctaUrl = cleanStoredUrl(patch.ctaUrl, 'CTA')
   if ('deadline' in patch && patch.deadline) data.deadline = parseDate(patch.deadline, 'fecha límite')
   await prisma.$transaction(async (tx) => {
+    // Lock del padre antes de reemplazar sus hijos: dos organizadores guardando la misma
+    // entidad a la vez borran y recrean las mismas filas hijas, y el segundo choca contra la
+    // clave única del primero (P2002 "ya existe un recurso con esa clave" — un mensaje sin
+    // sentido para quien está editando algo que ya existe). Serializa por entidad; mismo
+    // patrón que updateGallery y los delete con pre-chequeo.
+    await tx.$queryRaw`SELECT id FROM "Convocatoria" WHERE id = ${id} FOR UPDATE`
     await tx.convocatoria.update({ where: { id }, data })
     if (patch.fields) {
       // Reemplazo completo de los campos (createMany con order recalculado). createMany NO es
