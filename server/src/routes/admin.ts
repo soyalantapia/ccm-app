@@ -193,13 +193,15 @@ adminRouter.get('/admin/applications', requirePermission('applications:read'), a
 const decideSchema = z.object({
   status: z.enum(['aceptada', 'rechazada', 'preinscripta']),
   note: z.string().max(2000).optional(),
+  skipEmail: z.boolean().optional(),
 })
 adminRouter.patch('/admin/applications/:id', requirePermission('applications:decide'), async (req, res, next) => {
   try {
-    const { status, note } = decideSchema.parse(req.body)
+    const { status, note, skipEmail } = decideSchema.parse(req.body)
     await applicationService.decideApplication(req.params.id, status, {
       adminUserId: req.admin!.userId,
       ...(note ? { note } : {}),
+      ...(skipEmail ? { skipEmail } : {}),
     })
     res.status(204).end()
   } catch (err) {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { getDevOutbox, clearDevOutbox } from '../mail/mailer.js'
 
 const mockPrisma = {
   application: { updateMany: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
@@ -79,5 +80,64 @@ describe('decideApplication — volver a revisión (deshacer)', () => {
       status: 409,
       code: 'APPLICATION_ALREADY_DECIDED',
     })
+  })
+})
+
+describe('decideApplication — aviso al postulante', () => {
+  beforeEach(() => clearDevOutbox())
+
+  it('manda el mail al email que cargó el postulante', async () => {
+    mockPrisma.application.findUnique.mockResolvedValue({
+      id: 'app-1', status: 'aceptada', fromSeed: false,
+      data: { nombre: 'Lautaro', email: 'lau@mail.test' },
+      convocatoria: { title: 'Camino a CCM' },
+    })
+    await decideApplication('app-1', 'aceptada', { adminUserId: 'u1' })
+    expect(getDevOutbox()).toHaveLength(1)
+    expect(getDevOutbox()[0].to).toBe('lau@mail.test')
+  })
+
+  // Una postulación de demo trae un email de aspecto real que no es de nadie —o peor, de alguien.
+  it('NUNCA le manda mail a una postulación de demo', async () => {
+    mockPrisma.application.findUnique.mockResolvedValue({
+      id: 'app-seed', status: 'aceptada', fromSeed: true,
+      data: { nombre: 'Demo', email: 'milagros.soria.disenio@gmail.com' },
+      convocatoria: { title: 'Camino a CCM' },
+    })
+    await decideApplication('app-seed', 'aceptada', { adminUserId: 'u1' })
+    expect(getDevOutbox()).toHaveLength(0)
+  })
+
+  it('sin email en la postulación, decide igual y no intenta enviar', async () => {
+    mockPrisma.application.findUnique.mockResolvedValue({
+      id: 'app-2', status: 'aceptada', fromSeed: false,
+      data: { nombre: 'Sin Mail' }, convocatoria: { title: 'Camino a CCM' },
+    })
+    await expect(decideApplication('app-2', 'aceptada', { adminUserId: 'u1' })).resolves.toBeUndefined()
+    expect(getDevOutbox()).toHaveLength(0)
+  })
+
+  it('con skipEmail no manda nada, aunque haya email', async () => {
+    mockPrisma.application.findUnique.mockResolvedValue({
+      id: 'app-3', status: 'rechazada', fromSeed: false,
+      data: { nombre: 'X', email: 'x@mail.test' }, convocatoria: { title: 'C' },
+    })
+    await decideApplication('app-3', 'rechazada', { adminUserId: 'u1', skipEmail: true })
+    expect(getDevOutbox()).toHaveLength(0)
+  })
+
+  it('si el envío falla, la decisión QUEDA y se registra el error', async () => {
+    mockPrisma.application.findUnique.mockResolvedValue({
+      id: 'app-4', status: 'aceptada', fromSeed: false,
+      data: { nombre: 'Y', email: 'no-existe@' }, convocatoria: { title: 'C' },
+    })
+    const mailer = await import('../mail/mailer.js')
+    vi.spyOn(mailer, 'getMailer').mockReturnValue({
+      send: async () => { throw new Error('SMTP caído') },
+    })
+    await expect(decideApplication('app-4', 'aceptada', { adminUserId: 'u1' })).resolves.toBeUndefined()
+    const ultima = mockPrisma.application.updateMany.mock.calls.at(-1)![0]
+    expect(ultima.data.notifyError).toContain('SMTP caído')
+    vi.restoreAllMocks()
   })
 })

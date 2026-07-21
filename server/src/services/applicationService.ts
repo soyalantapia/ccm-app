@@ -5,6 +5,8 @@ import { notFound, conflict, badRequest } from '../lib/errors.js'
 import type { Application } from '@domain/types'
 import { keysFromApplicationData } from '../domain/personIdentity.js'
 import { linkPerson } from './personService.js'
+import { getMailer } from '../mail/mailer.js'
+import { applicationAcceptedEmail, applicationRejectedEmail } from '../mail/templates.js'
 
 /** Postulación pública (preinscripta). El equipo CCM decide después (admin). */
 export async function submitApplication(
@@ -80,7 +82,7 @@ export async function getDeviceApplications(deviceId: string): Promise<Applicati
 export async function decideApplication(
   id: string,
   status: 'aceptada' | 'rechazada' | 'preinscripta',
-  opts: { adminUserId: string; note?: string },
+  opts: { adminUserId: string; note?: string; skipEmail?: boolean },
 ): Promise<void> {
   const volviendo = status === 'preinscripta'
   const admin = await prisma.adminUser.findUnique({
@@ -99,5 +101,40 @@ export async function decideApplication(
       'APPLICATION_ALREADY_DECIDED',
       volviendo ? 'Esta postulación no está decidida.' : 'Esta postulación ya fue decidida.',
     )
+  }
+
+  // Volver a revisión no avisa nada: se está deshaciendo, no comunicando.
+  if (volviendo || opts.skipEmail) return
+
+  const app = await prisma.application.findUnique({
+    where: { id },
+    include: { convocatoria: { select: { title: true } } },
+  })
+  if (!app) return
+
+  // Las de demo traen un email de aspecto real que no es de nadie. Se decide igual, no se avisa.
+  if (app.fromSeed) return
+
+  const data = (app.data ?? {}) as Record<string, string>
+  const to = typeof data.email === 'string' ? data.email.trim() : ''
+  // Sin email no hay a quién escribirle. La decisión ya quedó guardada: no poder avisar
+  // nunca bloquea decidir.
+  if (!to) return
+
+  const nombre = typeof data.nombre === 'string' && data.nombre.trim() ? data.nombre.trim() : 'Hola'
+  const convocatoria = app.convocatoria?.title ?? 'la convocatoria'
+  const msg =
+    status === 'aceptada'
+      ? applicationAcceptedEmail({ name: nombre, convocatoria })
+      : applicationRejectedEmail({ name: nombre, convocatoria })
+
+  // Best-effort y DESPUÉS de persistir: que el correo falle no puede desarmar una decisión
+  // que el organizador ya tomó y que el postulante ya ve en su app.
+  try {
+    await getMailer().send(to, msg)
+    await prisma.application.updateMany({ where: { id }, data: { notifiedAt: new Date(), notifyError: null } })
+  } catch (err) {
+    const detalle = err instanceof Error ? err.message : String(err)
+    await prisma.application.updateMany({ where: { id }, data: { notifyError: detalle.slice(0, 500) } })
   }
 }

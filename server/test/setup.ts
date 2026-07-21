@@ -15,3 +15,10 @@ process.env.NODE_ENV = 'test'
 process.env.DATABASE_URL ??= 'postgresql://test:test@localhost:5432/ccm_test'
 process.env.DEVICE_TOKEN_SECRET ??= 'test-device-secret-0123456789abcdef'
 process.env.ADMIN_TOKEN ??= 'test-admin-token-abcdef'
+// Ningún test debe pegarle a un proveedor de mail real: el .env local de este worktree trae
+// SMTP prestado (Hostinger) para probar el envío a mano, y env.ts lo carga vía `dotenv/config`
+// al importarse. Seteado ANTES de esa importación (dotenv no pisa claves que ya existen en
+// process.env, aunque estén vacías) ⇒ SMTP_HOST/RESEND_API_KEY quedan '' y getMailer() cae
+// siempre al ConsoleMailer (buffer en memoria) durante los tests.
+process.env.SMTP_HOST = ''
+process.env.RESEND_API_KEY = ''
