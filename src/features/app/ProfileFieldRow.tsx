@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Button, Input, toast } from '../../components/ui'
+import { Button, Input, toast, PhoneInput } from '../../components/ui'
 import { store, useStore } from '../../data/store'
 import { FIELD_META, requireProfile } from '../../lib/profileRequest'
 import type { ProfileFieldKey } from '../../data/types'
@@ -76,16 +76,23 @@ export function ProfileFieldRow({ field }: { field: ProfileFieldKey }) {
 
       {editing && (
         <form onSubmit={save} className="mt-3 flex flex-wrap items-center gap-2">
-          <Input
-            type={meta.type}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder={meta.placeholder}
-            aria-label={meta.label}
-            autoComplete={meta.autocomplete}
-            autoFocus
-            className="min-w-0 flex-1 basis-48"
-          />
+          {field === 'phone' ? (
+            // Mismo criterio que el sheet: el teléfono se corrige con su prefijo de país.
+            <span className="min-w-0 flex-1 basis-48">
+              <PhoneInput value={value} onChange={setValue} autoFocus />
+            </span>
+          ) : (
+            <Input
+              type={meta.type}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={meta.placeholder}
+              aria-label={meta.label}
+              autoComplete={meta.autocomplete}
+              autoFocus
+              className="min-w-0 flex-1 basis-48"
+            />
+          )}
           <Button type="submit" size="sm">
             Guardar
           </Button>
