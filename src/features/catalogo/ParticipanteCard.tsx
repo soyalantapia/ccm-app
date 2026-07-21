@@ -36,7 +36,9 @@ export function ParticipanteCard({ profile }: { profile: CatalogProfile }) {
         <p className="mt-2 line-clamp-3 text-[10px] leading-[1.5] text-text-3 lg:text-[12px] lg:leading-[1.6]">{profile.bio}</p>
         <Link
           to={`/p/${profile.slug}`}
-          className="mt-3 block rounded-[8px] bg-accent py-2 text-center text-[10px] font-bold uppercase tracking-[0.04em] text-accent-ink transition-transform active:scale-[0.98] lg:mt-4 lg:py-2.5 lg:text-[11px]"
+          // accent-strong y no accent: es texto de 10px sobre el fondo, y el acento puro da
+          // 3,25:1 (AA pide 4,5). Mismo criterio que el botón primario.
+          className="mt-3 block rounded-[8px] bg-accent-strong py-2 text-center text-[10px] font-bold uppercase tracking-[0.04em] text-accent-ink transition-transform active:scale-[0.98] lg:mt-4 lg:py-2.5 lg:text-[11px]"
         >
           Ver Catálogo →
         </Link>

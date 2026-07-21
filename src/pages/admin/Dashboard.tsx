@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertCircle, ArrowRight, CheckCircle2, RefreshCw } from 'lucide-react'
+import { AlertCircle, ArrowRight, CheckCircle2, Database, RefreshCw } from 'lucide-react'
 import { Button, Stat } from '../../components/ui'
 import { store, useStore } from '../../data/store'
 import { CorePageHeader } from '../../features/admin/CorePageHeader'
@@ -78,6 +78,8 @@ export default function Dashboard() {
   }, [])
 
   const fallo = useStore((s) => s.statsFailed()) && intentado && !stats
+  // Sin backend (demo) no hay nada que esperar: es un estado FINAL, no una carga en curso.
+  const sinBackend = useStore((s) => !s.hasBackend())
 
   return (
     <div className="px-5 py-8 md:px-10">
@@ -86,17 +88,22 @@ export default function Dashboard() {
         lead={
           stats
             ? `Calculado sobre la base de datos · actualizado ${haceCuanto(stats.generatedAt)}`
-            : 'Métricas calculadas sobre la base de datos'
+            : sinBackend
+              ? 'Las métricas se calculan sobre la base de datos del backend'
+              : 'Métricas calculadas sobre la base de datos'
         }
         actions={
-          <Button variant="outline" size="sm" onClick={() => store.refetchAdminStats()}>
-            <RefreshCw size={13} strokeWidth={2} /> Actualizar
-          </Button>
+          // Sin backend, "Actualizar" no puede hacer nada: ofrecerlo invita a apretar en vano.
+          sinBackend && !stats ? undefined : (
+            <Button variant="outline" size="sm" onClick={() => store.refetchAdminStats()}>
+              <RefreshCw size={13} strokeWidth={2} /> Actualizar
+            </Button>
+          )
         }
       />
 
       {!stats ? (
-        <EstadoSinDatos fallo={fallo} />
+        <EstadoSinDatos fallo={fallo} sinBackend={sinBackend} />
       ) : (
         <Contenido stats={stats} />
       )}
@@ -104,8 +111,34 @@ export default function Dashboard() {
   )
 }
 
-/** Tres estados que se ven parecido y significan cosas opuestas: se distinguen. */
-function EstadoSinDatos({ fallo }: { fallo: boolean }) {
+/**
+ * Tres estados que se ven parecido y significan cosas opuestas: se distinguen.
+ *
+ *  1. `fallo`       → hay backend y no contestó. Se puede reintentar.
+ *  2. `sinBackend`  → es la demo: no hay a quién preguntarle. Estado FINAL.
+ *  3. resto         → hay backend y la respuesta está en camino. Transitorio.
+ *
+ * El caso 2 faltaba y caía en el 3, así que la demo mostraba un esqueleto pulsando y
+ * "Calculando métricas…" para siempre: una carga simulada que jamás iba a resolver, en la
+ * primera pantalla del panel y justo en el artefacto que se muestra en las reuniones.
+ */
+function EstadoSinDatos({ fallo, sinBackend }: { fallo: boolean; sinBackend: boolean }) {
+  if (sinBackend) {
+    return (
+      <div className="mt-10 flex items-start gap-3 rounded-md border border-line bg-surface p-5">
+        <Database size={18} className="mt-0.5 shrink-0 text-ink-soft" aria-hidden />
+        <div>
+          <p className="type-serif text-base text-ink">Esta demo no tiene métricas</p>
+          <p className="mt-1.5 max-w-prose text-[13px] leading-relaxed text-ink-soft">
+            Los números del Dashboard los calcula el backend sobre la base de datos real. Esta
+            demo corre sin backend, así que no hay nada que contar — y preferimos decirlo antes
+            que mostrarte cifras inventadas. El resto del panel funciona: podés crear, editar y
+            borrar, y los cambios viven en este dispositivo.
+          </p>
+        </div>
+      </div>
+    )
+  }
   if (fallo) {
     return (
       <div className="mt-10 flex items-start gap-3 rounded-md border border-danger/30 bg-danger/5 p-5">

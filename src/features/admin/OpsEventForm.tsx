@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Button, Field, Img, Input, Select, Sheet, Textarea, toast, ImageUpload } from '../../components/ui'
 import { store } from '../../data/store'
 import type { EventItem, EventType } from '../../data/types'
+import { fechaEnTexto, esTextoAutomatico, textoContradiceLaFecha } from '../../lib/eventDate'
+import { config } from '../../config'
 
 const TYPE_OPTIONS: { value: EventType; label: string }[] = [
   { value: 'camino', label: 'Camino a CCM (previo)' },
@@ -39,6 +41,9 @@ type Form = {
   socioOnly: boolean
 }
 
+// La sede de siempre viene puesta: los seis eventos cargados usan la misma. Es editable —hay
+// Caminos fuera del hotel— pero no tiene sentido hacer retipear en cada alta algo que el sistema
+// ya sabe.
 const empty: Form = {
   title: '',
   type: 'camino',
@@ -46,8 +51,8 @@ const empty: Form = {
   dateLabel: '',
   startDate: '',
   timeLabel: '',
-  venue: '',
-  address: '',
+  venue: config.venue.name,
+  address: config.venue.address,
   description: '',
   past: false,
   socioOnly: false,
@@ -83,18 +88,51 @@ export function OpsEventForm({ open, event, onClose }: Props) {
   const [f, setF] = useState<Form>(empty)
   const [error, setError] = useState('')
 
+  // ¿El texto de la fecha lo escribió una persona, o lo derivamos nosotros? Al editar un evento
+  // que ya existe se deduce: si el texto guardado no es el que produciría su fecha, alguien lo
+  // escribió a propósito (el evento principal dice "19 y 20 de septiembre") y no hay que pisarlo.
+  const [textoPersonalizado, setTextoPersonalizado] = useState(false)
+
   useEffect(() => {
-    if (open) {
-      setF(event ? fromEvent(event) : empty)
-      setError('')
-    }
+    if (!open) return
+    const inicial = event ? fromEvent(event) : empty
+    setF(inicial)
+    setError('')
+    setTextoPersonalizado(
+      !!event && !!inicial.dateLabel && !esTextoAutomatico(inicial.startDate, inicial.dateLabel),
+    )
   }, [open, event])
 
   const set = (k: keyof Form) => (e: { target: { value: string } }) =>
     setF((prev) => ({ ...prev, [k]: e.target.value }))
 
-  const submit = (e: FormEvent) => {
+  /** Al elegir la fecha, el texto se reescribe solo — salvo que lo hayan personalizado. */
+  const onCambiarFecha = (e: { target: { value: string } }) => {
+    const startDate = e.target.value
+    setF((prev) => ({
+      ...prev,
+      startDate,
+      dateLabel: textoPersonalizado ? prev.dateLabel : fechaEnTexto(startDate),
+    }))
+  }
+
+  const volverAlTextoAutomatico = () => {
+    setTextoPersonalizado(false)
+    setF((prev) => ({ ...prev, dateLabel: fechaEnTexto(prev.startDate) }))
+  }
+
+  const textoFecha = f.startDate ? fechaEnTexto(f.startDate) : ''
+  // Si personalizaron el texto y nombra un día de la semana que no es el de la fecha, avisamos.
+  // No lo bloqueamos: puede haber un texto raro y válido; lo que no puede pasar es que nadie mire.
+  const avisoFecha = textoPersonalizado ? textoContradiceLaFecha(f.startDate, f.dateLabel) : null
+
+  /** ¿Este evento ya está a la vista del público? Uno nuevo nace borrador. */
+  const yaPublicado = event?.published ?? false
+
+  const submit = (e: FormEvent | React.MouseEvent, opts?: { publicar?: boolean }) => {
     e.preventDefault()
+    // Sin `opts` es el submit del formulario, que es el botón de publicar/guardar cambios.
+    const publicar = opts?.publicar ?? true
     const required = ['title', 'dateLabel', 'startDate', 'venue', 'address', 'description', 'cover'] as const
     if (required.some((k) => !f[k].trim())) {
       setError('Completá los campos obligatorios.')
@@ -125,13 +163,22 @@ export function OpsEventForm({ open, event, onClose }: Props) {
       // al backend como false, no desaparecer del patch.
       past: f.past,
       socioOnly: f.socioOnly,
+      published: publicar,
     }
     if (event) {
       store.updateEvent(event.id, data)
-      toast('✓ Evento actualizado')
+      toast(
+        publicar
+          ? yaPublicado
+            ? '✓ Cambios guardados'
+            : '✓ Publicado · ya aparece en la app'
+          : yaPublicado
+            ? '✓ Despublicado · queda sólo para el equipo'
+            : '✓ Borrador guardado',
+      )
     } else {
       store.createEvent({ ...data, sponsorIds: [] })
-      toast('✓ Evento creado · ya aparece en la app')
+      toast(publicar ? '✓ Publicado · ya aparece en la app' : '✓ Borrador guardado · no lo ve el público')
     }
     onClose()
   }
@@ -176,14 +223,37 @@ export function OpsEventForm({ open, event, onClose }: Props) {
         <Field label="Subtítulo" hint="Opcional, una línea corta">
           <Input value={f.subtitle} onChange={set('subtitle')} placeholder="Charlas, networking y desfile cápsula" />
         </Field>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Fecha (texto)" required>
-            <Input value={f.dateLabel} onChange={set('dateLabel')} placeholder="18 de julio de 2026" required />
+        {/* UNA fecha. El texto que ve el público se escribe solo a partir de ella; antes eran dos
+            campos independientes y nadie verificaba que dijeran lo mismo — en producción dos
+            capacitaciones anunciaron el día de la semana equivocado durante semanas. */}
+        <Field label="Fecha" required hint={textoFecha ? `Se va a mostrar: “${textoFecha}”` : undefined}>
+          <Input type="date" value={f.startDate} onChange={onCambiarFecha} required />
+        </Field>
+
+        {textoPersonalizado ? (
+          <Field
+            label="Texto de la fecha"
+            hint="Para casos como “19 y 20 de septiembre”, que no salen de una sola fecha."
+          >
+            <Input value={f.dateLabel} onChange={set('dateLabel')} placeholder={textoFecha} />
+            {avisoFecha && <p className="mt-1.5 text-xs text-danger">{avisoFecha}</p>}
+            <button
+              type="button"
+              onClick={volverAlTextoAutomatico}
+              className="mt-2 text-xs text-accent-strong underline-offset-2 hover:underline"
+            >
+              Volver al texto automático
+            </button>
           </Field>
-          <Field label="Fecha (para ordenar)" required>
-            <Input type="date" value={f.startDate} onChange={set('startDate')} required />
-          </Field>
-        </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setTextoPersonalizado(true)}
+            className="-mt-1 text-xs text-ink-soft underline-offset-2 hover:text-ink hover:underline"
+          >
+            Escribir otro texto (ej: un evento de dos días)
+          </button>
+        )}
         <Field label="Horario" hint="Opcional">
           <Input value={f.timeLabel} onChange={set('timeLabel')} placeholder="17 a 21 hs" />
         </Field>
@@ -231,14 +301,31 @@ export function OpsEventForm({ open, event, onClose }: Props) {
 
         {error && <p className="text-xs text-danger">{error}</p>}
 
+        {/* Guardar y publicar son actos distintos. Quien lo tiene cerrado publica de una —mismo
+            esfuerzo que antes—; quien lo va armando de a poco guarda y vuelve, sin que el público
+            vea nada a medio hacer. Antes no existía la opción de no publicar. */}
         <div className="flex flex-col gap-2.5 pt-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="ghost" size="lg" onClick={onClose} className="sm:order-1">
             Cancelar
           </Button>
-          <Button type="submit" size="lg" className="sm:order-2">
-            {event ? 'Guardar cambios' : 'Crear evento'}
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={(e) => submit(e, { publicar: false })}
+            className="sm:order-2"
+          >
+            {yaPublicado ? 'Guardar y despublicar' : 'Guardar borrador'}
+          </Button>
+          <Button type="submit" size="lg" className="sm:order-3">
+            {yaPublicado ? 'Guardar cambios' : 'Publicar'}
           </Button>
         </div>
+        {!yaPublicado && (
+          <p className="text-right text-[11px] text-ink-soft/80">
+            El borrador queda sólo para el equipo. Publicar lo pone a la vista de todos.
+          </p>
+        )}
       </form>
     </Sheet>
   )

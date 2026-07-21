@@ -156,6 +156,33 @@ model Device {
   analytics     AnalyticsEvent[]
   payments      Payment[]
 
+  personId String?
+  person   Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([personId])
+}
+
+// ─────────────────────────────────────────────────────────
+//  PERSONAS (CRM)
+// ─────────────────────────────────────────────────────────
+
+/**
+ * Ancla de identidad. NO copia datos personales: solo guarda las claves con las que se
+ * unifica (email, dni normalizados). Los datos siguen en ProfileField —con su procedencia—
+ * y en Application.data. Copiarlos acá destruiría el "cuándo y en qué acción se capturó",
+ * que es lo que hace valiosa a la base propia.
+ */
+model Person {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  dni       String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  devices      Device[]
+  applications Application[]
+
   @@index([createdAt])
 }
 
@@ -195,6 +222,13 @@ model Event {
   price       Int?
   past        Boolean   @default(false)
   socioOnly   Boolean   @default(false) // gate a nivel EVENTO (canon 17); el bloque lo hereda
+  // Un evento nace BORRADOR: se puede cargar de a poco sin que el público lo vea a medio hacer.
+  // Publicar es un acto aparte y explícito. Antes cada alta salía a la app en el mismo instante
+  // en que se apretaba "Crear", sin vuelta atrás — no se podía despublicar y borrar se traba con
+  // la primera inscripción.
+  // ⚠️ La migración pone DEFAULT true para que los eventos que YA existían sigan publicados, y
+  // recién después baja el default a false. Sin ese orden, todo lo que está al aire desaparecía.
+  published   Boolean   @default(false)
 
   blocks        EventBlock[]
   registrations Registration[]
@@ -206,6 +240,8 @@ model Event {
 
   @@index([type, startDate])
   @@index([past])
+  // El público sólo ve lo publicado: el índice acompaña ese filtro, que corre en cada visita.
+  @@index([published])
 }
 
 // EventItem.sponsorIds[] → tabla puente.
@@ -722,8 +758,12 @@ model Application {
   convocatoria Convocatoria @relation(fields: [convocatoriaId], references: [id], onDelete: Cascade)
   device       Device?      @relation(fields: [deviceId], references: [id], onDelete: SetNull)
 
+  personId String?
+  person   Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
+
   @@index([convocatoriaId, status])
   @@index([status, ts])
+  @@index([personId])
 }
 
 // ─────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 
 const FOCUSABLE = [
   'a[href]',
@@ -49,12 +49,29 @@ export function bloquearScroll(): () => void {
  * - Tab / Shift+Tab ciclan dentro del contenedor.
  * - Escape llama a `onClose` (si se pasa) — SOLO si este trap es el tope de la pila.
  * - Al desactivar / desmontar: restituye el foco al elemento previamente enfocado.
+ *
+ * `onClose` NO puede estar en las dependencias del effect. Los consumidores la pasan como
+ * arrow inline —`onClose={() => close(false)}`, que es lo natural—, así que cambia de identidad
+ * en cada render. Con ella en las deps, cada tecla tipeada dentro del diálogo provocaba
+ * cleanup + re-montaje del trap, y el re-montaje llama a `focusFirst()`: el foco saltaba del
+ * campo al botón de cerrar, que es el primer focusable del DOM. Medido en el sheet de compra
+ * de entradas: tipear "Ana" en el campo Nombre dejaba el foco en la cruz.
+ *
+ * Se guarda en un ref que se mantiene al día, así el Escape siempre llama a la versión vigente
+ * sin que el effect dependa de su identidad.
  */
 export function useFocusTrap(
   active: boolean,
   containerRef: RefObject<HTMLElement | null>,
   onClose?: () => void,
 ) {
+  const onCloseRef = useRef(onClose)
+  // Sin array de deps: se actualiza en cada render, para que el Escape nunca quede atado a un
+  // callback viejo (que es el precio habitual de sacar la función de las dependencias).
+  useEffect(() => {
+    onCloseRef.current = onClose
+  })
+
   useEffect(() => {
     if (!active) return
     const container = containerRef.current
@@ -82,7 +99,7 @@ export function useFocusTrap(
     const onKey = (e: KeyboardEvent) => {
       if (!soyElTope()) return // hay un diálogo por encima: el evento es suyo
       if (e.key === 'Escape') {
-        onClose?.()
+        onCloseRef.current?.()
         return
       }
       if (e.key !== 'Tab') return
@@ -125,5 +142,5 @@ export function useFocusTrap(
         previouslyFocused.focus()
       }
     }
-  }, [active, containerRef, onClose])
+  }, [active, containerRef])
 }

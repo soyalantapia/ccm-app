@@ -7,6 +7,7 @@ import { OpsSponsorCard } from '../../features/admin/OpsSponsorCard'
 import { OpsGalleryForm } from '../../features/admin/OpsGalleryForm'
 import { OpsSponsorForm } from '../../features/admin/OpsSponsorForm'
 import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
+import { AVISO_BORRADO } from '../../features/admin/copyDestructivo'
 
 export default function AdminGalerias() {
   const galleries = useStore((s) => s.getGalleries())
@@ -154,8 +155,7 @@ export default function AdminGalerias() {
 
       <Sheet open={!!delGallery} onClose={() => setDelGallery(null)} title="¿Eliminar esta galería?">
         <p className="text-[15px] leading-relaxed text-ink-soft">
-          Se elimina <em className="text-accent">{delGallery?.title}</em> de Fotos. Podés recrearla o
-          reiniciar la demo para volver a los datos originales.
+          Se elimina <em className="text-accent">{delGallery?.title}</em> de Fotos. {AVISO_BORRADO}
         </p>
         <div className="mt-6 flex flex-col gap-2.5">
           <OpsDangerButton

@@ -1,8 +1,10 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { requirePermission } from '../middlewares/admin.js'
+import { notFound } from '../lib/errors.js'
 import * as admin from '../services/adminService.js'
 import * as applicationService from '../services/applicationService.js'
+import * as personService from '../services/personService.js'
 import * as catalogService from '../services/catalogService.js'
 import { handleUpload } from '../services/uploadService.js'
 import * as orderService from '../services/orderService.js'
@@ -194,6 +196,32 @@ adminRouter.patch('/admin/applications/:id', requirePermission('applications:dec
     const { status } = decideSchema.parse(req.body)
     await applicationService.decideApplication(req.params.id, status)
     res.status(204).end()
+  } catch (err) {
+    next(err)
+  }
+})
+
+/* ─── Personas (CRM) ─── */
+adminRouter.get('/admin/people', requirePermission('people:read'), async (req, res, next) => {
+  try {
+    res.json(
+      await personService.listPeople({
+        q: typeof req.query.q === 'string' ? req.query.q : undefined,
+        cursor: typeof req.query.cursor === 'string' ? req.query.cursor : undefined,
+      }),
+    )
+  } catch (err) {
+    next(err)
+  }
+})
+adminRouter.get('/admin/people/:id', requirePermission('people:read'), async (req, res, next) => {
+  try {
+    const ficha = await personService.getPerson(req.params.id)
+    if (!ficha) {
+      next(notFound('PERSON_NOT_FOUND', 'No encontramos a esa persona'))
+      return
+    }
+    res.json(ficha)
   } catch (err) {
     next(err)
   }

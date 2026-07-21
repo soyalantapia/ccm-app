@@ -2,6 +2,20 @@ import type { ErrorRequestHandler, RequestHandler } from 'express'
 import { ZodError } from 'zod'
 import { ApiError } from '../lib/errors.js'
 
+/**
+ * ¿El error es un choque entre dos escrituras concurrentes?
+ *
+ * Prisma no tipa estos casos: el driver los envuelve en PrismaClientUnknownRequestError y el
+ * código de Postgres (40P01 deadlock, 40001 serialization failure) queda sepultado en el texto
+ * del mensaje. Por eso se busca ahí en vez de en un campo `code`.
+ */
+function esConflictoDeConcurrencia(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const msg = (err as { message?: unknown }).message
+  if (typeof msg !== 'string') return false
+  return /\b(40P01|40001)\b/.test(msg) || /deadlock detected|could not serialize access/i.test(msg)
+}
+
 /** 404 para rutas no matcheadas. */
 export const notFoundHandler: RequestHandler = (_req, res) => {
   res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Ruta no encontrada' } })
@@ -36,6 +50,20 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
       res.status(409).json({ error: { code: 'FK_CONSTRAINT', message: 'No se puede borrar: tiene dependientes (ej. galerías)' } })
       return
     }
+  }
+  // Deadlock (40P01) y serialization failure (40001) de Postgres: dos escrituras que se pisaron.
+  // No es un error del servidor ni del payload — nadie hizo nada mal y reintentar suele funcionar.
+  // Sin esto salía como 500, así que al organizador le decíamos "algo falló" cuando lo correcto
+  // es "alguien más lo estaba editando, probá de nuevo". Red de seguridad: la causa se ataca
+  // tomando los locks en orden fijo (ver updateGallery), esto cubre lo que se nos escape.
+  if (esConflictoDeConcurrencia(err)) {
+    res.status(409).json({
+      error: {
+        code: 'WRITE_CONFLICT',
+        message: 'Otra persona estaba guardando lo mismo en este momento. Probá de nuevo.',
+      },
+    })
+    return
   }
   // Errores de http-errors que emite express.json() ANTES de tocar una ruta: JSON malformado
   // (400) y body > límite (413). Sin esto caían al 500 INTERNAL de abajo (respuesta engañosa +

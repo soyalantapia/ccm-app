@@ -135,3 +135,17 @@ describe('metadatos de la UI y del email', () => {
     expect(homePathFor('CONTENT')).toBe('/admin/novedades')
   })
 })
+
+describe('people:read', () => {
+  it('OWNER y EDITOR lo tienen', () => {
+    expect(can('OWNER', 'people:read')).toBe(true)
+    expect(can('EDITOR', 'people:read')).toBe(true)
+  })
+  it('CONTENT NO lo tiene — prensa no ve datos personales', () => {
+    expect(can('CONTENT', 'people:read')).toBe(false)
+  })
+  it('STAFF y VIEWER tampoco', () => {
+    expect(can('STAFF', 'people:read')).toBe(false)
+    expect(can('VIEWER', 'people:read')).toBe(false)
+  })
+})

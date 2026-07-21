@@ -179,6 +179,62 @@ describe('webhook — lo que NO debe pasar', () => {
     await handleNotification('111', true)
     expect(prisma.ticketOrder.update).not.toHaveBeenCalled()
   })
+
+  /**
+   * El test de arriba termina donde empieza el problema: comprueba que el aviso `pending` no
+   * confirma nada (correcto) y ahí corta. Pero un pago en efectivo NO termina en `pending` — MP
+   * avisa de nuevo, sobre EL MISMO pago y la MISMA fila, cuando la plata se acredita días
+   * después. Esta es esa secuencia completa, que es el camino normal de Rapipago/PagoFácil en
+   * Argentina, no un caso de borde.
+   */
+  it('efectivo: el aviso pending y DESPUÉS el approved del mismo pago sí confirma la orden', async () => {
+    const fila = filaFake({ id: 'pay_efectivo', kind: 'ticket_order', resourceId: 'ord_efectivo' })
+
+    // 1) MP genera el cupón: avisa "pending". No se entrega nada todavía, y está bien.
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 222, status: 'pending', external_reference: 'pay_efectivo' } as never)
+    await handleNotification('222', true)
+    expect(prisma.ticketOrder.update).not.toHaveBeenCalled()
+
+    // 2) El comprador va al kiosco y paga. MP avisa el MISMO pago, ahora acreditado.
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 222, status: 'approved', external_reference: 'pay_efectivo' } as never)
+    await handleNotification('222', true)
+
+    // La plata entró de verdad: la entrada TIENE que quedar confirmada.
+    expect(prisma.ticketOrder.update).toHaveBeenCalledTimes(1)
+    expect(fila.status).toBe('approved')
+  })
+
+  it('tarjeta en revisión: in_process y después approved también entrega', async () => {
+    const fila = filaFake({ id: 'pay_revision', kind: 'ticket_order', resourceId: 'ord_revision' })
+
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 333, status: 'in_process', external_reference: 'pay_revision' } as never)
+    await handleNotification('333', true)
+
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 333, status: 'approved', external_reference: 'pay_revision' } as never)
+    await handleNotification('333', true)
+
+    expect(prisma.ticketOrder.update).toHaveBeenCalledTimes(1)
+    expect(fila.status).toBe('approved')
+  })
+
+  /**
+   * La contracara del arreglo: sacar `mpPaymentId` de la rama no aprobada no puede haber
+   * debilitado el candado que impide entregar dos veces. Se prueba con la secuencia peor:
+   * un `pending` previo (que antes quemaba el candado) y DESPUÉS dos avisos de aprobación
+   * concurrentes sobre la misma fila.
+   */
+  it('pending y después dos approved CONCURRENTES: entrega una sola vez', async () => {
+    const fila = filaFake({ id: 'pay_carrera', kind: 'ticket_order', resourceId: 'ord_carrera' })
+
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 444, status: 'pending', external_reference: 'pay_carrera' } as never)
+    await handleNotification('444', true)
+
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 444, status: 'approved', external_reference: 'pay_carrera' } as never)
+    await Promise.all([handleNotification('444', true), handleNotification('444', true)])
+
+    expect(prisma.ticketOrder.update).toHaveBeenCalledTimes(1)
+    expect(fila.status).toBe('approved')
+  })
 })
 
 describe('webhook — defecto B: activar antes de marcar aprobado, sin bloquear el reintento', () => {

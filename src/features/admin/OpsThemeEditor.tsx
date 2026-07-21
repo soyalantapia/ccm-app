@@ -1,3 +1,4 @@
+import { AlertTriangle } from 'lucide-react'
 import { Eyebrow, Button, toast } from '../../components/ui'
 import { useDataVersion } from '../../data/store'
 import {
@@ -8,6 +9,7 @@ import {
   setTheme,
   type TokenKey,
 } from '../../lib/theme'
+import { revisarPaleta, MINIMO_AA } from '../../lib/contraste'
 
 const COLOR_LABELS: Partial<Record<TokenKey, string>> = {
   bg: 'Fondo',
@@ -45,6 +47,10 @@ export function OpsThemeEditor() {
   const resolve = (key: TokenKey) => theme[key] ?? DEFAULT_THEME[key]
   const merge = (key: TokenKey, value: string) => setTheme({ ...getTheme(), [key]: value })
 
+  // Avisa, no bloquea: la marca es del cliente y puede tener razones para elegir lo que
+  // elija. Lo que no puede pasar es que se entere recién cuando alguien no pueda leer la app.
+  const avisos = revisarPaleta(Object.fromEntries(COLOR_KEYS.map((k) => [k, resolve(k)])))
+
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -67,6 +73,35 @@ export function OpsThemeEditor() {
           Restaurar Editorial CCM
         </Button>
       </div>
+
+      {/* Contraste: se muestra sólo si hay algo que decir. No impide guardar. */}
+      {avisos.length > 0 && (
+        <div className="mt-6 rounded-md border border-danger/30 bg-danger/5 p-4">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0 text-danger" aria-hidden />
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-ink">
+                {avisos.length === 1
+                  ? 'Hay una combinación difícil de leer'
+                  : `Hay ${avisos.length} combinaciones difíciles de leer`}
+              </p>
+              <p className="mt-1 text-[12px] leading-relaxed text-ink-soft">
+                El estándar de accesibilidad pide {MINIMO_AA}:1 entre el texto y su fondo. Podés
+                guardar igual — es tu marca —, pero con menos contraste hay gente que no va a poder
+                leerlo, sobre todo en el celular a pleno sol durante el evento.
+              </p>
+              <ul className="mt-2.5 space-y-1">
+                {avisos.map((a) => (
+                  <li key={`${a.texto}-${a.fondo}`} className="text-[12px] text-ink">
+                    <span className="tabular-nums font-semibold">{a.ratio.toFixed(2)}:1</span>{' '}
+                    <span className="text-ink-soft">· {a.donde}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Presets */}
       <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">

@@ -174,6 +174,8 @@ export interface DataStore {
   getAdminBenefits(): Benefit[]
   /** Contenido para el panel: sin el gate de socio (el organizador debe ver el youtubeId real). */
   getAdminContents(): ContentItem[]
+  /** Eventos para el panel: incluye los BORRADORES, que la ruta pública ni siquiera devuelve. */
+  getAdminEvents(): EventItem[]
   createBanner(input: NewBanner): Banner
   updateBanner(id: string, patch: Partial<Banner>): void
   deleteBanner(id: string): void
@@ -223,6 +225,15 @@ export interface DataStore {
   /** true si el último intento falló. Distingue "el backend no respondió" de "no hay datos":
    *  se ven igual (ambos sin números) y significan lo contrario. */
   statsFailed(): boolean
+  /**
+   * ¿Hay un backend detrás de este store? false en la demo (LocalDataStore, sin VITE_API_URL).
+   *
+   * Sin esto, getAdminStats() === null es ambiguo: puede ser "todavía estoy trayendo" o
+   * "no hay a quién preguntarle". El Dashboard los pintaba igual, así que en la demo —el
+   * artefacto que se muestra en las reuniones— el panel quedaba en "Calculando métricas…"
+   * para siempre, simulando una carga que nunca iba a resolver.
+   */
+  hasBackend(): boolean
 
   /**
    * Re-hidrata los recursos con vista admin (notas/banners/beneficios) tras loguear el

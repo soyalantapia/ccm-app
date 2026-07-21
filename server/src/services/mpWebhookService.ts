@@ -138,9 +138,18 @@ export async function handleNotification(mpPaymentId: string, firmaValida: boole
     // Efectivo/Rapipago llega como pending; un rechazo o un vencimiento liberan el índice único
     // de "pending" (pueden reintentar la compra); un reverso deja constancia de 'refunded'. En
     // ningún caso de esta rama se activa nada.
+    //
+    // ⚠️ NO escribir `mpPaymentId` acá. Ese campo es el candado de ENTREGA: el claim atómico de
+    // más abajo activa sólo si está en null. Si esta rama lo llena, el `approved` que llega
+    // después POR EL MISMO PAGO encuentra el candado tomado, sale por el `return` silencioso y no
+    // entrega nunca. Eso rompía el 100% de los pagos en efectivo/Rapipago —MP avisa `pending` al
+    // generar el cupón y `approved` cuando se acredita, sobre la misma fila— y también
+    // `in_process` → `approved` de tarjeta en revisión: plata cobrada, entrada jamás entregada, y
+    // ni una línea de log. El id de MP igual queda registrado (en `externalRef`, y entero dentro
+    // de `raw`), así que no se pierde rastro para reconciliar.
     await prisma.payment.update({
       where: { id: pago.id },
-      data: { mpPaymentId, status: estado, raw: pagoMp as never },
+      data: { externalRef: mpPaymentId, status: estado, raw: pagoMp as never },
     })
     return
   }
