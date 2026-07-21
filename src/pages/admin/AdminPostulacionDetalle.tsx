@@ -25,6 +25,16 @@ const linkCls = 'text-[15px] text-ink underline decoration-line underline-offset
  */
 export default function AdminPostulacionDetalle() {
   const { id = '' } = useParams()
+  // key={id}: fuerza un remount COMPLETO de la ficha al cambiar de postulación. Sin esto, React
+  // Router cambia el :id de la URL pero reutiliza la MISMA instancia (mismo tipo de elemento, misma
+  // posición en el árbol) — el estado `decision` de acá abajo (panel de aceptar/rechazar abierto) y
+  // el `note`/`skipEmail` de OpsDecisionSheet sobreviven al cambio de id. Es la tercera pata del
+  // BLOQUEANTE 1 del review: junto con los dos guards del atajo de teclado, esto asegura que el
+  // estado de UNA postulación nunca quede flotando sobre otra.
+  return <AdminPostulacionDetalleFicha key={id} id={id} />
+}
+
+function AdminPostulacionDetalleFicha({ id }: { id: string }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const tab = parseApplicationTab(searchParams.get('tab'))
@@ -47,12 +57,27 @@ export default function AdminPostulacionDetalle() {
   useEffect(() => {
     if (index < 0) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp' && prevId) navigate(`/admin/postulaciones/${prevId}${applicationTabQuery(tab)}`)
-      if (e.key === 'ArrowDown' && nextId) navigate(`/admin/postulaciones/${nextId}${applicationTabQuery(tab)}`)
+      // Guard 1: con el panel de decisión abierto, ↑/↓ NO tiene que cambiar de postulación —
+      // confirmar ahí manda un mail real e irreversible, y no puede terminar apuntando a otra
+      // persona por una flecha de más.
+      if (decision !== null) return
+      // Guard 2: si el foco está escribiendo (la nota interna es un textarea; también cubre
+      // inputs y cualquier contenteditable), ↓ es "bajar una línea", no "siguiente postulación".
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
+      if (e.key === 'ArrowUp' && prevId) {
+        e.preventDefault() // si no, además de navegar, scrollea la página
+        navigate(`/admin/postulaciones/${prevId}${applicationTabQuery(tab)}`)
+      }
+      if (e.key === 'ArrowDown' && nextId) {
+        e.preventDefault()
+        navigate(`/admin/postulaciones/${nextId}${applicationTabQuery(tab)}`)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [index, prevId, nextId, tab, navigate])
+  }, [index, prevId, nextId, tab, navigate, decision])
 
   // null = todavía no hidrató o falló el fetch real (mismo criterio que AdminPostulaciones):
   // nunca cae al seed cuando SÍ hay backend, y "cargando" es un estado DISTINTO de "no existe".
