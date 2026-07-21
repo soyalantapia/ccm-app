@@ -204,7 +204,12 @@ export interface DataStore {
   /** Solo las del PROPIO device ("Mis postulaciones" / guard "ya te postulaste"). NUNCA la
    *  lista admin, aunque haya sesión de organizador en la misma pestaña. */
   getMyApplications(): Application[]
-  decideApplication(applicationId: string, status: Exclude<ApplicationStatus, 'preinscripta'>): void
+  /** Decide una postulación. `preinscripta` como destino es "volver a revisión" (deshacer). */
+  decideApplication(
+    applicationId: string,
+    status: ApplicationStatus,
+    opts?: { note?: string; skipEmail?: boolean },
+  ): void
 
   /* Analytics */
   track(event: string, payload?: Record<string, unknown>): void

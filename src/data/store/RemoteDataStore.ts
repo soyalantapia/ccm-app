@@ -942,7 +942,11 @@ export class RemoteDataStore extends LocalDataStore {
       })
     return app
   }
-  override decideApplication(applicationId: string, status: Exclude<ApplicationStatus, 'preinscripta'>): void {
+  override decideApplication(
+    applicationId: string,
+    status: ApplicationStatus,
+    opts?: { note?: string; skipEmail?: boolean },
+  ): void {
     if (!this.adminApplications) {
       // hidratar bajo demanda (el admin abrió postulaciones)
       this.hydrateAdminApplications()
@@ -953,7 +957,11 @@ export class RemoteDataStore extends LocalDataStore {
     // Antes el error se tragaba con `.catch(() => {})`: la postulación quedaba marcada como
     // aceptada en pantalla sin que el backend lo supiera, y al recargar volvía a "preinscripta".
     this.adminWrite(
-      this.api.patch(`/admin/applications/${applicationId}`, { status }),
+      this.api.patch(`/admin/applications/${applicationId}`, {
+        status,
+        ...(opts?.note ? { note: opts.note } : {}),
+        ...(opts?.skipEmail ? { skipEmail: true } : {}),
+      }),
       () => this.hydrateAdminApplications(),
       // `prev` puede ser undefined: arriba se dispara una hidratación bajo demanda, y si ESA
       // llega mientras el PATCH está en vuelo, restaurar el snapshot vacío borraría la lista

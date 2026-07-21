@@ -705,7 +705,11 @@ export class LocalDataStore implements DataStore {
     return this.getApplications()
   }
 
-  decideApplication(applicationId: string, status: Exclude<ApplicationStatus, 'preinscripta'>): void {
+  decideApplication(
+    applicationId: string,
+    status: ApplicationStatus,
+    _opts?: { note?: string; skipEmail?: boolean },
+  ): void {
     const overrides = readJSON<Record<string, AppOverride>>(K.applicationOverrides, {})
     overrides[applicationId] = { status, decidedAt: new Date().toISOString() }
     writeJSON(K.applicationOverrides, overrides)
