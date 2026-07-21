@@ -8,17 +8,25 @@ const STATUS_META: Record<
   Status,
   { badgeTone: BadgeTone; badge: string; title: string; body: string }
 > = {
+  // Ninguno de los dos textos promete un canal de contacto puntual (antes "por teléfono"): el
+  // mail que manda decideApplication (server/src/mail/templates.ts) dice "en los próximos días
+  // te escribimos", y estos dos textos tienen que decir lo mismo — no algo distinto que se lea
+  // como una contradicción si la persona lee primero acá y después el mail (o al revés).
   preinscripta: {
     badgeTone: 'accent',
     badge: 'En revisión',
     title: 'Tu postulación está en revisión',
-    body: 'El equipo CCM revisa tu historia y te confirma el lugar por teléfono. Máximo 1 acompañante.',
+    body: 'El equipo CCM está revisando tu postulación. Si quedás seleccionada/o, te escribimos en los próximos días con los detalles. Máximo 1 acompañante.',
   },
   aceptada: {
     badgeTone: 'success',
     badge: 'Aceptada',
-    title: '¡Tenés tu lugar confirmado! 🖤',
-    body: 'El equipo CCM aceptó tu postulación. Te esperamos en el encuentro con tu mejor LOOK.',
+    // Antes decía "¡Tenés tu lugar confirmado!": aceptar la postulación NO reserva ningún lugar
+    // (no crea una Registration en ningún lado) — el texto prometía algo que no existía. Acá se
+    // dice lo que de verdad pasó (la postulación fue aceptada) y lo que sigue (el equipo se
+    // contacta), igual que el mail que ya recibió.
+    title: '¡Quedaste seleccionada/o! 🖤',
+    body: 'El equipo CCM aceptó tu postulación. En los próximos días te escribimos con los detalles de la fecha, el lugar y lo que tenés que llevar.',
   },
   rechazada: {
     badgeTone: 'danger',
