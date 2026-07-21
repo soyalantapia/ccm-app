@@ -88,3 +88,35 @@ describe('PhoneInput', () => {
     expect(sel.tabIndex).toBeGreaterThanOrEqual(0)
   })
 })
+
+/**
+ * El orden natural es elegir el país PRIMERO y después escribir el número. Con el campo vacío,
+ * `unirTelefono` devuelve '' a propósito (para no guardar un «+598» suelto), pero si el país
+ * sólo vive dentro de ese string, la elección se pierde en el mismo render: el selector volvía
+ * solo a Argentina y la persona terminaba guardando su número uruguayo con prefijo argentino.
+ */
+describe('PhoneInput — el país elegido no se pierde', () => {
+  it('elegir el país con el campo VACÍO y escribir después conserva el país', () => {
+    render(<Campo />)
+
+    fireEvent.change(selectorPais(), { target: { value: 'UY' } })
+    expect(selectorPais().value, 'el selector se revirtió solo').toBe('UY')
+
+    fireEvent.change(campoNumero(), { target: { value: '99887766' } })
+    expect(selectorPais().value).toBe('UY')
+    expect(valorEmitido(), 'se guardó con el prefijo equivocado').toBe('+598 99887766')
+  })
+
+  it('borrar todo el número no revierte el país', () => {
+    render(<Campo inicial="+55 11987654321" />)
+    fireEvent.change(campoNumero(), { target: { value: '' } })
+    expect(selectorPais().value, 'volvió al país por defecto al vaciar').toBe('BR')
+  })
+
+  it('un teléfono guardado manda sobre el país por defecto', () => {
+    // Al abrir el formulario con un teléfono ya cargado, el país sale de ESE valor.
+    render(<Campo inicial="+56 912345678" />)
+    expect(selectorPais().value).toBe('CL')
+    expect(campoNumero().value).toBe('912345678')
+  })
+})

@@ -1,4 +1,4 @@
-import { useId, useMemo } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { inputClass } from './fields'
 import { PAISES, banderaDe, separarTelefono, unirTelefono } from '../../lib/paises'
 
@@ -31,7 +31,22 @@ export function PhoneInput({
   autoFocus?: boolean
 }) {
   const idPais = useId()
-  const { pais, numero } = useMemo(() => separarTelefono(value), [value])
+  const leido = useMemo(() => separarTelefono(value), [value])
+
+  /**
+   * El país vive acá y no sólo dentro del string, porque con el número vacío el string es ''
+   * —a propósito, para no guardar un «+598» suelto— y ahí no queda dónde recordarlo.
+   *
+   * Sin esto, elegir el país ANTES de escribir (el orden natural: primero decís de dónde sos)
+   * revertía el selector a Argentina en el mismo render, y alguien de Uruguay terminaba
+   * guardando su número con prefijo argentino sin notarlo.
+   */
+  const [paisElegido, setPaisElegido] = useState(leido.pais)
+
+  // Un valor que llega de afuera con prefijo reconocible manda: es el teléfono ya guardado que
+  // se abre para editar. Si el valor no tiene prefijo, gana lo que la persona eligió recién.
+  const pais = value.trim().startsWith('+') ? leido.pais : paisElegido
+  const numero = leido.numero
 
   return (
     <span className="flex gap-2">
@@ -46,7 +61,9 @@ export function PhoneInput({
           value={pais.iso}
           onChange={(e) => {
             const nuevo = PAISES.find((p) => p.iso === e.target.value)
-            if (nuevo) onChange(unirTelefono(nuevo, numero))
+            if (!nuevo) return
+            setPaisElegido(nuevo)
+            onChange(unirTelefono(nuevo, numero))
           }}
           className={`${inputClass} w-[7.5rem] appearance-none pr-7`}
           aria-label="País del teléfono"
