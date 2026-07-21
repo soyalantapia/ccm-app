@@ -17,6 +17,16 @@
         "VITE_BASE": "/",
         "VITE_API_URL": "http://localhost:4010"
       }
+    },
+    {
+      "name": "ccm-panel-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5189", "--strictPort"],
+      "port": 5189,
+      "env": {
+        "VITE_BASE": "/",
+        "VITE_API_URL": "http://localhost:4021"
+      }
     }
   ]
 }
