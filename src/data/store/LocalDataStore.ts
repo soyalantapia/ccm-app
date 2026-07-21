@@ -707,12 +707,31 @@ export class LocalDataStore implements DataStore {
     return [...seeded, ...local].sort((a, b) => b.ts.localeCompare(a.ts))
   }
 
+  /**
+   * A diferencia de getAdminStats() (que en demo devuelve null porque las métricas no tienen
+   * NINGÚN equivalente legítimo: se calculan sobre tablas que acá no existen), acá el seed de
+   * postulaciones SÍ es el contenido de la demo — igual que getAdminEvents/getAdminNotas/
+   * getAdminBenefits. Devolverlo no es mentir: en modo demo, todo es demo y se sabe.
+   */
+  getAdminApplications(): Application[] | null {
+    return this.getApplications()
+  }
+
+  /** Nunca falla: sin backend no hay fetch que pueda fallar. */
+  applicationsFailed(): boolean {
+    return false
+  }
+
   /** Demo: no hay backend admin, así que "mis" = todas (los consumidores filtran !fromSeed). */
   getMyApplications(): Application[] {
     return this.getApplications()
   }
 
-  decideApplication(applicationId: string, status: Exclude<ApplicationStatus, 'preinscripta'>): void {
+  decideApplication(
+    applicationId: string,
+    status: ApplicationStatus,
+    _opts?: { note?: string; skipEmail?: boolean },
+  ): void {
     const overrides = readJSON<Record<string, AppOverride>>(K.applicationOverrides, {})
     overrides[applicationId] = { status, decidedAt: new Date().toISOString() }
     writeJSON(K.applicationOverrides, overrides)

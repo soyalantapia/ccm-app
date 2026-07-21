@@ -146,3 +146,54 @@ Entrar: ${opts.loginUrl}`
     text,
   }
 }
+
+/**
+ * Aviso de que la postulación entró. Es el SEGUNDO aviso, no el primero: el postulante ya vio
+ * el estado en la app apenas se guardó la decisión. Por eso el mail suma los próximos pasos en
+ * vez de limitarse a anunciar.
+ */
+export function applicationAcceptedEmail(opts: { name: string; convocatoria: string }): EmailMsg {
+  const conv = esc(opts.convocatoria)
+  const inner = `
+    ${h1('Quedaste seleccionado')}
+    ${p(`Hola ${esc(opts.name)}. Tu postulación a <strong style="color:${INK};">${conv}</strong> fue aceptada por el equipo de CCM.`)}
+    ${p('En los próximos días te escribimos con los detalles de la fecha, el lugar y lo que tenés que llevar. Si tenés alguna consulta, respondé este mail.')}`
+  const text = `Quedaste seleccionado.
+
+Hola ${opts.name}. Tu postulación a ${opts.convocatoria} fue aceptada por el equipo de CCM.
+
+En los próximos días te escribimos con los detalles de la fecha, el lugar y lo que tenés que llevar.
+Si tenés alguna consulta, respondé este mail.`
+  return {
+    subject: `Quedaste seleccionado — ${opts.convocatoria}`,
+    html: shell({ preview: `Tu postulación a ${opts.convocatoria} fue aceptada.`, inner }),
+    text,
+  }
+}
+
+/**
+ * Aviso de que la postulación no entró. Corto y cordial.
+ *
+ * La firma NO acepta el motivo a propósito: `decisionNote` es una nota interna del equipo y
+ * filtrarla sería el peor bug de esta pantalla. Que no exista el parámetro es la garantía.
+ */
+export function applicationRejectedEmail(opts: { name: string; convocatoria: string }): EmailMsg {
+  const conv = esc(opts.convocatoria)
+  const inner = `
+    ${h1('Sobre tu postulación')}
+    ${p(`Hola ${esc(opts.name)}. Gracias por postularte a <strong style="color:${INK};">${conv}</strong>.`)}
+    ${p('Esta vez no pudimos darte un lugar. Recibimos muchas más postulaciones que cupos, y la decisión fue difícil.')}
+    ${p('Nos gustaría verte en las próximas convocatorias. Seguí atento, que van a salir pronto.')}`
+  const text = `Sobre tu postulación.
+
+Hola ${opts.name}. Gracias por postularte a ${opts.convocatoria}.
+
+Esta vez no pudimos darte un lugar. Recibimos muchas más postulaciones que cupos, y la decisión fue difícil.
+
+Nos gustaría verte en las próximas convocatorias. Seguí atento, que van a salir pronto.`
+  return {
+    subject: `Sobre tu postulación a ${opts.convocatoria}`,
+    html: shell({ preview: 'Gracias por postularte a CCM.', inner }),
+    text,
+  }
+}

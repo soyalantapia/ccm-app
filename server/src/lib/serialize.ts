@@ -328,7 +328,15 @@ export function toMembership(m: Membership): DomainMembership {
   }
 }
 
-export function toApplication(a: Application): DomainApplication {
+/**
+ * `forAdmin` decide si se incluye `decidedBy`. Esta misma fila alimenta DOS rutas:
+ * /admin/applications (panel del organizador, protegida con requirePermission) y
+ * /applications ("Mis postulaciones" del propio postulante, solo device-scoped). `decidedBy`
+ * es el EMAIL del admin que decidió — PII interna del equipo — así que solo viaja con
+ * forAdmin=true. `notifiedAt`/`notifyError` sí viajan siempre: son sobre el aviso de la
+ * PROPIA postulación, no exponen a nadie más.
+ */
+export function toApplication(a: Application, forAdmin = false): DomainApplication {
   return {
     id: a.id,
     convocatoriaId: a.convocatoriaId,
@@ -337,6 +345,9 @@ export function toApplication(a: Application): DomainApplication {
     data: a.data as Record<string, string>,
     ...(a.fromSeed ? { fromSeed: a.fromSeed } : {}),
     ...(a.decidedAt ? { decidedAt: a.decidedAt.toISOString() } : {}),
+    ...(forAdmin && a.decidedBy ? { decidedBy: a.decidedBy } : {}),
+    ...(a.notifiedAt ? { notifiedAt: a.notifiedAt.toISOString() } : {}),
+    ...(a.notifyError ? { notifyError: a.notifyError } : {}),
   }
 }
 

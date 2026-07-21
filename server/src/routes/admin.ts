@@ -183,18 +183,31 @@ adminRouter.post('/admin/upload', requirePermission('upload'), async (req, res, 
 })
 
 /* ─── Postulaciones ─── */
-adminRouter.get('/admin/applications', requirePermission('applications:read'), async (_req, res, next) => {
+const listAppsSchema = z.object({
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().positive().max(100).optional(),
+})
+adminRouter.get('/admin/applications', requirePermission('applications:read'), async (req, res, next) => {
   try {
-    res.json(await applicationService.getApplications())
+    const q = listAppsSchema.parse(req.query)
+    res.json(await applicationService.getApplications(q))
   } catch (err) {
     next(err)
   }
 })
-const decideSchema = z.object({ status: z.enum(['aceptada', 'rechazada']) })
+const decideSchema = z.object({
+  status: z.enum(['aceptada', 'rechazada', 'preinscripta']),
+  note: z.string().max(2000).optional(),
+  skipEmail: z.boolean().optional(),
+})
 adminRouter.patch('/admin/applications/:id', requirePermission('applications:decide'), async (req, res, next) => {
   try {
-    const { status } = decideSchema.parse(req.body)
-    await applicationService.decideApplication(req.params.id, status)
+    const { status, note, skipEmail } = decideSchema.parse(req.body)
+    await applicationService.decideApplication(req.params.id, status, {
+      adminUserId: req.admin!.userId,
+      ...(note ? { note } : {}),
+      ...(skipEmail ? { skipEmail } : {}),
+    })
     res.status(204).end()
   } catch (err) {
     next(err)

@@ -5,6 +5,8 @@ import { notFound, conflict, badRequest } from '../lib/errors.js'
 import type { Application } from '@domain/types'
 import { keysFromApplicationData } from '../domain/personIdentity.js'
 import { linkPerson } from './personService.js'
+import { getMailer } from '../mail/mailer.js'
+import { applicationAcceptedEmail, applicationRejectedEmail } from '../mail/templates.js'
 
 /** Postulación pública (preinscripta). El equipo CCM decide después (admin). */
 export async function submitApplication(
@@ -55,21 +57,102 @@ export async function submitApplication(
   return toApplication(row)
 }
 
-/** Admin: todas las postulaciones (más recientes primero).
- *  take=500 previene un full-table-scan cuando crecen; suficiente para todo evento CCM.
- *  Sin él, findMany sin cota lee la tabla entera en cada hidratación admin. */
-export async function getApplications(): Promise<Application[]> {
-  const rows = await prisma.application.findMany({ orderBy: { ts: 'desc' }, take: 500 })
-  return rows.map(toApplication)
+/**
+ * Cola de revisión del admin. Paginada con cursor (mismo patrón que listPeople) y ordenada por
+ * la MÁS ANTIGUA primero: en una cola, primero va la que más esperó. Antes era `ts: desc` con
+ * `take: 500`, así que al pasar las 500 se ocultaban justamente las más urgentes.
+ */
+export async function getApplications(opts: { cursor?: string; limit?: number } = {}): Promise<{
+  items: Application[]
+  nextCursor: string | null
+}> {
+  const limit = Math.min(opts.limit ?? 50, 100)
+  const rows = await prisma.application.findMany({
+    take: limit + 1,
+    ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
+    orderBy: { ts: 'asc' },
+  })
+  const hayMas = rows.length > limit
+  const page = hayMas ? rows.slice(0, limit) : rows
+  // forAdmin=true: esta cola es EXCLUSIVAMENTE del panel (requirePermission('applications:read')),
+  // así que acá sí viaja decidedBy (email del admin que decidió).
+  return { items: page.map((r) => toApplication(r, true)), nextCursor: hayMas ? page[page.length - 1].id : null }
 }
 
 /** Las postulaciones del PROPIO device (para "Mis postulaciones" en el Perfil). */
 export async function getDeviceApplications(deviceId: string): Promise<Application[]> {
   const rows = await prisma.application.findMany({ where: { deviceId }, orderBy: { ts: 'desc' } })
-  return rows.map(toApplication)
+  // NO pasar toApplication directo a .map(): Array#map llama al callback con (valor, INDEX,
+  // array), y con forAdmin como segundo parámetro el index se colaba ahí — con index=1 (truthy)
+  // decidedBy (email del admin) se filtraba al postulante a partir de la segunda fila. Regresión
+  // real: tsc la marcó, vitest no (transforma sin chequeo de tipos).
+  return rows.map((r) => toApplication(r))
 }
 
-/** Admin: aceptar/rechazar. Solo desde 'preinscripta' (decideApplication del dominio). */
-export async function decideApplication(id: string, status: 'aceptada' | 'rechazada'): Promise<void> {
-  await prisma.application.update({ where: { id }, data: { status, decidedAt: new Date() } })
+/**
+ * Decide una postulación. Es una TRANSICIÓN, no un update: exige que esté en el estado de
+ * origen esperado. Sin eso, un doble click aplicaba dos decisiones — y con el aviso conectado,
+ * mandaba dos mails a la misma persona.
+ *
+ * `preinscripta` como destino es "volver a revisión": la única transición que parte de una
+ * postulación ya decidida.
+ */
+export async function decideApplication(
+  id: string,
+  status: 'aceptada' | 'rechazada' | 'preinscripta',
+  opts: { adminUserId: string; note?: string; skipEmail?: boolean },
+): Promise<void> {
+  const volviendo = status === 'preinscripta'
+  const admin = await prisma.adminUser.findUnique({
+    where: { id: opts.adminUserId },
+    select: { email: true },
+  })
+  const { count } = await prisma.application.updateMany({
+    // Volver a revisión parte de una decidida; decidir parte de una pendiente.
+    where: volviendo ? { id, status: { in: ['aceptada', 'rechazada'] } } : { id, status: 'preinscripta' },
+    data: volviendo
+      ? { status, decidedAt: null, decidedBy: null, decisionNote: null, notifiedAt: null, notifyError: null }
+      : { status, decidedAt: new Date(), decidedBy: admin?.email ?? null, decisionNote: opts.note?.trim() || null },
+  })
+  if (count === 0) {
+    throw conflict(
+      'APPLICATION_ALREADY_DECIDED',
+      volviendo ? 'Esta postulación no está decidida.' : 'Esta postulación ya fue decidida.',
+    )
+  }
+
+  // Volver a revisión no avisa nada: se está deshaciendo, no comunicando.
+  if (volviendo || opts.skipEmail) return
+
+  const app = await prisma.application.findUnique({
+    where: { id },
+    include: { convocatoria: { select: { title: true } } },
+  })
+  if (!app) return
+
+  // Las de demo traen un email de aspecto real que no es de nadie. Se decide igual, no se avisa.
+  if (app.fromSeed) return
+
+  const data = (app.data ?? {}) as Record<string, string>
+  const to = typeof data.email === 'string' ? data.email.trim() : ''
+  // Sin email no hay a quién escribirle. La decisión ya quedó guardada: no poder avisar
+  // nunca bloquea decidir.
+  if (!to) return
+
+  const nombre = typeof data.nombre === 'string' && data.nombre.trim() ? data.nombre.trim() : 'Hola'
+  const convocatoria = app.convocatoria?.title ?? 'la convocatoria'
+  const msg =
+    status === 'aceptada'
+      ? applicationAcceptedEmail({ name: nombre, convocatoria })
+      : applicationRejectedEmail({ name: nombre, convocatoria })
+
+  // Best-effort y DESPUÉS de persistir: que el correo falle no puede desarmar una decisión
+  // que el organizador ya tomó y que el postulante ya ve en su app.
+  try {
+    await getMailer().send(to, msg)
+    await prisma.application.updateMany({ where: { id }, data: { notifiedAt: new Date(), notifyError: null } })
+  } catch (err) {
+    const detalle = err instanceof Error ? err.message : String(err)
+    await prisma.application.updateMany({ where: { id }, data: { notifyError: detalle.slice(0, 500) } })
+  }
 }

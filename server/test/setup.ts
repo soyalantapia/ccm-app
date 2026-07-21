@@ -27,3 +27,13 @@ process.env.MP_REDIRECT_URI ??= 'http://localhost:4000/api/v1/mp/callback'
 // Base pública del server (mpCheckoutService.baseUrl / adminAuth.publicBase): notification_url
 // y back_urls de MP se arman con esto, no recortando MP_REDIRECT_URI.
 process.env.PUBLIC_BASE_URL ??= 'http://localhost:4000'
+// Ningún test debe pegarle a un proveedor de mail real: el .env local de algunos worktrees trae
+// SMTP prestado (Hostinger) para probar el envío a mano, y env.ts lo carga vía `dotenv/config`
+// al importarse. Seteado ANTES de esa importación (dotenv no pisa claves que ya existen en
+// process.env, aunque estén vacías) ⇒ SMTP_HOST/RESEND_API_KEY quedan '' y getMailer() cae
+// siempre al ConsoleMailer (buffer en memoria) durante los tests.
+//
+// Va con `=` y no con `??=`, a diferencia de las de arriba: acá el objetivo es PISAR lo que
+// venga del ambiente, no respetarlo. Un SMTP heredado del .env mandaría mails de verdad.
+process.env.SMTP_HOST = ''
+process.env.RESEND_API_KEY = ''

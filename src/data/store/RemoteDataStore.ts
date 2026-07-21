@@ -102,6 +102,9 @@ export class RemoteDataStore extends LocalDataStore {
   private plans?: TicketPlan[]
   private applications?: Application[] // device-scoped ("Mis postulaciones")
   private adminApplications?: Application[] // admin-scoped (panel del organizador) — caché SEPARADO
+  // true si el último intento de hidratar adminApplications falló. Sin fallback al seed a
+  // propósito: mostrar postulaciones de demo como si fueran reales es peor que no mostrar nada.
+  private appsError = false
   private membership?: Membership
   private benefits?: Benefit[]
   private banners?: Banner[]
@@ -817,12 +820,40 @@ export class RemoteDataStore extends LocalDataStore {
     this.api.get<Application[]>('/applications').then((a) => { this.applications = a; bus.emit('applications') }).catch(() => {})
   }
   private hydrateAdminApplications(): void {
-    this.api.get<Application[]>('/admin/applications').then((a) => { this.adminApplications = a; bus.emit('applications') }).catch(() => {})
+    // El endpoint ahora pagina por cursor y devuelve { items, nextCursor } (antes un array plano
+    // con take:500). Acá solo hidratamos la primera página; el cursor queda para paginación futura.
+    this.api
+      .get<{ items: Application[]; nextCursor: string | null }>('/admin/applications')
+      .then((r) => {
+        this.adminApplications = r.items
+        this.appsError = false
+      })
+      .catch(() => {
+        // El error se EXPONE (antes se tragaba en un catch vacío y la pantalla caía en cascada
+        // al seed): si el backend no responde, el panel tiene que decirlo, no mostrar demo.
+        this.appsError = true
+      })
+      .finally(() => bus.emit('applications'))
   }
 
   /** TODAS (vista del organizador): la lista admin si está cargada, si no cae al device/seed. */
   override getApplications(): Application[] {
     return this.adminApplications ?? this.applications ?? super.getApplications()
+  }
+  /**
+   * Postulaciones para el PANEL, sin fallback al seed.
+   *
+   * A diferencia de getApplications() (que cae en cascada para no dejar sin datos al resto de
+   * la UI), esta es la que consume AdminPostulaciones: null hasta que /admin/applications
+   * resuelva, y sigue null si falló — mostrar las 24 postulaciones fabricadas del seed como si
+   * fueran reales es peor que no mostrar nada.
+   */
+  override getAdminApplications(): Application[] | null {
+    return this.adminApplications ?? null
+  }
+  /** true si el último intento falló → el panel muestra el error en vez de la lista de demo. */
+  override applicationsFailed(): boolean {
+    return this.appsError
   }
   /** Solo las del PROPIO device (vistas de usuario): NUNCA la lista admin. */
   override getMyApplications(): Application[] {
@@ -943,10 +974,14 @@ export class RemoteDataStore extends LocalDataStore {
       })
     return app
   }
-  override decideApplication(applicationId: string, status: Exclude<ApplicationStatus, 'preinscripta'>): void {
+  override decideApplication(
+    applicationId: string,
+    status: ApplicationStatus,
+    opts?: { note?: string; skipEmail?: boolean },
+  ): void {
     if (!this.adminApplications) {
       // hidratar bajo demanda (el admin abrió postulaciones)
-      this.refetch<Application[]>('/admin/applications', (v) => (this.adminApplications = v), 'applications')
+      this.hydrateAdminApplications()
     }
     const prev = this.adminApplications
     if (this.adminApplications) this.adminApplications = this.adminApplications.map((a) => (a.id === applicationId ? { ...a, status, decidedAt: new Date().toISOString() } : a))
@@ -954,14 +989,18 @@ export class RemoteDataStore extends LocalDataStore {
     // Antes el error se tragaba con `.catch(() => {})`: la postulación quedaba marcada como
     // aceptada en pantalla sin que el backend lo supiera, y al recargar volvía a "preinscripta".
     this.adminWrite(
-      this.api.patch(`/admin/applications/${applicationId}`, { status }),
-      () => this.refetch<Application[]>('/admin/applications', (v) => (this.adminApplications = v), 'applications'),
+      this.api.patch(`/admin/applications/${applicationId}`, {
+        status,
+        ...(opts?.note ? { note: opts.note } : {}),
+        ...(opts?.skipEmail ? { skipEmail: true } : {}),
+      }),
+      () => this.hydrateAdminApplications(),
       // `prev` puede ser undefined: arriba se dispara una hidratación bajo demanda, y si ESA
       // llega mientras el PATCH está en vuelo, restaurar el snapshot vacío borraría la lista
       // real recién traída y dejaría al organizador viendo las postulaciones del seed.
       () => {
         if (prev) this.adminApplications = prev
-        else this.refetch<Application[]>('/admin/applications', (v) => (this.adminApplications = v), 'applications')
+        else this.hydrateAdminApplications()
         bus.emit('applications')
       },
     )
