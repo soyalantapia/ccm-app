@@ -57,12 +57,24 @@ export async function submitApplication(
   return toApplication(row)
 }
 
-/** Admin: todas las postulaciones (más recientes primero).
- *  take=500 previene un full-table-scan cuando crecen; suficiente para todo evento CCM.
- *  Sin él, findMany sin cota lee la tabla entera en cada hidratación admin. */
-export async function getApplications(): Promise<Application[]> {
-  const rows = await prisma.application.findMany({ orderBy: { ts: 'desc' }, take: 500 })
-  return rows.map(toApplication)
+/**
+ * Cola de revisión del admin. Paginada con cursor (mismo patrón que listPeople) y ordenada por
+ * la MÁS ANTIGUA primero: en una cola, primero va la que más esperó. Antes era `ts: desc` con
+ * `take: 500`, así que al pasar las 500 se ocultaban justamente las más urgentes.
+ */
+export async function getApplications(opts: { cursor?: string; limit?: number } = {}): Promise<{
+  items: Application[]
+  nextCursor: string | null
+}> {
+  const limit = Math.min(opts.limit ?? 50, 100)
+  const rows = await prisma.application.findMany({
+    take: limit + 1,
+    ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
+    orderBy: { ts: 'asc' },
+  })
+  const hayMas = rows.length > limit
+  const page = hayMas ? rows.slice(0, limit) : rows
+  return { items: page.map(toApplication), nextCursor: hayMas ? page[page.length - 1].id : null }
 }
 
 /** Las postulaciones del PROPIO device (para "Mis postulaciones" en el Perfil). */

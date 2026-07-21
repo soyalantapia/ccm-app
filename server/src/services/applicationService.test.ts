@@ -18,6 +18,27 @@ beforeEach(() => {
   })
 })
 
+describe('getApplications — cola de revisión', () => {
+  it('ordena por más antigua primero: es la que más esperó', async () => {
+    mockPrisma.application.findMany.mockResolvedValue([])
+    const { getApplications } = await import('./applicationService.js')
+    await getApplications()
+    const args = mockPrisma.application.findMany.mock.calls[0][0]
+    expect(args.orderBy).toMatchObject({ ts: 'asc' })
+  })
+
+  it('devuelve nextCursor cuando hay más de una página', async () => {
+    const filas = Array.from({ length: 51 }, (_, i) => ({
+      id: `app-${i}`, convocatoriaId: 'c1', status: 'preinscripta', data: {}, ts: new Date(), fromSeed: false,
+    }))
+    mockPrisma.application.findMany.mockResolvedValue(filas)
+    const { getApplications } = await import('./applicationService.js')
+    const r = await getApplications({ limit: 50 })
+    expect(r.items).toHaveLength(50)
+    expect(r.nextCursor).toBe('app-49')
+  })
+})
+
 describe('decideApplication — transición condicionada', () => {
   it('exige que la postulación esté en preinscripta', async () => {
     await decideApplication('app-1', 'aceptada', { adminUserId: 'u1' })

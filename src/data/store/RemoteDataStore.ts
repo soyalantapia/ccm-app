@@ -811,7 +811,12 @@ export class RemoteDataStore extends LocalDataStore {
     this.api.get<Application[]>('/applications').then((a) => { this.applications = a; bus.emit('applications') }).catch(() => {})
   }
   private hydrateAdminApplications(): void {
-    this.api.get<Application[]>('/admin/applications').then((a) => { this.adminApplications = a; bus.emit('applications') }).catch(() => {})
+    // El endpoint ahora pagina por cursor y devuelve { items, nextCursor } (antes un array plano
+    // con take:500). Acá solo hidratamos la primera página; el cursor queda para paginación futura.
+    this.api
+      .get<{ items: Application[]; nextCursor: string | null }>('/admin/applications')
+      .then((r) => { this.adminApplications = r.items; bus.emit('applications') })
+      .catch(() => {})
   }
 
   /** TODAS (vista del organizador): la lista admin si está cargada, si no cae al device/seed. */
@@ -940,7 +945,7 @@ export class RemoteDataStore extends LocalDataStore {
   override decideApplication(applicationId: string, status: Exclude<ApplicationStatus, 'preinscripta'>): void {
     if (!this.adminApplications) {
       // hidratar bajo demanda (el admin abrió postulaciones)
-      this.refetch<Application[]>('/admin/applications', (v) => (this.adminApplications = v), 'applications')
+      this.hydrateAdminApplications()
     }
     const prev = this.adminApplications
     if (this.adminApplications) this.adminApplications = this.adminApplications.map((a) => (a.id === applicationId ? { ...a, status, decidedAt: new Date().toISOString() } : a))
@@ -949,13 +954,13 @@ export class RemoteDataStore extends LocalDataStore {
     // aceptada en pantalla sin que el backend lo supiera, y al recargar volvía a "preinscripta".
     this.adminWrite(
       this.api.patch(`/admin/applications/${applicationId}`, { status }),
-      () => this.refetch<Application[]>('/admin/applications', (v) => (this.adminApplications = v), 'applications'),
+      () => this.hydrateAdminApplications(),
       // `prev` puede ser undefined: arriba se dispara una hidratación bajo demanda, y si ESA
       // llega mientras el PATCH está en vuelo, restaurar el snapshot vacío borraría la lista
       // real recién traída y dejaría al organizador viendo las postulaciones del seed.
       () => {
         if (prev) this.adminApplications = prev
-        else this.refetch<Application[]>('/admin/applications', (v) => (this.adminApplications = v), 'applications')
+        else this.hydrateAdminApplications()
         bus.emit('applications')
       },
     )
