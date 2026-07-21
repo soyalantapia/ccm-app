@@ -15,6 +15,11 @@ process.env.NODE_ENV = 'test'
 process.env.DATABASE_URL ??= 'postgresql://test:test@localhost:5432/ccm_test'
 process.env.DEVICE_TOKEN_SECRET ??= 'test-device-secret-0123456789abcdef'
 process.env.ADMIN_TOKEN ??= 'test-admin-token-abcdef'
+// Sin esto, los tests de firma de `requireAdmin` dependían de que existiera un server/.env local
+// (gitignoreado): en el repo recién clonado —o en un worktree, que no se lo lleva— fallaban 3
+// tests con "ADMIN_TOKEN_SECRET no configurado". Eso hizo circular durante toda una sesión la
+// premisa falsa de que "esos 3 ya fallan en main": no fallan por main, falta infraestructura.
+process.env.ADMIN_TOKEN_SECRET ??= 'test-admin-session-secret-0123456789abcdef'
 // Mercado Pago: sin esto, buildAuthUrl() siempre tira MP_NOT_CONFIGURED y ningún test
 // del flujo OAuth (mpOAuthService) puede ejercitar el camino feliz.
 process.env.MP_CLIENT_ID ??= 'test-mp-client-id'
