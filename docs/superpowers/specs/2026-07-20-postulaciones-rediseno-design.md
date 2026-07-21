@@ -21,6 +21,22 @@ El organizador acepta a alguien convencido de que le llegó la invitación. No l
 
 A eso se suman tres cosas que aparecen con volumen: la lista mezcla convocatorias sin poder filtrar, no hay búsqueda, y las 24 postulaciones `fromSeed` conviven con las reales en la misma cola.
 
+### Lo que encontró el análisis (41 hallazgos verificados, 0 refutados)
+
+Cinco cambian el diseño y no estaban en la primera versión de este documento.
+
+**El postulante YA ve la decisión, al instante.** Es lo contrario de lo que dice el panel. Apenas se guarda un rechazo, quien abre la convocatoria en su teléfono lee *«Sin cupo — Esta vez no conseguimos lugar»* (`ApplicationStatus.tsx:23-28`) y pierde el CTA de inscripción (`:56`), mientras el admin lee que hasta "Fase 1" no pasa nada. El mail no es el primer aviso: **es el segundo**.
+
+**Y al aceptado se le promete algo que no ocurre.** Lee *«¡Tenés tu lugar confirmado!»* (`ApplicationStatus.tsx:18-22`), pero aceptar sólo escribe `status`: no crea ninguna `Registration`, así que no hay lugar reservado en ningún lado.
+
+**Aceptar una postulación de demo mandaría mail a una dirección inventada.** El seed carga postulaciones `fromSeed: true` con emails de aspecto real (`milagros.soria.disenio@gmail.com`), varias en estado `preinscripta`. Al conectar el envío, decidirlas dispara correos a direcciones que no son de nadie —o peor, de alguien.
+
+**Doble click son dos decisiones, y serían dos mails.** `decideApplication` hace un `update` por id sin condicionar el estado de origen, pese a que su propio docstring dice "Solo desde 'preinscripta'".
+
+**Si el fetch falla, la pantalla muestra postulaciones falsas sin avisar.** `hydrateAdminApplications` se traga el error con `.catch(() => {})` y `getApplications()` cae en cascada al seed — el mismo patrón que ya se corrigió en el Dashboard.
+
+Además, dos cosas de escala: el backend trae `take: 500` **ordenado por `ts: desc`**, así que a partir de la 501 se esconden las más viejas, que son justamente las que llevan más tiempo esperando respuesta.
+
 ## Decisiones tomadas
 
 | Tema | Elegido |
@@ -31,6 +47,8 @@ A eso se suman tres cosas que aparecen con volumen: la lista mezcla convocatoria
 | Deshacer | Ventana de 8 s; el mail sale recién al cerrarse |
 
 La ventana de gracia resuelve la tensión de raíz: como el envío ocurre **después**, deshacer no tiene que desmentir ningún correo ya leído.
+
+**Con un matiz que descubrió el análisis:** la ventana protege del mail, no del estado. El postulante ve *«Sin cupo»* en su app desde el segundo cero. Deshacer a los 8 segundos deja todo bien salvo que la persona justo estuviera mirando la pantalla — improbable, pero honesto decirlo. Cerrar también esa ventana exigiría diferir el guardado, y eso es peor: si se cae el navegador en el medio, la decisión se pierde. Se prioriza **no perder decisiones** por sobre un caso de borde de segundos.
 
 ## Qué se apoya en lo que ya existe
 
@@ -101,14 +119,44 @@ El envío es best-effort y va **después** de persistir la decisión. Si falla, 
 
 Se resuelve en dos lugares: un aviso al guardar una convocatoria sin campo de email —advirtiendo que no se van a poder mandar avisos— y, en la ficha, un cartel claro en lugar del panel de envío. Nunca se bloquea la creación ni la decisión.
 
+## Decidir es una transición, no un update
+
+`decideApplication` pasa de escribir a ciegas a exigir el estado de origen:
+
+```ts
+const { count } = await prisma.application.updateMany({
+  where: { id, status: 'preinscripta' },
+  data: { status, decidedAt, decidedBy, decisionNote },
+})
+if (count === 0) throw conflict('APPLICATION_ALREADY_DECIDED', 'Esta postulación ya fue decidida.')
+```
+
+Con eso, el doble click deja de ser dos decisiones —y, cuando haya envío, dos mails—. El `409` se muestra tal cual gracias al `adminWrite` que ahora propaga el mensaje del backend.
+
+Para que "Deshacer" funcione hay que ampliar tres tipos que hoy lo prohíben: `Exclude<ApplicationStatus, 'preinscripta'>` en `DataStore.ts:207`, `LocalDataStore.ts:708` y `RemoteDataStore.ts:940`, más el `z.enum` del PATCH (`routes/admin.ts:193`). Volver a revisión es la única transición que puede partir de un estado decidido.
+
+## Postulaciones de demo
+
+Dos capas, porque el costo de equivocarse es mandarle un mail a un desconocido:
+
+1. **Guard en el servidor**: si `fromSeed`, la decisión se guarda pero **nunca** se envía nada, y se registra por qué.
+2. **En la UI**: rótulo "demo" en la card y en la ficha, y el panel de decisión lo aclara antes de confirmar.
+
+## Escala
+
+El backend pasa a paginar con cursor, copiando el patrón que ya existe en `personService.ts:226-266` (`take: limit + 1` + `nextCursor`). Y el orden por defecto cambia a **`ts: asc`**: en una cola de revisión, primero va la que más esperó. Hoy es `desc` con `take: 500`, así que a partir de la 501 se ocultan justamente las más urgentes.
+
 ## Errores
 
 | Situación | Qué pasa |
 |---|---|
 | Falla el guardado | La decisión no se aplica y se avisa con el mensaje del backend |
+| Ya estaba decidida (doble click) | `409` y el aviso lo dice; no se manda un segundo mail |
 | Falla el mail | La decisión queda firme; se guarda `notifyError` y se ofrece reintentar |
 | Sin email en la convocatoria | Se decide igual; la ficha explica por qué no se avisó |
+| Es una postulación de demo | Se decide igual; **nunca** se envía correo |
 | Se aprieta "Deshacer" | Vuelve a `preinscripta`, se limpian nota y decisor, y **no sale ningún mail** |
+| Falla el GET de la lista | Se muestra el error; **nunca** las postulaciones del seed como si fueran reales |
 | Sin permiso `applications:decide` | Los botones no se muestran (el backend ya lo rechaza) |
 
 ## Testing
@@ -120,10 +168,14 @@ En el servidor, con Prisma mockeado y el `devOutbox` del mailer:
 3. **`decisionNote` no aparece en el cuerpo ni en el asunto del mail de rechazo.**
 4. Si el mailer tira error, la decisión igual queda guardada y `notifyError` se completa.
 5. Sin email en `data`, no se intenta enviar y la decisión se guarda.
-6. `fromSeed: true` no entra en la cola de pendientes.
+6. Una postulación `fromSeed: true` se decide pero **no** dispara ningún envío.
+7. Decidir dos veces la misma postulación devuelve `409` y no manda un segundo mail.
+8. La lista pide `ts: asc` y respeta el cursor de paginación.
 
 En el front: que "Deshacer" dentro de la ventana no dispare envío, y que la ficha muestre los tres estados de notificación (enviado, falló, no había email).
 
 ## Fuera de alcance
 
 WhatsApp (otro canal, otro proveedor, su propio spec) y el score de IA — se borra la promesa en vez de arrastrarla. Tampoco entran acciones en lote ni exportación: si aparecen, son otro spec.
+
+**Y una que el análisis destapó y merece el suyo:** aceptar le dice al postulante *«¡Tenés tu lugar confirmado!»* pero no crea ninguna `Registration`, así que no hay cupo reservado en ningún lado. Arreglarlo de verdad implica decidir a qué bloque entra el aceptado y respetar el lock de cupo de `registrationService`, que es una discusión de producto entera. Acá sólo se ajusta el texto para que no prometa una reserva que no existe; la reserva real queda para un spec propio.
