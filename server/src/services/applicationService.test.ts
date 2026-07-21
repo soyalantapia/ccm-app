@@ -140,4 +140,15 @@ describe('decideApplication — aviso al postulante', () => {
     expect(ultima.data.notifyError).toContain('SMTP caído')
     vi.restoreAllMocks()
   })
+
+  // Con email presente a propósito: si el guard de "volver a revisión" se rompiera, el de
+  // "sin email" taparía el bug y este test seguiría en verde sin detectarlo.
+  it('volver a revisión no dispara ningún aviso', async () => {
+    mockPrisma.application.findUnique.mockResolvedValue({
+      id: 'app-5', status: 'aceptada', fromSeed: false,
+      data: { nombre: 'Z', email: 'z@mail.test' }, convocatoria: { title: 'C' },
+    })
+    await decideApplication('app-5', 'preinscripta', { adminUserId: 'u1' })
+    expect(getDevOutbox()).toHaveLength(0)
+  })
 })
