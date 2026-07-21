@@ -1,7 +1,6 @@
 import { Badge, Sheet } from '../../components/ui'
 import { usePerson } from '../../data/queries'
-import { PROFILE_FIELD_LABELS, formatDateTime, formatRelative, sourceLabel, APPLICATION_STATUS_META } from './coreFormat'
-import type { ProfileFieldKey } from '../../data/types'
+import { campoLabel, formatDateTime, formatRelative, sourceLabel, APPLICATION_STATUS_META } from './coreFormat'
 
 interface Props {
   personId: string | null
@@ -42,7 +41,7 @@ export function UsuarioFicha({ personId, onClose }: Props) {
                 {data.campos.map((c, i) => (
                   <li key={`${c.key}-${i}`} className="flex flex-wrap items-baseline justify-between gap-x-4">
                     <span className="text-[13px] text-ink-soft">
-                      {PROFILE_FIELD_LABELS[c.key as ProfileFieldKey] ?? c.key}
+                      {campoLabel(c.key)}
                     </span>
                     <span className="text-[13px] text-ink">{c.value}</span>
                     <span className="w-full text-[11px] text-ink-soft/70">
