@@ -9,7 +9,7 @@ import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
 
 export default function AdminConvocatorias() {
   const convocatorias = useStore((s) => s.getConvocatorias())
-  const events = useStore((s) => s.getEvents())
+  const events = useStore((s) => s.getAdminEvents())
   const applications = useStore((s) => s.getApplications())
 
   const [form, setForm] = useState<{ open: boolean; convocatoria?: Convocatoria }>({ open: false })

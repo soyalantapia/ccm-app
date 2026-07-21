@@ -77,7 +77,7 @@ describe('adminWrite — el motivo del rechazo llega hasta el aviso', () => {
     esp.off()
   })
 
-  it('propaga también el código, para poder distinguir rechazos', async () => {
+  it('propaga el mensaje de una validación, no sólo el de un conflicto', async () => {
     backendQueRechaza(400, { error: { code: 'INVALID_PRICE', message: 'El precio debe ser un número entre 0 y 1000000000.' } })
     const s = new RemoteDataStore('https://api.test')
     const esp = escucharMotivo()
@@ -85,20 +85,25 @@ describe('adminWrite — el motivo del rechazo llega hasta el aviso', () => {
     s.createNota(NOTA as never)
 
     await vi.waitFor(() => expect(esp.valor).toBeDefined())
-    expect(esp.valor?.code).toBe('INVALID_PRICE')
     expect(esp.valor?.message).toContain('precio')
     esp.off()
   })
 
-  it('si el backend no dice nada útil, cae al genérico (no rompe ni inventa)', async () => {
+  it('si el backend no explicó nada, NO inventa un motivo: deja que avise el aviso', async () => {
+    // Se propaga sólo lo que el server realmente escribió. Mandar acá el texto de reserva del
+    // cliente HTTP taparía el mensaje del toast, que está redactado para el panel.
     backendQueRechaza(500, {})
     const s = new RemoteDataStore('https://api.test')
-    const esp = escucharMotivo()
+    let emitido = false
+    let detalle: unknown = 'sin-emitir'
+    const off = bus.on((k, d) => {
+      if (k === 'admin:write-failed' && !emitido) { emitido = true; detalle = d }
+    })
 
     s.createNota(NOTA as never)
 
-    await vi.waitFor(() => expect(esp.valor).toBeDefined())
-    expect(esp.valor?.message).toContain('No se pudo guardar')
-    esp.off()
+    await vi.waitFor(() => expect(emitido).toBe(true))
+    expect(detalle, 'sin mensaje del server no se manda detail').toBeUndefined()
+    off()
   })
 })
