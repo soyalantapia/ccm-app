@@ -77,30 +77,78 @@ mpRouter.post('/payments/preference', requireDevice, async (req, res, next) => {
 })
 
 /**
+ * Configuración del webhook, exportada como objeto MUTABLE a propósito: es la única forma de que
+ * el test del timeout no tenga que esperar el timeout real (ver mp.test.ts). No se toca en runtime.
+ */
+export const webhookConfig = {
+  /**
+   * Cuánto esperamos a que termine el procesamiento antes de contestarle a MP. MP corta la
+   * conexión bastante después (del orden de los 20 s), así que este tope es DELIBERADAMENTE más
+   * corto: preferimos cortar nosotros —con un 5xx explícito, que MP registra como fallido y
+   * reintenta— antes que quedar colgados hasta que corte MP, que es un final mucho más ambiguo.
+   */
+  timeoutMs: 10_000,
+}
+
+/** Corre `promesa` con un tope de tiempo. Si se pasa, rechaza (y no deja el timer colgado). */
+function conTimeout<T>(promesa: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout
+  const corte = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`el procesamiento del webhook superó ${ms}ms`)), ms)
+  })
+  return Promise.race([promesa, corte]).finally(() => clearTimeout(timer)) as Promise<T>
+}
+
+/**
  * POST /api/v1/mp/webhook — aviso de pago de Mercado Pago.
- * Responde 200 SIEMPRE y rápido: MP reintenta si tarda o si contesta error, y no queremos que
- * un reintento en loop dependa de nuestra lógica. La validación real ocurre adentro.
+ *
+ * P0-C — CRITERIO: para MP, el código de estado ES el mecanismo de reintento. Un 2xx significa
+ * "lo procesé, no vuelvas a avisar"; cualquier otra cosa significa "reintentá" (MP reprograma el
+ * aviso con backoff durante horas). Antes esta ruta contestaba 200 ANTES de procesar y se comía
+ * toda excepción: el `catch` de `handleNotification` suelta el claim "para que MP reintente",
+ * pero MP ya tenía su 200 y no reintentaba NUNCA. El pago quedaba cobrado y sin entregar, sin
+ * ningún camino de recuperación (no hay job de fondo en este server: corre en un solo contenedor
+ * de Railway sin scheduler).
+ *
+ * Ahora se procesa PRIMERO y se responde DESPUÉS, con este mapeo:
+ *   · procesado OK, o nada que hacer (sin data.id) → 200, MP no reintenta.
+ *   · firma inválida → 401. No lo procesamos. Y pedimos reintento a propósito: si es un atacante
+ *     no cuesta nada (MP no está del otro lado), y si lo que está roto es la configuración
+ *     (MP_WEBHOOK_SECRET, o el header del proxy) los reintentos de MP son la ÚNICA red que nos
+ *     da tiempo a arreglarlo sin perder el aviso.
+ *   · excepción o timeout → 500. Es exactamente el caso que tiene que volver.
+ *
+ * Que un reintento sea seguro no es un supuesto: la idempotencia del servicio es por payment_id
+ * concreto y un pago ya entregado no se vuelve a entregar (ver mpWebhookService.handleNotification).
+ * Entre "cobrar y no entregar" y "recibir el mismo aviso dos veces", el segundo no cuesta nada.
+ *
+ * Lo que NO se hace: mantener la conexión abierta indefinidamente. El tope de `webhookConfig`
+ * corta antes que MP y devuelve 5xx (el procesamiento que quedó en vuelo termina solo; si llegó a
+ * entregar, el reintento lo ve entregado y no duplica).
  */
 mpRouter.post('/mp/webhook', async (req, res) => {
   const dataId = String((req.body as { data?: { id?: string } })?.data?.id ?? req.query['data.id'] ?? '')
-  res.status(200).end()
-  if (!dataId) return
+  // Sin identificador no hay nada que procesar NI que reintentar: 200 y listo (un 5xx acá solo
+  // le pediría a MP que nos vuelva a mandar el mismo mensaje vacío).
+  if (!dataId) return void res.status(200).end()
+
   const headers = req.headers as Record<string, string | undefined>
-  const firmaValida = verificarFirma(headers, dataId)
-  if (!firmaValida) {
+  if (!verificarFirma(headers, dataId)) {
     // Defecto D: antes esto no dejaba NINGÚN rastro. Sin este log, un ataque (alguien probando
     // dataIds con una firma trucha) y una configuración rota (MP_WEBHOOK_SECRET mal seteado, o
     // el problema del proxy del defecto A) se ven EXACTAMENTE igual: nada. Mismo formato que
-    // /mp/callback más abajo.
+    // /mp/callback más arriba.
     console.error('[mp.webhook] firma inválida', { dataId })
+    return void res.status(401).end()
   }
+
   try {
-    await handleNotification(dataId, firmaValida)
+    await conTimeout(handleNotification(dataId, true), webhookConfig.timeoutMs)
+    res.status(200).end()
   } catch (err) {
-    // Nunca propagamos: el 200 ya salió y MP no debe reintentar en loop por esto. Pero si no
-    // logueamos acá, los defectos A/B/C de la Tarea 5 vuelven a ser invisibles: MP cobra, nada
-    // se activa, y no queda ni una línea para saber por qué. Mismo formato que /mp/callback y
-    // middlewares/error.ts.
+    // Se loguea Y se devuelve 5xx: el log es para el operador, el 5xx es para que MP lo vuelva a
+    // mandar. Mismo formato que /mp/callback y middlewares/error.ts.
     console.error('[mp.webhook]', err instanceof Error ? err.stack : err)
+    res.status(500).end()
   }
 })

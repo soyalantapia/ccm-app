@@ -57,8 +57,26 @@ function filaFake(overrides: Partial<Record<string, unknown>>) {
     ...overrides,
   }
 
+  /**
+   * Soporta las pocas formas de `where` que usa el servicio: igualdad, `{ not }`, `{ notIn }` y
+   * `OR`. Si aparece una condición nueva, TIRA en vez de devolver `false` en silencio — un fake
+   * que ignora un filtro que no entiende haría pasar tests que en Postgres fallarían.
+   */
+  function coincideValor(actual: unknown, cond: unknown): boolean {
+    if (cond !== null && typeof cond === 'object') {
+      const c = cond as Record<string, unknown>
+      if ('not' in c) return actual !== c.not
+      if ('notIn' in c) return !(c.notIn as unknown[]).includes(actual)
+      throw new Error(`filaFake: condición no soportada ${JSON.stringify(cond)}`)
+    }
+    return actual === cond
+  }
+
   function coincide(where: Record<string, unknown>): boolean {
-    return Object.entries(where).every(([k, v]) => fila[k] === v)
+    return Object.entries(where).every(([k, v]) => {
+      if (k === 'OR') return (v as Record<string, unknown>[]).some((sub) => coincide(sub))
+      return coincideValor(fila[k], v)
+    })
   }
 
   vi.mocked(prisma.payment.updateMany).mockImplementation((async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
@@ -246,7 +264,7 @@ describe('webhook — defecto C: reversos y vencimientos NO son "pendiente"', ()
 
     await handleNotification('111', true)
 
-    const args = vi.mocked(prisma.payment.update).mock.calls[0][0] as { data: { status: string } }
+    const args = vi.mocked(prisma.payment.updateMany).mock.calls[0][0] as { data: { status: string } }
     expect(args.data.status).not.toBe('pending')
     expect(args.data.status).toBe('rejected')
   })
@@ -264,10 +282,116 @@ describe('webhook — defecto C: reversos y vencimientos NO son "pendiente"', ()
 
     await handleNotification('111', true)
 
-    const args = vi.mocked(prisma.payment.update).mock.calls[0][0] as { data: { status: string } }
+    const args = vi.mocked(prisma.payment.updateMany).mock.calls[0][0] as { data: { status: string } }
     expect(args.data.status).toBe('refunded')
     expect(errSpy).toHaveBeenCalled()
 
+    errSpy.mockRestore()
+  })
+})
+
+/**
+ * P0-A: una MISMA preferencia (mismo external_reference = Payment.id) puede generar VARIOS
+ * payment_id distintos en MP — la tarjeta rebota, el comprador paga con otra. El guard viejo
+ * usaba `mpPaymentId IS NULL` como sinónimo de "todavía no procesado": el primer aviso (el
+ * rechazado, o el cupón de efectivo) ocupaba el campo y el APROBADO que llegaba después se
+ * descartaba en silencio. Plata cobrada, entrada nunca entregada.
+ */
+describe('webhook — P0-A: la idempotencia es por payment_id CONCRETO, no por "hay algún mpPaymentId"', () => {
+  it('rechazado con una tarjeta y aprobado con otra: el aprobado SÍ entrega', async () => {
+    const fila = filaFake({ id: 'pay_A', kind: 'ticket_order', resourceId: 'ord_A' })
+
+    // Intento 1: la tarjeta rebota. Ocupa mpPaymentId con el payment_id 900.
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 900, status: 'rejected', external_reference: 'pay_A' } as never)
+    await handleNotification('900', true)
+    expect(fila.mpPaymentId).toBe('900')
+
+    // Intento 2: paga con otra tarjeta. Es OTRO payment_id y viene aprobado.
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 901, status: 'approved', external_reference: 'pay_A' } as never)
+    await handleNotification('901', true)
+
+    expect(prisma.ticketOrder.update).toHaveBeenCalledTimes(1)
+    expect(fila.status).toBe('approved')
+    expect(fila.mpPaymentId).toBe('901')
+  })
+
+  it('efectivo pendiente y después acreditado (mismo payment_id) entrega una sola vez', async () => {
+    const fila = filaFake({ id: 'pay_A2', kind: 'ticket_order', resourceId: 'ord_A2' })
+
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 902, status: 'pending', external_reference: 'pay_A2' } as never)
+    await handleNotification('902', true)
+    expect(prisma.ticketOrder.update).not.toHaveBeenCalled()
+
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 902, status: 'approved', external_reference: 'pay_A2' } as never)
+    await handleNotification('902', true)
+    await handleNotification('902', true) // reintento de MP del MISMO evento: no puede duplicar
+
+    expect(prisma.ticketOrder.update).toHaveBeenCalledTimes(1)
+    expect(fila.status).toBe('approved')
+  })
+
+  it('un SEGUNDO payment_id aprobado sobre un pago ya entregado no re-entrega, pero grita en el log', async () => {
+    const fila = filaFake({ id: 'pay_A3', kind: 'ticket_order', resourceId: 'ord_A3', status: 'approved', mpPaymentId: '903' })
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 904, status: 'approved', external_reference: 'pay_A3' } as never)
+
+    await handleNotification('904', true)
+
+    expect(prisma.ticketOrder.update).not.toHaveBeenCalled()
+    expect(fila.mpPaymentId).toBe('903')
+    expect(errSpy).toHaveBeenCalled() // doble cobro real: alguien tiene que devolver esa plata
+    errSpy.mockRestore()
+  })
+})
+
+/**
+ * P0-B: la rama de estados no-aprobados hacía un `update` INCONDICIONAL. Un aviso viejo, o uno
+ * de OTRO payment_id que llega desordenado, pisaba un Payment `approved` (ya entregado) y lo
+ * dejaba en `rejected`/`pending`. Un pago aprobado NO retrocede de estado.
+ */
+describe('webhook — P0-B: un pago aprobado no puede retroceder de estado', () => {
+  it('un rechazo tardío de OTRO payment_id no degrada un pago ya aprobado y entregado', async () => {
+    const fila = filaFake({ id: 'pay_B', kind: 'ticket_order', resourceId: 'ord_B', status: 'approved', mpPaymentId: '901' })
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 900, status: 'rejected', external_reference: 'pay_B' } as never)
+
+    await handleNotification('900', true)
+
+    expect(fila.status).toBe('approved')
+    expect(fila.mpPaymentId).toBe('901')
+    errSpy.mockRestore()
+  })
+
+  it('un pending desordenado tampoco lo devuelve a pendiente (re-trabaría el índice único)', async () => {
+    const fila = filaFake({ id: 'pay_B2', kind: 'ticket_order', resourceId: 'ord_B2', status: 'approved', mpPaymentId: '901' })
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 901, status: 'in_process', external_reference: 'pay_B2' } as never)
+
+    await handleNotification('901', true)
+
+    expect(fila.status).toBe('approved')
+    errSpy.mockRestore()
+  })
+
+  it('approved → refunded SÍ es una transición válida (el reverso tiene que quedar registrado)', async () => {
+    const fila = filaFake({ id: 'pay_B3', kind: 'ticket_order', resourceId: 'ord_B3', status: 'approved', mpPaymentId: '901' })
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 901, status: 'refunded', external_reference: 'pay_B3' } as never)
+
+    await handleNotification('901', true)
+
+    expect(fila.status).toBe('refunded')
+    errSpy.mockRestore()
+  })
+
+  it('un rechazo que llega después de un reverso tampoco lo pisa', async () => {
+    const fila = filaFake({ id: 'pay_B4', kind: 'ticket_order', resourceId: 'ord_B4', status: 'refunded', mpPaymentId: '901' })
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(mpApi.getPayment).mockResolvedValue({ id: 900, status: 'rejected', external_reference: 'pay_B4' } as never)
+
+    await handleNotification('900', true)
+
+    expect(fila.status).toBe('refunded')
     errSpy.mockRestore()
   })
 })

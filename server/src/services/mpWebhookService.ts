@@ -62,6 +62,33 @@ export function verificarFirma(headers: Record<string, string | undefined>, data
 type EstadoPago = 'approved' | 'pending' | 'rejected' | 'refunded'
 
 /**
+ * P0-B: orden de avance de la vida de un cobro. Los avisos de MP NO llegan ordenados (reintentos
+ * superpuestos, un rechazo de un intento anterior que sale tarde, dos payment_id distintos sobre
+ * la MISMA preferencia), así que "el último aviso que llegó" no es "lo último que pasó". La única
+ * regla que hace falta para no perder plata es: un pago NUNCA retrocede. Concretamente, un
+ * `approved` (que ya entregó la entrada / la membresía / la campaña) no puede volver a
+ * `pending` ni a `rejected` — solo puede avanzar a `refunded`.
+ *
+ * `expired` y `rejected` comparten rango: los dos son "este intento terminó sin acreditarse" y
+ * los dos liberan el índice único parcial Payment(kind,resourceId) WHERE status='pending'. Que
+ * `pending` NO pueda pisar a `expired` es a propósito: si pudiera, un aviso tardío volvería a
+ * trabar ese índice y el comprador no podría generar un cobro nuevo. Si ese pago igual termina
+ * acreditándose, el `approved` entra igual (rango mayor) y se entrega.
+ */
+const RANGO_ESTADO: Record<string, number> = {
+  pending: 0,
+  expired: 1,
+  rejected: 1,
+  approved: 2,
+  refunded: 3,
+}
+
+/** ¿La transición `actual → nuevo` avanza (o se queda igual), o es un retroceso que hay que descartar? */
+function transicionPermitida(actual: string, nuevo: EstadoPago): boolean {
+  return (RANGO_ESTADO[nuevo] ?? 0) >= (RANGO_ESTADO[actual] ?? 0)
+}
+
+/**
  * Mapea el estado de MP con INTENCIÓN, no por descarte (defecto C). Antes, todo lo que no era
  * 'approved'/'rejected' cayó en 'pending' — eso incluía reversos YA ENTREGADOS (refunded,
  * charged_back) y pagos en efectivo VENCIDOS (cancelled), con dos consecuencias reales: (1) un
@@ -124,6 +151,19 @@ export async function handleNotification(mpPaymentId: string, firmaValida: boole
     const pago = await prisma.payment.findUnique({ where: { id: ref } })
     if (!pago) return
 
+    // P0-B: antes acá había un `update` INCONDICIONAL. Un aviso de OTRO payment_id de la misma
+    // preferencia (el intento con la tarjeta que rebotó) o un aviso en vuelo que llega
+    // desordenado pisaba un Payment `approved` YA ENTREGADO y lo dejaba en `rejected`/`pending`:
+    // el cobro figuraba como fallido con la entrada en la mano, y encima volvía a trabar el
+    // índice único de pendientes. Un pago aprobado no retrocede.
+    if (!transicionPermitida(pago.status, estado)) {
+      console.error(
+        '[mpWebhookService] aviso descartado por retroceso de estado (llegó tarde o es de otro intento de pago)',
+        { paymentId: pago.id, estadoActual: pago.status, estadoDelAviso: estado, mpPaymentId, estadoMp: pagoMp.status },
+      )
+      return
+    }
+
     if (estado === 'refunded' && pago.status === 'approved') {
       // Defecto C: se revierte un pago que YA fue entregado. NO revocamos el recurso
       // automáticamente (es una decisión de negocio que no está definida — ver el informe de la
@@ -138,48 +178,107 @@ export async function handleNotification(mpPaymentId: string, firmaValida: boole
     // Efectivo/Rapipago llega como pending; un rechazo o un vencimiento liberan el índice único
     // de "pending" (pueden reintentar la compra); un reverso deja constancia de 'refunded'. En
     // ningún caso de esta rama se activa nada.
-    await prisma.payment.update({
-      where: { id: pago.id },
+    //
+    // `updateMany` gateado por el estado que acabamos de leer (bloqueo optimista), no `update`
+    // por id: entre el `findUnique` de arriba y esta escritura puede colarse el aviso APROBADO
+    // (otro request, en paralelo) y dejar el pago entregado. Con el estado en el `WHERE`, esa
+    // carrera la pierde este aviso viejo en vez de pisar un `approved` — el chequeo de
+    // `transicionPermitida` solo, sobre una lectura ya rancia, no alcanza.
+    const escrito = await prisma.payment.updateMany({
+      where: { id: pago.id, status: pago.status },
       data: { mpPaymentId, status: estado, raw: pagoMp as never },
     })
+    if (escrito.count !== 1) {
+      console.error(
+        '[mpWebhookService] el estado del pago cambió mientras procesábamos este aviso: no se pisa nada',
+        { paymentId: pago.id, estadoLeido: pago.status, estadoDelAviso: estado, mpPaymentId },
+      )
+    }
     return
   }
 
   // Defecto B.3: el guard de idempotencia y la decisión de QUIÉN activa son la MISMA operación
-  // atómica — un `updateMany` gateado por `mpPaymentId: null` (en vez de `findFirst` + `update`
-  // por `id`). Dos avisos concurrentes del mismo pago (dos reintentos de MP superpuestos, o un
-  // reintento que llega mientras el primero todavía está en vuelo) pueden pasar los dos por una
-  // lectura en null; con un único `UPDATE ... WHERE mpPaymentId IS NULL` la base deja pasar a
-  // UNO SOLO (`count === 1`), el resto ve `count === 0` y no activa nada.
+  // atómica — un `updateMany` (en vez de `findFirst` + `update` por `id`). Dos avisos
+  // concurrentes del mismo pago (dos reintentos de MP superpuestos, o un reintento que llega
+  // mientras el primero todavía está en vuelo) pueden pasar los dos por la misma lectura; con un
+  // único `UPDATE ... WHERE` la base deja pasar a UNO SOLO (`count === 1`), el resto ve
+  // `count === 0` y no activa nada.
+  //
+  // P0-A: el `WHERE` ya NO es `mpPaymentId IS NULL`, y lo que se reclama ya NO es el campo
+  // `mpPaymentId` sino la TRANSICIÓN A `approved`. El guard viejo confundía "hay algún
+  // mpPaymentId" con "este aviso ya se procesó", y son cosas distintas: una MISMA preferencia
+  // (mismo external_reference = Payment.id) genera VARIOS payment_id en MP cuando el comprador
+  // reintenta — la tarjeta rebota (payment_id 900, rechazado, ocupa el campo), después paga con
+  // otra (payment_id 901, aprobado) y el aprobado se descartaba en silencio: plata cobrada,
+  // entrada nunca entregada.
+  //
+  // Ojo con el arreglo "obvio" de gatear por `mpPaymentId <> este`: NO alcanza, porque el mismo
+  // payment_id cambia de estado legítimamente. Un pago en efectivo llega primero como `pending`
+  // (y esa rama YA guarda su mpPaymentId) y días después se acredita como `approved` con el
+  // MISMO id: con ese guard, el aviso que acredita la plata quedaría afuera. La pregunta correcta
+  // no es "¿conozco este payment_id?" sino "¿ESTA COMPRA ya se entregó?", y eso lo dice el
+  // estado: `status notIn [approved, refunded]`.
+  //
+  // Ese mismo `WHERE` sigue siendo el gate de concurrencia (defecto B.3): un único
+  // `UPDATE ... WHERE status NOT IN (...)` deja pasar a UNO SOLO de dos avisos superpuestos.
+  //
+  // Contrapartida asumida: como el claim marca `approved` ANTES de entregar, si el proceso se
+  // CAE justo entre el claim y la entrega, el Payment queda `approved` sin entregar y los
+  // reintentos de MP lo ven entregado. Es la misma ventana que ya tenía el claim por
+  // `mpPaymentId` (un reintento tampoco podía volver a pasar), y toda falla que no sea una caída
+  // dura se revierte abajo, en el `catch`.
   const claim = await prisma.payment.updateMany({
-    where: { id: ref, mpPaymentId: null },
-    data: { mpPaymentId },
+    where: { id: ref, status: { notIn: ['approved', 'refunded'] } },
+    data: { mpPaymentId, status: 'approved' },
   })
-  if (claim.count !== 1) return // ya reclamado: por este mismo aviso repetido o por uno concurrente
+  if (claim.count !== 1) {
+    // No se pudo reclamar. Hay tres motivos posibles y solo uno amerita despertar a alguien.
+    const actual = await prisma.payment.findUnique({ where: { id: ref } })
+    if (actual && actual.status === 'approved' && actual.mpPaymentId !== mpPaymentId) {
+      // DOS pagos aprobados distintos contra la misma compra: MP cobró dos veces de verdad (p.ej.
+      // el comprador pagó el cupón de efectivo y además con tarjeta). No re-entregamos —eso está
+      // bien— pero alguien tiene que devolver esa plata, así que no puede pasar en silencio.
+      console.error(
+        '[mpWebhookService] llegó un SEGUNDO pago aprobado para una compra ya entregada: revisar y devolver',
+        { paymentId: ref, kind: actual.kind, resourceId: actual.resourceId, mpPaymentIdEntregado: actual.mpPaymentId, mpPaymentIdNuevo: mpPaymentId },
+      )
+    }
+    // Los otros dos motivos son normales y no se loguean: (1) reintento de MP del MISMO aviso ya
+    // procesado, (2) un aviso gemelo que en este instante está en vuelo y ya tomó el claim.
+    return
+  }
 
   const pago = await prisma.payment.findUnique({ where: { id: ref } })
   if (!pago) return // no debería pasar: el updateMany de arriba matcheó justo esta fila
 
   try {
-    // Defecto B.1: ACTIVAR ANTES de marcar aprobado. Antes era al revés (primero
-    // `status: 'approved'`, después `activar`) — si `activar` fallaba (el recurso ya no existe →
-    // Prisma tira P2025) o no hacía nada en silencio (ver el comentario en `activar` sobre
-    // membership), el Payment YA había quedado `approved`, y como el guard de idempotencia miraba
-    // ese mismo estado, ningún reintento de MP volvía a intentar activar. Nunca: plata cobrada,
-    // producto jamás entregado.
+    // Defecto B.1: lo que NO se puede es dar el pago por cerrado sin haber entregado. El claim de
+    // arriba marcó `approved`, pero si `activar` falla (el recurso ya no existe → Prisma tira
+    // P2025, o una membresía sin deviceId — ver el comentario en `activar`) el `catch` DESHACE
+    // ese estado. Lo prohibido es que un fallo de entrega quede grabado como entregado: ahí
+    // ningún reintento de MP volvería a intentar, y sería plata cobrada con producto jamás
+    // entregado.
     await activar(pago.kind, pago.resourceId, pago.deviceId, pago.amount)
   } catch (err) {
-    // No se pudo entregar: soltamos el claim (mpPaymentId vuelve a null) para que el PRÓXIMO
-    // reintento de MP pueda volver a intentarlo, en vez de quedar trabado para siempre.
+    // No se pudo entregar: se deshace el claim (vuelve a `pending`, y `mpPaymentId` a null) para
+    // que el PRÓXIMO reintento de MP —que llega porque la ruta devuelve 5xx, ver mp.ts, P0-C—
+    // pueda volver a intentarlo, en vez de quedar trabado para siempre. Vuelve a `pending` y no a
+    // `expired`: hay un pago aprobado de verdad dando vueltas, así que el comprador NO debería
+    // poder generarse un segundo cobro para este recurso mientras tanto (índice único parcial).
     console.error(
-      '[mpWebhookService] no se pudo activar un pago aprobado — se libera el claim para que MP pueda reintentar',
+      '[mpWebhookService] no se pudo activar un pago aprobado — se deshace el claim para que MP pueda reintentar',
       { paymentId: pago.id, kind: pago.kind, resourceId: pago.resourceId, deviceId: pago.deviceId, mpPaymentId },
       err instanceof Error ? err.stack : err,
     )
-    await prisma.payment.updateMany({ where: { id: pago.id, mpPaymentId }, data: { mpPaymentId: null } })
+    await prisma.payment.updateMany({
+      where: { id: pago.id, mpPaymentId },
+      data: { mpPaymentId: null, status: 'pending' },
+    })
     throw err
   }
 
+  // Entregado. El estado ya quedó en `approved` con el claim; esto guarda el detalle del pago tal
+  // como lo devolvió MP (queda para reconciliar a mano si alguna vez hay que discutir un cobro).
   await prisma.payment.update({
     where: { id: pago.id },
     data: { status: 'approved', raw: pagoMp as never },

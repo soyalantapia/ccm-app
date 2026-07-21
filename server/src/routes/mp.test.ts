@@ -15,6 +15,7 @@ vi.mock('../services/mpWebhookService.js', () => ({
 import * as oauth from '../services/mpOAuthService.js'
 import * as webhook from '../services/mpWebhookService.js'
 import { createApp } from '../app.js'
+import { webhookConfig } from './mp.js'
 
 const app = createApp()
 
@@ -60,14 +61,13 @@ describe('vuelta de Mercado Pago', () => {
 })
 
 /**
- * Estos casos no vienen en el brief de la Tarea 5: los agrego porque el pedido puntual era
- * verificar que la ruta responde 200 ANTES de procesar (para que MP no reintente en loop) y que
- * un error dentro del procesamiento no pueda escapar como unhandledRejection y voltear el
- * proceso. handleNotification/verificarFirma van mockeadas acá: lo que se ejercita es el
+ * El código de estado del webhook ES el mecanismo de reintento de MP: 2xx = "listo, no vuelvas a
+ * avisar"; cualquier otra cosa = "reintentá". Por eso la ruta procesa PRIMERO y responde DESPUÉS
+ * (P0-C). handleNotification/verificarFirma van mockeadas acá: lo que se ejercita es el
  * comportamiento de la RUTA (mp.ts), no la lógica de negocio del servicio (ya cubierta en
  * mpWebhookService.test.ts).
  */
-describe('POST /mp/webhook — la ruta responde 200 siempre, rápido, y no se cae', () => {
+describe('POST /mp/webhook — el 200 significa "procesado"', () => {
   it('es pública: sin sesión ni device, igual procesa', async () => {
     vi.mocked(webhook.verificarFirma).mockReturnValue(true)
     vi.mocked(webhook.handleNotification).mockResolvedValue(undefined)
@@ -88,61 +88,67 @@ describe('POST /mp/webhook — la ruta responde 200 siempre, rápido, y no se ca
     expect(webhook.handleNotification).toHaveBeenCalledWith('222', true)
   })
 
-  it('si handleNotification rechaza, la respuesta 200 ya viaja y el error no se propaga', async () => {
-    vi.mocked(webhook.verificarFirma).mockReturnValue(true)
-    vi.mocked(webhook.handleNotification).mockRejectedValue(new Error('la base se cayó justo acá'))
-
-    // Si el catch de la ruta no atrapara esto, node emitiría 'unhandledRejection' y (según
-    // configuración) podría voltear el proceso — exactamente lo que este test descarta.
-    let unhandled: unknown = null
-    const onUnhandled = (err: unknown) => {
-      unhandled = err
-    }
-    process.once('unhandledRejection', onUnhandled)
-
-    await request(app).post('/api/v1/mp/webhook').send({ data: { id: '333' } }).expect(200)
-    // Le doy una vuelta de microtask/macrotask a la promesa que sigue corriendo en segundo
-    // plano después de que la respuesta ya salió, para que el rechazo (si escapara) alcance a
-    // dispararse antes de chequear.
-    await new Promise((r) => setImmediate(r))
-
-    process.removeListener('unhandledRejection', onUnhandled)
-    expect(unhandled).toBeNull()
-  })
-
   it('un dataId no-string en el body (ej. objeto) no rompe la ruta', async () => {
     vi.mocked(webhook.verificarFirma).mockReturnValue(false)
     vi.mocked(webhook.handleNotification).mockResolvedValue(undefined)
-    await request(app).post('/api/v1/mp/webhook').send({ data: { id: { raro: true } } }).expect(200)
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await request(app).post('/api/v1/mp/webhook').send({ data: { id: { raro: true } } }).expect(401)
+    errSpy.mockRestore()
   })
 })
 
 /**
- * Defecto D de la Tarea 5: el catch de la ruta no dejaba rastro de nada, lo que volvía
- * invisibles a los defectos A/B/C (la firma falla siempre detrás del proxy, o la activación
- * falla y nadie se entera). Acá se verifica que ahora SÍ queda un log, distinguiendo firma
- * inválida de una excepción real.
+ * P0-C: la ruta hacía `res.status(200).end()` ANTES de procesar y se comía toda excepción. El
+ * catch de handleNotification suelta el claim "para que MP reintente"… pero MP ya había recibido
+ * 200 y no reintenta nunca. El pago quedaba cobrado y sin entregar, para siempre.
  */
-describe('POST /mp/webhook — defecto D: nada de esto pasa en silencio', () => {
-  it('firma inválida deja un log (para no confundirlo con una excepción)', async () => {
+describe('POST /mp/webhook — P0-C: un fallo real tiene que ser reintentable por MP', () => {
+  it('si handleNotification tira, responde 5xx (MP reintenta) y deja el log', async () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    vi.mocked(webhook.verificarFirma).mockReturnValue(false)
-    vi.mocked(webhook.handleNotification).mockResolvedValue(undefined)
+    vi.mocked(webhook.verificarFirma).mockReturnValue(true)
+    vi.mocked(webhook.handleNotification).mockRejectedValue(new Error('la base se cayó justo acá'))
 
-    await request(app).post('/api/v1/mp/webhook').send({ data: { id: '444' } }).expect(200)
+    const res = await request(app).post('/api/v1/mp/webhook').send({ data: { id: '333' } })
 
+    expect(res.status).toBeGreaterThanOrEqual(500)
     expect(errSpy).toHaveBeenCalled()
     errSpy.mockRestore()
   })
 
-  it('si handleNotification tira, el catch de la ruta loguea el error (no lo descarta)', async () => {
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  it('el 200 recién sale DESPUÉS de procesar (no se adelanta a handleNotification)', async () => {
     vi.mocked(webhook.verificarFirma).mockReturnValue(true)
-    vi.mocked(webhook.handleNotification).mockRejectedValue(new Error('la activación falló'))
+    let terminoDeProcesar = false
+    vi.mocked(webhook.handleNotification).mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 30))
+      terminoDeProcesar = true
+    })
 
-    await request(app).post('/api/v1/mp/webhook').send({ data: { id: '555' } }).expect(200)
-    await new Promise((r) => setImmediate(r))
+    await request(app).post('/api/v1/mp/webhook').send({ data: { id: '666' } }).expect(200)
 
+    expect(terminoDeProcesar).toBe(true)
+  })
+
+  it('si el procesamiento se cuelga, corta por timeout y responde 5xx (MP reintenta, no espera al corte de MP)', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const original = webhookConfig.timeoutMs
+    webhookConfig.timeoutMs = 20
+    vi.mocked(webhook.verificarFirma).mockReturnValue(true)
+    vi.mocked(webhook.handleNotification).mockImplementation(() => new Promise(() => {})) // nunca resuelve
+
+    const res = await request(app).post('/api/v1/mp/webhook').send({ data: { id: '777' } })
+
+    expect(res.status).toBeGreaterThanOrEqual(500)
+    webhookConfig.timeoutMs = original
+    errSpy.mockRestore()
+  })
+
+  it('firma inválida: NO procesa, deja log, y responde 401', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(webhook.verificarFirma).mockReturnValue(false)
+
+    await request(app).post('/api/v1/mp/webhook').send({ data: { id: '444' } }).expect(401)
+
+    expect(webhook.handleNotification).not.toHaveBeenCalled()
     expect(errSpy).toHaveBeenCalled()
     errSpy.mockRestore()
   })
