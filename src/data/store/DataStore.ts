@@ -201,6 +201,10 @@ export interface DataStore {
   submitApplication(convocatoriaId: string, data: Record<string, string>): Application
   /** TODAS las postulaciones (vista del organizador). */
   getApplications(): Application[]
+  /** Postulaciones para el PANEL. null = no hidratado o falló; nunca cae al seed, porque
+   *  mostrar postulaciones de demo como si fueran reales es peor que no mostrar nada. */
+  getAdminApplications(): Application[] | null
+  applicationsFailed(): boolean
   /** Solo las del PROPIO device ("Mis postulaciones" / guard "ya te postulaste"). NUNCA la
    *  lista admin, aunque haya sesión de organizador en la misma pestaña. */
   getMyApplications(): Application[]

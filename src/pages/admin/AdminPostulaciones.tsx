@@ -7,8 +7,25 @@ import { OpsApplicationCard } from '../../features/admin/OpsApplicationCard'
 type TabId = 'todas' | ApplicationStatus
 
 export default function AdminPostulaciones() {
-  const applications = useStore((s) => s.getApplications())
+  const applications = useStore((s) => s.getAdminApplications())
+  const fallo = useStore((s) => s.applicationsFailed())
   const [tab, setTab] = useState<TabId>('todas')
+
+  // null = todavía no hidrató o falló el fetch real (solo pasa con backend: en demo el seed
+  // ES el contenido y nunca es null). Nunca cae al seed cuando SÍ hay backend: mostrar
+  // postulaciones de demo como si fueran reales es peor que no mostrar nada.
+  if (!applications) {
+    return (
+      <div className="px-5 py-8 md:px-10">
+        <SectionTitle eyebrow="Admin · Postulaciones" title="Postulaciones" />
+        <p className="mt-8 text-sm text-ink-soft">
+          {fallo
+            ? 'No pudimos traer las postulaciones. No mostramos nada para no darte una lista equivocada.'
+            : 'Cargando…'}
+        </p>
+      </div>
+    )
+  }
 
   const count = (status: ApplicationStatus) => applications.filter((a) => a.status === status).length
   const tabs = [

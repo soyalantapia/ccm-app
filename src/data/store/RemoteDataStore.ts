@@ -100,6 +100,9 @@ export class RemoteDataStore extends LocalDataStore {
   private plans?: TicketPlan[]
   private applications?: Application[] // device-scoped ("Mis postulaciones")
   private adminApplications?: Application[] // admin-scoped (panel del organizador) — caché SEPARADO
+  // true si el último intento de hidratar adminApplications falló. Sin fallback al seed a
+  // propósito: mostrar postulaciones de demo como si fueran reales es peor que no mostrar nada.
+  private appsError = false
   private membership?: Membership
   private benefits?: Benefit[]
   private banners?: Banner[]
@@ -815,13 +818,36 @@ export class RemoteDataStore extends LocalDataStore {
     // con take:500). Acá solo hidratamos la primera página; el cursor queda para paginación futura.
     this.api
       .get<{ items: Application[]; nextCursor: string | null }>('/admin/applications')
-      .then((r) => { this.adminApplications = r.items; bus.emit('applications') })
-      .catch(() => {})
+      .then((r) => {
+        this.adminApplications = r.items
+        this.appsError = false
+      })
+      .catch(() => {
+        // El error se EXPONE (antes se tragaba en un catch vacío y la pantalla caía en cascada
+        // al seed): si el backend no responde, el panel tiene que decirlo, no mostrar demo.
+        this.appsError = true
+      })
+      .finally(() => bus.emit('applications'))
   }
 
   /** TODAS (vista del organizador): la lista admin si está cargada, si no cae al device/seed. */
   override getApplications(): Application[] {
     return this.adminApplications ?? this.applications ?? super.getApplications()
+  }
+  /**
+   * Postulaciones para el PANEL, sin fallback al seed.
+   *
+   * A diferencia de getApplications() (que cae en cascada para no dejar sin datos al resto de
+   * la UI), esta es la que consume AdminPostulaciones: null hasta que /admin/applications
+   * resuelva, y sigue null si falló — mostrar las 24 postulaciones fabricadas del seed como si
+   * fueran reales es peor que no mostrar nada.
+   */
+  override getAdminApplications(): Application[] | null {
+    return this.adminApplications ?? null
+  }
+  /** true si el último intento falló → el panel muestra el error en vez de la lista de demo. */
+  override applicationsFailed(): boolean {
+    return this.appsError
   }
   /** Solo las del PROPIO device (vistas de usuario): NUNCA la lista admin. */
   override getMyApplications(): Application[] {
