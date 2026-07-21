@@ -12,8 +12,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  */
 
 const mockTx = {
+  $queryRaw: vi.fn(),
   gallery: { update: vi.fn() },
-  photo: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
+  photo: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
   catalogProfile: { update: vi.fn() },
   portfolioPiece: { findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
 }
@@ -62,7 +63,7 @@ describe('updateGallery — no destruye lo que sobrevive', () => {
 
     // Se resolvieron por src contra las filas existentes: update, nunca create.
     expect(mockTx.photo.create).not.toHaveBeenCalled()
-    expect(mockTx.photo.update).toHaveBeenCalledTimes(3)
+    expect(mockTx.photo.updateMany).toHaveBeenCalledTimes(3)
     expect(sobrevivientes().sort()).toEqual(['ph-01', 'ph-02', 'ph-03'])
   })
 
@@ -71,7 +72,7 @@ describe('updateGallery — no destruye lo que sobrevive', () => {
       photos: [{ id: 'ph-01', src: 'img/gallery/g01.jpg' }],
     } as never)
 
-    const data = mockTx.photo.update.mock.calls[0][0].data
+    const data = mockTx.photo.updateMany.mock.calls[0][0].data
     expect(data).not.toHaveProperty('alt')
     expect(data).toMatchObject({ src: 'img/gallery/g01.jpg', order: 0 })
   })
@@ -80,7 +81,7 @@ describe('updateGallery — no destruye lo que sobrevive', () => {
     await updateGallery('gal-1', {
       photos: [{ id: 'ph-01', src: 'img/gallery/g01.jpg', alt: 'Epígrafe editado' }],
     } as never)
-    expect(mockTx.photo.update.mock.calls[0][0].data).toMatchObject({ alt: 'Epígrafe editado' })
+    expect(mockTx.photo.updateMany.mock.calls[0][0].data).toMatchObject({ alt: 'Epígrafe editado' })
   })
 
   it('agrega las nuevas sin tocar las viejas', async () => {
@@ -91,7 +92,7 @@ describe('updateGallery — no destruye lo que sobrevive', () => {
       ],
     } as never)
 
-    expect(mockTx.photo.update).toHaveBeenCalledTimes(3)
+    expect(mockTx.photo.updateMany).toHaveBeenCalledTimes(3)
     expect(mockTx.photo.create).toHaveBeenCalledTimes(1)
     // Photo.id no tiene @default: el id lo tenemos que poner siempre nosotros.
     expect(mockTx.photo.create.mock.calls[0][0].data.id).toMatch(/^ph_/)

@@ -4,6 +4,7 @@ import { toEventItem, toEventBlock, toContentItem, toSponsor, toGallery, toCatal
 import { conflict, badRequest } from '../lib/errors.js'
 import { parseDate } from '../lib/dates.js'
 import { cleanStoredUrl } from '../lib/url.js'
+import { normalizarYoutubeId } from '../lib/youtube.js'
 import type { EventItem, EventBlock, ContentItem, Sponsor, Gallery, CatalogProfile, PlanId, Convocatoria } from '@domain/types'
 
 /**
@@ -63,6 +64,12 @@ export async function updateEvent(id: string, patch: Partial<EventItem>): Promis
   if ('mapsUrl' in patch) data.mapsUrl = cleanStoredUrl(patch.mapsUrl, 'mapa') ?? '' // valida esquema (no javascript:/data:)
   if (patch.startDate) data.startDate = parseDate(patch.startDate, 'fecha del evento')
   await prisma.$transaction(async (tx) => {
+    // Lock del padre antes de reemplazar sus hijos: dos organizadores guardando la misma
+    // entidad a la vez borran y recrean las mismas filas hijas, y el segundo choca contra la
+    // clave única del primero (P2002 "ya existe un recurso con esa clave" — un mensaje sin
+    // sentido para quien está editando algo que ya existe). Serializa por entidad; mismo
+    // patrón que updateGallery y los delete con pre-chequeo.
+    await tx.$queryRaw`SELECT id FROM "Event" WHERE id = ${id} FOR UPDATE`
     await tx.event.update({ where: { id }, data })
     if (patch.sponsorIds) {
       await tx.eventSponsor.deleteMany({ where: { eventId: id } })
@@ -128,7 +135,8 @@ export async function deleteBlock(id: string): Promise<void> {
 export async function createContent(c: ContentItem): Promise<ContentItem> {
   const row = await prisma.contentItem.create({
     data: {
-      id: c.id, type: c.type, title: c.title, description: c.description, youtubeId: c.youtubeId,
+      id: c.id, type: c.type, title: c.title, description: c.description,
+      youtubeId: normalizarYoutubeId(c.youtubeId),
       duration: c.duration ?? null, platform: c.platform ?? null, sponsorId: c.sponsorId ?? null,
       publishedAt: parseDate(c.publishedAt, 'fecha de publicación'), socioOnly: c.socioOnly ?? false,
     },
@@ -138,9 +146,11 @@ export async function createContent(c: ContentItem): Promise<ContentItem> {
 
 export async function updateContent(id: string, patch: Partial<ContentItem>): Promise<ContentItem> {
   const data: Record<string, unknown> = {}
-  for (const k of ['title', 'description', 'youtubeId', 'duration', 'platform', 'sponsorId', 'socioOnly'] as const) {
+  for (const k of ['title', 'description', 'duration', 'platform', 'sponsorId', 'socioOnly'] as const) {
     if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   }
+  // Fuera del loop: se normaliza a un id de YouTube en vez de copiarse tal cual (ver lib/youtube).
+  if ('youtubeId' in patch) data.youtubeId = normalizarYoutubeId(patch.youtubeId)
   if (patch.publishedAt) data.publishedAt = parseDate(patch.publishedAt, 'fecha de publicación')
   const row = await prisma.contentItem.update({ where: { id }, data })
   return toContentItem(row)
@@ -171,6 +181,12 @@ export async function updateSponsor(id: string, patch: Partial<Sponsor>): Promis
   const data: Record<string, unknown> = {}
   for (const k of ['name', 'industry', 'level', 'exclusive', 'tagline', 'banner'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   await prisma.$transaction(async (tx) => {
+    // Lock del padre antes de reemplazar sus hijos: dos organizadores guardando la misma
+    // entidad a la vez borran y recrean las mismas filas hijas, y el segundo choca contra la
+    // clave única del primero (P2002 "ya existe un recurso con esa clave" — un mensaje sin
+    // sentido para quien está editando algo que ya existe). Serializa por entidad; mismo
+    // patrón que updateGallery y los delete con pre-chequeo.
+    await tx.$queryRaw`SELECT id FROM "Sponsor" WHERE id = ${id} FOR UPDATE`
     await tx.sponsor.update({ where: { id }, data })
     if (patch.creatives) {
       await tx.sponsorCreative.deleteMany({ where: { sponsorId: id } })
@@ -214,6 +230,17 @@ export async function updateGallery(id: string, patch: Partial<Gallery>): Promis
   const data: Record<string, unknown> = {}
   for (const k of ['slug', 'title', 'eventLabel', 'date', 'cover', 'sponsorId'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   await prisma.$transaction(async (tx) => {
+    // Lock explícito sobre la galería ANTES de tocar sus fotos: serializa las ediciones de una
+    // misma galería, que es lo único que evita el deadlock de verdad.
+    //
+    // Ordenar los UPDATE por id (más abajo) no alcanza: el deleteMany final pide lock sobre las
+    // filas que cada transacción decidió sacar, y esas son DISTINTAS en cada una — A espera la
+    // foto que B tiene tomada y viceversa. Tampoco alcanza el gallery.update de acá abajo:
+    // cuando el patch trae sólo `photos`, `data` queda vacío y ese UPDATE sin columnas no
+    // bloquea nada. Medido: con el orden fijo solo, seguían apareciendo 40P01 en el log.
+    //
+    // Mismo patrón que deleteEvent/deleteBlock, por consistencia.
+    await tx.$queryRaw`SELECT id FROM "Gallery" WHERE id = ${id} FOR UPDATE`
     await tx.gallery.update({ where: { id }, data })
     if (!patch.photos) return
 
@@ -229,8 +256,16 @@ export async function updateGallery(id: string, patch: Partial<Gallery>): Promis
       librePorSrc.set(p.src, l)
     }
 
+    // PRIMERO se resuelve a qué fila corresponde cada posición, SIN escribir nada; recién
+    // después se escribe. La separación importa por los deadlocks: escribir mientras se recorre
+    // `patch.photos` toma los locks en el orden que mandó el cliente, y dos organizadores
+    // guardando la misma galería con las fotos en distinto orden se bloquean mutuamente
+    // (Postgres 40P01). Reproducido: dos PATCH simultáneos, uno respondía 500.
     const sobreviven: string[] = []
     const usados = new Set<string>()
+    const aActualizar: { id: string; data: Record<string, unknown> }[] = []
+    const aCrear: { id: string; galleryId: string; src: string; alt: string; order: number }[] = []
+
     for (const [i, p] of patch.photos.entries()) {
       let real: string | undefined
       if (p.id && porId.has(p.id) && !usados.has(p.id)) real = p.id
@@ -248,15 +283,29 @@ export async function updateGallery(id: string, patch: Partial<Gallery>): Promis
         // `alt` solo se pisa si vino en el payload: en prod los 58 alt están escritos a mano.
         const campos: Record<string, unknown> = { src: p.src, order: i }
         if (p.alt !== undefined) campos.alt = p.alt
-        await tx.photo.update({ where: { id: real }, data: campos })
+        aActualizar.push({ id: real, data: campos })
       } else {
         // Id nuevo. `Photo.id` no tiene @default, así que siempre lo ponemos nosotros; si el id que
         // manda el cliente ya existe (podría ser de OTRA galería), lo re-minteamos para no robarla.
         const propuesto = p.id && !(await tx.photo.findUnique({ where: { id: p.id }, select: { id: true } })) ? p.id : `ph_${randomUUID()}`
         sobreviven.push(propuesto)
-        await tx.photo.create({ data: { id: propuesto, galleryId: id, src: p.src, alt: p.alt ?? '', order: i } })
+        aCrear.push({ id: propuesto, galleryId: id, src: p.src, alt: p.alt ?? '', order: i })
       }
     }
+
+    // Orden total y estable por id: dos transacciones concurrentes piden los mismos locks en la
+    // misma secuencia, así que una espera a la otra en vez de formar un ciclo. El campo `order`
+    // ya viaja en `data`, así que el orden que eligió el organizador se persiste igual.
+    aActualizar.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    // updateMany y no update: si el otro organizador ya sacó esa foto, `update` tira P2025 y el
+    // errorHandler lo mapea a 404 — un "no encontrado" desconcertante para alguien que está
+    // editando una galería que sí existe, y que además tira abajo el resto de su edición.
+    // updateMany afecta 0 filas y sigue: se pierde el cambio sobre la foto que ya no está,
+    // que es exactamente lo que corresponde, y el resto se guarda.
+    for (const u of aActualizar) await tx.photo.updateMany({ where: { id: u.id }, data: u.data })
+
+    aCrear.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    for (const c of aCrear) await tx.photo.create({ data: c })
 
     await tx.photo.deleteMany({ where: { galleryId: id, id: { notIn: sobreviven } } })
   })
@@ -280,6 +329,12 @@ export async function updateCatalogProfile(id: string, patch: Partial<CatalogPro
   const data: Record<string, unknown> = {}
   for (const k of ['slug', 'name', 'role', 'kind', 'platform', 'city', 'bio', 'projects', 'photo', 'instagram', 'whatsapp', 'verified', 'participatesIn'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   await prisma.$transaction(async (tx) => {
+    // Lock del padre antes de reemplazar sus hijos: dos organizadores guardando la misma
+    // entidad a la vez borran y recrean las mismas filas hijas, y el segundo choca contra la
+    // clave única del primero (P2002 "ya existe un recurso con esa clave" — un mensaje sin
+    // sentido para quien está editando algo que ya existe). Serializa por entidad; mismo
+    // patrón que updateGallery y los delete con pre-chequeo.
+    await tx.$queryRaw`SELECT id FROM "CatalogProfile" WHERE id = ${id} FOR UPDATE`
     await tx.catalogProfile.update({ where: { id }, data })
     if (patch.portfolio) {
       // A diferencia de Photo, PortfolioPiece no está referenciada por nadie, así que recrearla es
@@ -387,6 +442,12 @@ export async function updateConvocatoria(id: string, patch: Partial<Convocatoria
   if ('ctaUrl' in patch) data.ctaUrl = cleanStoredUrl(patch.ctaUrl, 'CTA')
   if ('deadline' in patch && patch.deadline) data.deadline = parseDate(patch.deadline, 'fecha límite')
   await prisma.$transaction(async (tx) => {
+    // Lock del padre antes de reemplazar sus hijos: dos organizadores guardando la misma
+    // entidad a la vez borran y recrean las mismas filas hijas, y el segundo choca contra la
+    // clave única del primero (P2002 "ya existe un recurso con esa clave" — un mensaje sin
+    // sentido para quien está editando algo que ya existe). Serializa por entidad; mismo
+    // patrón que updateGallery y los delete con pre-chequeo.
+    await tx.$queryRaw`SELECT id FROM "Convocatoria" WHERE id = ${id} FOR UPDATE`
     await tx.convocatoria.update({ where: { id }, data })
     if (patch.fields) {
       // Reemplazo completo de los campos (createMany con order recalculado). createMany NO es
