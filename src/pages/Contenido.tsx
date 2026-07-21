@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Sparkles } from 'lucide-react'
 import { EmptyState } from '../components/ui'
 import { SponsorCarousel } from '../features/ads/SponsorCarousel'
 import { store, useStore } from '../data/store'
@@ -8,12 +7,10 @@ import { EntrevistaRow, PaywallCard, SectionLabel, VideoThumb } from '../feature
 import { formatMoney } from '../features/tickets/format'
 import { SOCIO_PRICE } from '../features/membresia/plans'
 
-/** Elukamo (mockup): header ELUKAMO + sponsor-elukamo box + tabs Entrevistas/
- *  Capacitaciones. Entrevistas: featured + rows + carrusel. Capacitaciones:
+/** Elukamo: header ELUKAMO + tabs Entrevistas/Capacitaciones. Entrevistas: featured + rows + carrusel. Capacitaciones:
  *  paywall-card (o acceso si es socio) + carruseles de video. */
 export default function Contenido() {
   const contents = useStore((s) => s.getContents())
-  const sponsors = useStore((s) => s.getSponsors())
   const isSocio = useStore((s) => s.isSocio())
   const [tab, setTab] = useState<'entrevistas' | 'capacitaciones'>('entrevistas')
 
@@ -26,27 +23,12 @@ export default function Contenido() {
     [contents],
   )
   const [featured, ...rest] = sorted
-  const elukamoSponsor = sponsors[0]
 
   return (
     <div className="mx-auto max-w-2xl pb-6 lg:max-w-6xl lg:pb-16">
-      {/* Header ELUKAMO + sponsor-elukamo box + tabs */}
+      {/* Header ELUKAMO + tabs */}
       <div className="bg-ink px-5 pb-2.5 pt-3.5 lg:rounded-b-[20px] lg:px-10 lg:pb-4 lg:pt-8">
         <div className="type-display text-[22px] leading-none text-night-ink lg:text-[46px] lg:tracking-[0.02em]">ELUKAMO</div>
-        {elukamoSponsor && (
-          <div className="mt-3.5 flex items-center justify-between gap-3 rounded-[10px] border border-dashed border-accent/50 bg-white/[0.07] px-3.5 py-2.5 lg:mt-6 lg:max-w-md lg:gap-5 lg:rounded-[14px] lg:px-6 lg:py-4">
-            <div className="min-w-0">
-              <div className="text-[8px] font-bold uppercase tracking-[0.12em] text-accent lg:text-[11px]">Sponsor Elukamo</div>
-              <div className="type-serif mt-0.5 truncate text-[13px] text-night-ink lg:mt-1 lg:text-[18px]">{elukamoSponsor.name}</div>
-            </div>
-            <span className="shrink-0 rounded-[4px] bg-accent px-2 py-1 text-[9px] font-bold uppercase text-accent-ink lg:hidden">
-              Sponsor
-            </span>
-            <span className="hidden shrink-0 items-center justify-center rounded-[10px] bg-accent text-accent-ink lg:flex lg:h-12 lg:w-12">
-              <Sparkles size={22} />
-            </span>
-          </div>
-        )}
         <div className="mt-2.5 flex border-b border-white/[0.08] lg:mt-6 lg:gap-2">
           {(['entrevistas', 'capacitaciones'] as const).map((t) => (
             <button
