@@ -16,3 +16,17 @@ import { IS_REMOTE } from '../../data/store'
 export const AVISO_BORRADO = IS_REMOTE
   ? 'Esta acción es permanente: se borra del sistema y el cambio lo ve todo el público al instante.'
   : 'Podés recrearlo o reiniciar la demo para volver a los datos originales.'
+
+/**
+ * Lo mismo, para las órdenes: el panel hablaba de «las órdenes de la demo» y de «confirmación
+ * manual en la demo» aunque contra el backend real esas órdenes son compras de gente de verdad
+ * y confirmarlas es dar una entrada por pagada. Llamarlo demo invita a tocar el botón para
+ * probar.
+ */
+export const LEAD_ORDENES = IS_REMOTE
+  ? 'Editá precios y links de pago de Mercado Pago por plan, y gestioná las órdenes de compra.'
+  : 'Editá precios y links de pago de Mercado Pago por plan, y gestioná las órdenes de la demo.'
+
+export const AVISO_CONFIRMACION_MANUAL = IS_REMOTE
+  ? 'Confirmar una orden da la entrada por pagada: verificá el pago en Mercado Pago antes. La conciliación automática por webhook llega en Fase 1.'
+  : 'Confirmación manual en la demo · la conciliación automática por webhook de Mercado Pago llega en Fase 1.'

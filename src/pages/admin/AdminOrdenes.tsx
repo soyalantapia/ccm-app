@@ -5,6 +5,7 @@ import type { OrderStatus } from '../../data/types'
 import { OpsPlanEditor } from '../../features/admin/OpsPlanEditor'
 import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
 import { formatDateTime, formatMoney } from '../../features/admin/opsFormat'
+import { AVISO_CONFIRMACION_MANUAL, LEAD_ORDENES } from '../../features/admin/copyDestructivo'
 
 const STATUS_META: Record<OrderStatus, { label: string; tone: BadgeTone }> = {
   iniciada: { label: 'Iniciada', tone: 'neutral' },
@@ -92,7 +93,7 @@ export default function AdminOrdenes() {
       <SectionTitle
         eyebrow="Admin · Entradas"
         title="Entradas y órdenes"
-        lead="Editá precios y links de pago de Mercado Pago por plan, y gestioná las órdenes de la demo."
+        lead={LEAD_ORDENES}
       />
 
       {/* ─── Planes (PRD §10.15) ─── */}
@@ -183,10 +184,7 @@ export default function AdminOrdenes() {
           </>
         )}
 
-        <p className="mt-4 text-xs leading-relaxed text-ink-soft/80">
-          Confirmación manual en la demo · la conciliación automática por webhook de Mercado Pago llega
-          en Fase 1.
-        </p>
+        <p className="mt-4 text-xs leading-relaxed text-ink-soft/80">{AVISO_CONFIRMACION_MANUAL}</p>
       </section>
     </div>
   )
