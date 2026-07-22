@@ -71,6 +71,10 @@ const NAV_RIGHT: NavItem[] = [
   { to: '/admin/galerias', label: 'Sponsors', icon: Images, needs: 'content:write' },
 ]
 const MORE: NavItem[] = [
+  // Convocatorias estaba declarada en SECTIONS pero en NINGÚN nav del celular: desde el teléfono
+  // no había forma de llegar salvo tipeando /admin/convocatorias a mano. Y es justo la sección
+  // que se le muestra a las universidades.
+  { to: '/admin/convocatorias', label: 'Convocatorias', icon: ClipboardList, needs: 'convocatorias:write' },
   { to: '/admin/postulaciones', label: 'Postulaciones', icon: Inbox, needs: 'applications:read' },
   { to: '/admin/catalogo', label: 'Expositores', icon: Store, needs: 'catalog:write' },
   { to: '/admin/contenido', label: 'Contenido', icon: Film, needs: 'content:write' },
