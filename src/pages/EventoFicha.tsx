@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowUpRight, CalendarDays, Check, ChevronLeft, Clock, Lock, MapPin } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, Check, ChevronLeft, Clock, Lock, MapPin, Ticket } from 'lucide-react'
 import { ButtonLink, EmptyState, Eyebrow, Img, PagePending, SectionTitle } from '../components/ui'
 import { store, useStore } from '../data/store'
 import { useEvents } from '../data/queries'
@@ -141,6 +141,15 @@ export default function EventoFicha() {
             <MapPin size={15} className="shrink-0 text-accent" />
             {event.venue} · {event.address}
           </span>
+          {event.price != null && (
+            // El precio va en la misma fila que fecha, horario y sede: es un dato del evento,
+            // no una promoción. Se muestra aunque todavía no haya checkout — que exista el
+            // número ya cumple la regla del cliente de que una capacitación no salga gratis.
+            <span className="flex items-center gap-2 text-sm font-medium text-ink">
+              <Ticket size={15} className="shrink-0 text-accent" />
+              {formatMoney(event.price)}
+            </span>
+          )}
           <ButtonLink
             href={event.mapsUrl}
             target="_blank"
