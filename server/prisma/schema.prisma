@@ -109,6 +109,7 @@ enum PaymentKind {
   ticket_order
   membership
   ad_campaign
+  event // un evento con precio (capacitación, workshop): se cobra solo, sin pasar por TicketPlan
 }
 
 // Estado del cobro en MP (independiente del estado de negocio del recurso).

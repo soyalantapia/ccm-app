@@ -13,7 +13,7 @@
  * líneas y se entregan de a una, marcando `PaymentItem.deliveredAt`, así una entrega parcial es
  * reanudable y el reintento no re-activa lo ya entregado.
  */
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import { prisma } from '../lib/prisma.js'
 import { env } from '../lib/env.js'
 import * as mpApi from '../lib/mpApi.js'
@@ -136,7 +136,10 @@ function mapearEstado(estadoMp: string): EstadoPago {
 }
 
 /** Subconjunto del cliente Prisma que usa `activar` — así acepta tanto `prisma` como un `tx`. */
-type ClientePrisma = Pick<typeof prisma, 'ticketOrder' | 'adCampaign' | 'membership'>
+type ClientePrisma = Pick<
+  typeof prisma,
+  'ticketOrder' | 'adCampaign' | 'membership' | 'registration' | '$queryRaw'
+>
 
 /**
  * Activa lo que corresponda según el tipo de cobro. TIRA si no pudo entregar de verdad — quien
@@ -169,6 +172,44 @@ async function activar(
       throw new Error(`membership sin deviceId para resourceId=${resourceId}: no se puede activar (¿Device borrado?)`)
     }
     await becomeSocio(deviceId, amount, tx)
+    return
+  }
+  if (kind === 'event') {
+    // Entregar un evento pago = crear la inscripción. Dos cosas que NO se pueden hacer acá:
+    //
+    // 1. Llamar a register(): abre su propia transacción y no vería esta, así que la inscripción
+    //    quedaría fuera del mismo commit que marca la línea como entregada. Si algo falla en el
+    //    medio, el comprador queda pago y sin lugar (o al revés).
+    // 2. Un create pelado: MP reenvía el aviso seguido, y el @@unique(deviceId,eventId,blockId)
+    //    NO protege este caso porque blockId es null y en Postgres dos NULL se consideran
+    //    distintos dentro de un índice único. Dos avisos = dos inscripciones = dos QR.
+    //
+    // Por eso se replica el lock que ya usa register() para el camino sin bloque: se bloquea la
+    // fila del Event, se busca una inscripción previa del device y recién ahí se crea o reactiva.
+    if (!deviceId) {
+      throw new Error(`event sin deviceId para resourceId=${resourceId}: no se puede inscribir (¿Device borrado?)`)
+    }
+    await tx.$queryRaw`SELECT id FROM "Event" WHERE id = ${resourceId} FOR UPDATE`
+    const previa = await tx.registration.findFirst({
+      where: { deviceId, eventId: resourceId, blockId: null },
+    })
+    if (previa?.status === 'confirmada') return // ya entregado: el reintento de MP no duplica
+    if (previa) {
+      await tx.registration.update({
+        where: { id: previa.id },
+        data: { status: 'confirmada', ts: new Date() },
+      })
+      return
+    }
+    await tx.registration.create({
+      data: {
+        id: `reg_${randomUUID()}`,
+        deviceId,
+        eventId: resourceId,
+        blockId: null,
+        status: 'confirmada',
+      },
+    })
     return
   }
   const camp = await tx.adCampaign.findUnique({ where: { id: resourceId } })

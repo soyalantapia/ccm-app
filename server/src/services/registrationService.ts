@@ -37,6 +37,18 @@ export async function register(
   // recibir un QR para algo que ya sucedió). El front revierte el optimista ante este 409.
   if (event.past) throw conflict('EVENT_PAST', 'Este evento ya finalizó; las inscripciones están cerradas.')
 
+  // Evento con precio: no se entra gratis, ni por el CTA ni por un bloque de la grilla. El lugar
+  // lo crea el aviso de pago de Mercado Pago (mpWebhookService.activar), no esta ruta.
+  // Sin este guard, apagar el botón en la pantalla es cosmético: el POST sigue abierto y alguien
+  // que sepa el id del bloque se lleva el lugar sin pagar. Y es justo lo que el precio venía a
+  // evitar — el cliente lo puso como filtro, no como decoración.
+  if (event.price != null) {
+    throw conflict(
+      'EVENT_REQUIRES_PAYMENT',
+      'Este evento tiene un valor: el lugar se confirma al completar el pago.',
+    )
+  }
+
   // Gate socioOnly a nivel evento (el bloque lo hereda).
   if (event.socioOnly) {
     const membership = await prisma.membership.findUnique({ where: { deviceId } })

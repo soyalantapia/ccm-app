@@ -201,7 +201,7 @@ export default function EventoFicha() {
                   <div key={day} className={i > 0 ? 'mt-4' : ''}>
                     {dayEntries.length > 1 && <Eyebrow className="pb-5 pt-2">{dayLabel(day)}</Eyebrow>}
                     {dayBlocks.map((block) => (
-                      <BlockRow key={block.id} block={block} />
+                      <BlockRow key={block.id} block={block} dePago={event.price != null} />
                     ))}
                   </div>
                 ))}

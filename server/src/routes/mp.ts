@@ -59,7 +59,7 @@ mpRouter.get('/mp/callback', async (req, res) => {
 
 /** Una línea del carrito. El monto NO se acepta: lo calcula el server. */
 const lineaSchema = z.object({
-  kind: z.enum(['ticket_order', 'membership', 'ad_campaign']),
+  kind: z.enum(['ticket_order', 'membership', 'ad_campaign', 'event']),
   resourceId: z.string().min(1),
 })
 

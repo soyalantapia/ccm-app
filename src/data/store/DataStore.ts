@@ -63,7 +63,8 @@ export type NewConvocatoria = Omit<Convocatoria, 'id' | 'slug'> & { slug?: strin
 
 /** Una línea del carrito de pago. El monto NO viaja: lo calcula el server. */
 export interface CheckoutItem {
-  kind: 'ticket_order' | 'membership' | 'ad_campaign'
+  /** `event` = un evento con precio (capacitación, workshop). Se cobra solo, sin TicketPlan. */
+  kind: 'ticket_order' | 'membership' | 'ad_campaign' | 'event'
   resourceId: string
 }
 

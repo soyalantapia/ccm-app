@@ -12,6 +12,11 @@ vi.mock('../lib/prisma.js', () => {
     // calcular expiresAt — ese dato no viaja en el Payment (que solo tiene el monto).
     adCampaign: { findUnique: vi.fn(), update: vi.fn() },
     membership: { upsert: vi.fn() },
+    // Un evento con precio se entrega creando la inscripción, así que `activar()` toca
+    // Registration. Y `$queryRaw` porque esa creación va detrás del mismo `SELECT ... FOR UPDATE`
+    // sobre la fila del Event que usa register(): el @@unique no protege con blockId null.
+    registration: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    $queryRaw: vi.fn(),
     // `$transaction` en sus dos formas. Con callback le pasa el MISMO cliente mockeado (un tx de
     // Prisma expone la misma superficie). No simula rollback: lo que estos tests verifican es el
     // resultado final, no el rollback.
@@ -56,6 +61,11 @@ beforeEach(() => {
   // Por default MP no conoce ningún pago vivo para la preferencia: un rechazo es un rechazo y
   // punto. Los tests del reintento dentro de la misma preferencia lo pisan.
   vi.mocked(mpApi.searchPaymentsByExternalReference).mockResolvedValue([] as never)
+  // Entrega de un evento pago: por default no hay inscripción previa y el lock no devuelve nada.
+  vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never)
+  vi.mocked(prisma.registration.findFirst).mockResolvedValue(null as never)
+  vi.mocked(prisma.registration.create).mockResolvedValue({} as never)
+  vi.mocked(prisma.registration.update).mockResolvedValue({} as never)
 })
 
 function pagoAprobado(ref: string, status: string = 'approved') {
@@ -250,6 +260,91 @@ describe('webhook — activa el recurso al aprobarse', () => {
     // El tercer argumento es el cliente de la transacción (para que alta de socio y marca de
     // entrega sean atómicas): no se fija en cuál, sí en que el monto no lo elige el cliente.
     expect(becomeSocio).toHaveBeenCalledWith('dev_1', 9900, expect.anything())
+  })
+
+  it('un evento pago crea la inscripción del comprador', async () => {
+    cobroFake({ id: 'pay_ev', deviceId: 'dev_1', amount: 45000 }, [
+      { kind: 'event', resourceId: 'ev_taller', amount: 45000 },
+    ])
+    pagoAprobado('pay_ev')
+    await handleNotification('111', true)
+    expect(prisma.registration.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          deviceId: 'dev_1',
+          eventId: 'ev_taller',
+          blockId: null,
+          status: 'confirmada',
+        }),
+      }),
+    )
+  })
+
+  it('la inscripción se crea detrás del lock de la fila del Event, no con un create pelado', async () => {
+    // Sin el lock, dos avisos de MP en carrera crean DOS inscripciones: el @@unique
+    // (deviceId,eventId,blockId) no protege este caso porque blockId es null y en Postgres dos
+    // NULL se consideran distintos dentro de un índice único.
+    cobroFake({ id: 'pay_ev2', deviceId: 'dev_1', amount: 45000 }, [
+      { kind: 'event', resourceId: 'ev_taller', amount: 45000 },
+    ])
+    pagoAprobado('pay_ev2')
+    await handleNotification('111', true)
+    const sql = vi.mocked(prisma.$queryRaw).mock.calls[0][0] as unknown as string[]
+    expect(sql.join('?')).toContain('"Event"')
+    expect(sql.join('?')).toContain('FOR UPDATE')
+    expect(vi.mocked(prisma.$queryRaw).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(prisma.registration.create).mock.invocationCallOrder[0],
+    )
+  })
+
+  it('un aviso repetido NO genera una segunda inscripción (ni un segundo QR)', async () => {
+    // MP reenvía el aviso seguido. Si ya hay una inscripción confirmada, activar() sale sin tocar
+    // nada: es el caso que evita que el comprador aparezca dos veces en la lista de la puerta.
+    vi.mocked(prisma.registration.findFirst).mockResolvedValue({
+      id: 'reg_1',
+      status: 'confirmada',
+    } as never)
+    cobroFake({ id: 'pay_ev3', deviceId: 'dev_1', amount: 45000 }, [
+      { kind: 'event', resourceId: 'ev_taller', amount: 45000 },
+    ])
+    pagoAprobado('pay_ev3')
+    await handleNotification('111', true)
+    expect(prisma.registration.create).not.toHaveBeenCalled()
+    expect(prisma.registration.update).not.toHaveBeenCalled()
+  })
+
+  it('si el comprador había cancelado, se reactiva su fila en vez de crear otra', async () => {
+    vi.mocked(prisma.registration.findFirst).mockResolvedValue({
+      id: 'reg_1',
+      status: 'cancelada',
+    } as never)
+    cobroFake({ id: 'pay_ev4', deviceId: 'dev_1', amount: 45000 }, [
+      { kind: 'event', resourceId: 'ev_taller', amount: 45000 },
+    ])
+    pagoAprobado('pay_ev4')
+    await handleNotification('111', true)
+    expect(prisma.registration.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'reg_1' },
+        data: expect.objectContaining({ status: 'confirmada' }),
+      }),
+    )
+    expect(prisma.registration.create).not.toHaveBeenCalled()
+  })
+
+  it('un evento pago SIN device no se entrega en silencio: tira para que MP reintente', async () => {
+    // Payment.device tiene onDelete: SetNull. Si el Device se borra entre el checkout y el aviso,
+    // deviceId llega null: cobrar y no inscribir a nadie, sin rastro, es el peor resultado.
+    cobroFake({ id: 'pay_ev5', deviceId: null, amount: 45000 }, [
+      { kind: 'event', resourceId: 'ev_taller', amount: 45000 },
+    ])
+    pagoAprobado('pay_ev5')
+    // Propaga: la ruta devuelve 5xx y MP reintenta. Es el mismo contrato que membership — un
+    // fallo de entrega nunca puede quedar grabado como entregado.
+    await expect(handleNotification('111', true)).rejects.toThrow(/no se puede inscribir/)
+    expect(prisma.registration.create).not.toHaveBeenCalled()
+    // La línea NO queda marcada como entregada, así que el reintento vuelve a intentarla.
+    expect(prisma.paymentItem.update).not.toHaveBeenCalled()
   })
 
   it('una campaña se pone al aire con su ventana de horas', async () => {

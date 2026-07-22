@@ -1,0 +1,21 @@
+-- Suma 'event' a PaymentKind: un EVENTO pasa a ser cobrable por sí mismo, igual que la
+-- membresía. Es el camino para vender una capacitación o un workshop —que en este modelo es un
+-- evento con precio— sin abrir el alta de TicketPlan ni tocar el circuito que hoy vende las VIP.
+--
+-- Por qué acá y no colgado de TicketPlan: cobrar nunca requirió una fila de plan. `membership`
+-- ya cobra en producción resolviendo el monto desde una constante y entregando con becomeSocio,
+-- sin tocar TicketPlan. Agregar un cuarto kind es aditivo; abrir TicketPlan implicaba PlanId
+-- (unión cerrada compartida entre front y server), dos enums de Postgres cerrados y cirugía
+-- sobre TicketOrder, que es la tabla que tiene plata adentro.
+--
+-- OJO nombre de carpeta: Prisma ordena las migraciones por STRING, no por número. El orden real
+-- del directorio es 0_init, 10_, 11_, 12_, 1_, 2_ … 9_ — o sea que un "13_" correría ANTES que
+-- todo el bloque de Mercado Pago. Por eso el prefijo "9z_": ordena después de
+-- "9_ticket_multi_order_payment", que es la última aplicada. Hay un test que lo verifica
+-- (src/lib/migrationsOrder.test.ts) para que esto no se vuelva a olvidar.
+--
+-- Es ADITIVA y sin rollback destructivo: agregar un valor a un enum no toca ninguna fila. Ojo
+-- que Postgres no permite USAR un valor de enum en la misma transacción en que se lo agrega —
+-- acá sólo se agrega, así que no aplica.
+
+ALTER TYPE "PaymentKind" ADD VALUE IF NOT EXISTS 'event';

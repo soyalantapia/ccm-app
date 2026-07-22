@@ -78,6 +78,27 @@ describe('register — gates del evento', () => {
     })
   })
 
+  it('evento CON PRECIO no se puede tomar gratis → 409 EVENT_REQUIRES_PAYMENT', async () => {
+    // El lugar de un evento pago lo crea el aviso de Mercado Pago, no esta ruta. Sin este guard,
+    // apagar el botón en la pantalla es cosmético: el POST sigue abierto.
+    mockPrisma.event.findUnique.mockResolvedValue({ ...EVENTO_VIVO, price: 45000 })
+    await expect(register('dev_1', 'ev_1')).rejects.toMatchObject({
+      status: 409,
+      code: 'EVENT_REQUIRES_PAYMENT',
+    })
+  })
+
+  it('un evento pago tampoco se puede tomar gratis POR UN BLOQUE de su grilla', async () => {
+    // Ésta es la puerta de atrás: el CTA de arriba dice "Comprar", pero cada renglón de la
+    // agenda tenía su propio "Inscribime" que llamaba a la misma ruta con un blockId.
+    mockPrisma.event.findUnique.mockResolvedValue({ ...EVENTO_VIVO, price: 45000 })
+    await expect(register('dev_1', 'ev_1', 'blk_1')).rejects.toMatchObject({
+      code: 'EVENT_REQUIRES_PAYMENT',
+    })
+    // Ni siquiera llega a abrir la transacción del cupo.
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+  })
+
   it('evento sólo para Socios sin membresía → 403 SOCIO_ONLY', async () => {
     mockPrisma.event.findUnique.mockResolvedValue({ ...EVENTO_VIVO, socioOnly: true })
     mockPrisma.membership.findUnique.mockResolvedValue(null)
