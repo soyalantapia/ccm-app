@@ -1,15 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, MapPin, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Badge, Button, ButtonLink, EmptyState, Img, Sheet, Stat } from '../../components/ui'
 import { store, useStore } from '../../data/store'
-import type { EventBlock } from '../../data/types'
+import type { EventBlock, InscriptoAdmin } from '../../data/types'
 import { CorePageHeader } from '../../features/admin/CorePageHeader'
 import { CorePanel } from '../../features/admin/CorePanel'
 import { CoreOccupancyBar } from '../../features/admin/CoreOccupancyBar'
 import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
 import { OpsEventForm } from '../../features/admin/OpsEventForm'
 import { OpsBlockForm } from '../../features/admin/OpsBlockForm'
+import { formatMoney } from '../../features/tickets/format'
 import { EVENT_TYPE_META, formatDateTime, percent } from '../../features/admin/coreFormat'
 import { AVISO_BORRADO } from '../../features/admin/copyDestructivo'
 
@@ -19,6 +20,7 @@ export default function AdminEventoDetalle() {
   const [editOpen, setEditOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [blockForm, setBlockForm] = useState<{ open: boolean; block?: EventBlock }>({ open: false })
+  const [iniciativaOpen, setIniciativaOpen] = useState(false)
   const [deleteBlock, setDeleteBlock] = useState<EventBlock | null>(null)
 
   const event = useStore((s) => s.getEventById(id))
@@ -31,13 +33,27 @@ export default function AdminEventoDetalle() {
       return { block, avail, localTaken }
     }),
   )
-  const registrations = useStore((s) =>
-    s
-      .getRegistrations()
-      .filter((r) => r.eventId === id)
-      .sort((a, b) => b.ts.localeCompare(a.ts)),
-  )
-  const profile = useStore((s) => s.getProfile())
+  // Las INICIATIVAS que cuelgan de este evento. Se leen de la lista del panel (que incluye
+  // borradores): una iniciativa a medio armar tiene que verse acá, que es donde se la termina.
+  const iniciativas = useStore((s) => s.getAdminEvents().filter((e) => e.parentId === id))
+  // Los inscriptos REALES, de todos los dispositivos. Antes esto salía de getRegistrations(),
+  // que es device-scoped (lo dice el docstring de DataStore): la lista mostraba únicamente las
+  // inscripciones del teléfono desde el que se estaba mirando, o sea casi siempre ninguna. Para
+  // el organizador eso se lee como "no se anotó nadie" y no da ningún síntoma de que esté mal.
+  const [inscriptos, setInscriptos] = useState<InscriptoAdmin[] | null>(null)
+  const [errorInscriptos, setErrorInscriptos] = useState(false)
+  useEffect(() => {
+    let vivo = true
+    setInscriptos(null)
+    setErrorInscriptos(false)
+    store
+      .fetchInscriptos(id)
+      .then((r) => vivo && setInscriptos(r))
+      .catch(() => vivo && setErrorInscriptos(true))
+    return () => {
+      vivo = false
+    }
+  }, [id])
 
   if (!event) {
     return (
@@ -59,9 +75,6 @@ export default function AdminEventoDetalle() {
   const capacity = blocks.reduce((n, b) => n + b.avail.capacity, 0)
   const taken = blocks.reduce((n, b) => n + b.avail.taken, 0)
   const seedTotal = blocks.reduce((n, b) => n + b.block.seedTaken, 0)
-  const deviceName =
-    [profile.fields.firstName?.value, profile.fields.lastName?.value].filter(Boolean).join(' ') ||
-    'Visitante sin datos'
 
   return (
     <div className="px-5 py-8 md:px-10">
@@ -106,6 +119,50 @@ export default function AdminEventoDetalle() {
       <div className="mt-10 grid gap-x-10 gap-y-10 lg:grid-cols-3">
         <div className="space-y-10 lg:col-span-2">
           {/* Bloques con ocupación en vivo */}
+          {/* Iniciativas: workshops, capacitaciones o lo que sea, adentro de este evento.
+              Cada una es un evento con su ficha, su portada, su link propio y su precio — por eso
+              se cargan con el MISMO formulario de evento, sólo que ya saben de quién cuelgan. */}
+          <CorePanel title="Iniciativas" note="Workshops y capacitaciones adentro de este evento">
+            <div className="mb-5">
+              <Button variant="outline" size="sm" onClick={() => setIniciativaOpen(true)}>
+                <Plus size={13} strokeWidth={2} /> Agregar iniciativa
+              </Button>
+            </div>
+            {iniciativas.length === 0 ? (
+              <p className="py-2 text-sm text-ink-soft">
+                Todavía no hay iniciativas. Una iniciativa es cualquier cosa que pase adentro de
+                este evento y que quieras difundir o cobrar aparte: un workshop, una capacitación,
+                una masterclass. Tiene su propia página y su propio link para compartir.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {iniciativas.map((ini) => (
+                  <li
+                    key={ini.id}
+                    className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-1 border-b border-line pb-3 last:border-b-0 last:pb-0"
+                  >
+                    <div className="min-w-0">
+                      <Link
+                        to={`/admin/eventos/${ini.id}`}
+                        className="type-serif text-[15px] text-ink hover:text-accent-strong"
+                      >
+                        {ini.title}
+                      </Link>
+                      <p className="mt-0.5 text-[12px] text-ink-soft">
+                        {ini.dateLabel}
+                        {ini.price != null && ` · ${formatMoney(ini.price)}`}
+                        {ini.capacity != null && ` · ${ini.capacity} lugares`}
+                      </p>
+                    </div>
+                    <Badge tone={ini.published ? 'success' : 'outline'}>
+                      {ini.published ? 'Publicada' : 'Borrador'}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CorePanel>
+
           <CorePanel title="Bloques" note="Cupo seed + inscripciones de esta demo, en vivo">
             <div className="mb-5">
               <Button variant="outline" size="sm" onClick={() => setBlockForm({ open: true })}>
@@ -156,44 +213,47 @@ export default function AdminEventoDetalle() {
             )}
           </CorePanel>
 
-          {/* Inscriptos locales */}
-          <CorePanel title="Inscriptos de esta demo" note="Identidad por dispositivo, sin contraseñas">
-            {registrations.length === 0 ? (
+          {/* Inscriptos reales (todos los dispositivos) */}
+          <CorePanel title="Inscriptos" note="Todos los dispositivos, en vivo desde el servidor">
+            {errorInscriptos ? (
+              <p className="py-4 text-sm leading-relaxed text-danger">
+                No pudimos traer la lista de inscriptos. Recargá la página; si sigue, puede que tu
+                usuario no tenga permiso para ver datos personales.
+              </p>
+            ) : inscriptos === null ? (
+              <p className="py-4 text-sm text-ink-soft">Cargando inscriptos…</p>
+            ) : inscriptos.length === 0 ? (
               <p className="py-4 text-sm leading-relaxed text-ink-soft">
-                Todavía no hay inscripciones desde este dispositivo. Abrí la app en otra pestaña e
-                inscribite a un bloque: la fila aparece acá al instante.
+                Todavía no se anotó nadie a este evento.
               </p>
             ) : (
               <ul>
-                {registrations.map((reg) => {
-                  const block = reg.blockId ? blocks.find((b) => b.block.id === reg.blockId)?.block : undefined
-                  return (
-                    <li
-                      key={reg.id}
-                      className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-line py-3.5 last:border-b-0"
-                    >
-                      <div className="min-w-0">
-                        <p className="type-serif text-[15px] text-ink">{deviceName}</p>
-                        <p className="mt-0.5 truncate text-[12px] text-ink-soft">
-                          {block ? block.title : 'Inscripción general'}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-3">
-                        <Badge tone={reg.status === 'confirmada' ? 'success' : 'danger'}>
-                          {reg.status === 'confirmada' ? 'Confirmada' : 'Cancelada'}
-                        </Badge>
-                        <span className="text-[11px] tabular-nums text-ink-soft/70">
-                          {formatDateTime(reg.ts)}
-                        </span>
-                      </div>
-                    </li>
-                  )
-                })}
+                {inscriptos.map((ins) => (
+                  <li
+                    key={ins.id}
+                    className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-line py-3.5 last:border-b-0"
+                  >
+                    <div className="min-w-0">
+                      <p className="type-serif text-[15px] text-ink">
+                        {ins.nombre ?? 'Sin nombre cargado'}
+                      </p>
+                      <p className="mt-0.5 truncate text-[12px] text-ink-soft">
+                        {ins.blockTitle ?? 'Inscripción general'}
+                        {ins.email && ` · ${ins.email}`}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="text-[11px] tabular-nums text-ink-soft/70">
+                        {formatDateTime(ins.ts)}
+                      </span>
+                    </div>
+                  </li>
+                ))}
               </ul>
             )}
             <p className="mt-4 text-[11px] leading-relaxed text-ink-soft/70">
-              Los {seedTotal} inscriptos previos del seed se muestran agregados por bloque; en Fase 1
-              cada inscripto tiene su ficha individual con acciones masivas (PRD §10.2).
+              Además hay {seedTotal} inscriptos previos cargados como baseline de cupo, que se
+              cuentan en la ocupación pero no tienen ficha individual.
             </p>
           </CorePanel>
         </div>
@@ -205,8 +265,8 @@ export default function AdminEventoDetalle() {
             <Stat value={`${percent(taken, capacity)}%`} label="Ocupación" tone="accent" />
             <Stat value={taken} label="Inscriptos totales" />
             <Stat
-              value={registrations.filter((r) => r.status === 'confirmada').length}
-              label="De esta demo"
+              value={inscriptos?.length ?? 0}
+              label="Con ficha"
             />
           </div>
         </aside>
@@ -214,6 +274,11 @@ export default function AdminEventoDetalle() {
 
       {/* Modales: editar evento, crear/editar bloque, confirmaciones de borrado */}
       <OpsEventForm open={editOpen} event={event} onClose={() => setEditOpen(false)} />
+      <OpsEventForm
+        open={iniciativaOpen}
+        parentId={event.id}
+        onClose={() => setIniciativaOpen(false)}
+      />
       <OpsBlockForm
         open={blockForm.open}
         eventId={event.id}

@@ -18,7 +18,7 @@ import { ESTADOS_MP_CON_PLATA_VIVA } from './mpEstados.js'
 import { SOCIO_PRICE, priceForCampaign } from '../../../src/lib/pricing.js'
 import type { AdSlot } from '@domain/types'
 
-export type PaymentKind = 'ticket_order' | 'membership' | 'ad_campaign'
+export type PaymentKind = 'ticket_order' | 'membership' | 'ad_campaign' | 'event'
 
 /** Lo que pide el comprador: qué recursos quiere pagar. Sin monto (lo calcula el server). */
 export interface LineaPedida {
@@ -88,6 +88,27 @@ async function resolverCrudo(kind: PaymentKind, resourceId: string, deviceId?: s
     const membresia = await prisma.membership.findUnique({ where: { deviceId: resourceId } })
     if (membresia?.tier === 'socio') throw conflict('ALREADY_PAID', 'Ya sos Socio CCM')
     return { kind, resourceId, titulo: 'Membresía Socio CCM', amount: SOCIO_PRICE }
+  }
+  if (kind === 'event') {
+    // Un evento con precio se vende solo, sin fila de TicketPlan. Los guards son los mismos que
+    // los de register(), y en el mismo orden, para que comprar y anotarse no digan cosas
+    // distintas sobre el mismo evento.
+    const ev = await prisma.event.findUnique({ where: { id: resourceId } })
+    // Borrador o inexistente responden igual: un evento sin publicar no se puede comprar ni
+    // sondear desde afuera.
+    if (!ev || !ev.published) throw notFound('RESOURCE_NOT_FOUND', 'El evento no existe')
+    if (ev.past) throw conflict('EVENT_PAST', 'Este evento ya finalizó')
+    // Sin precio NO es gratis: es "todavía no está a la venta". Dejarlo pasar generaría un cobro
+    // de $0 que MP rechaza con un 400 genérico, y el comprador vería un error sin explicación.
+    if (ev.price == null) throw conflict('EVENT_NOT_FOR_SALE', 'Este evento todavía no está a la venta')
+    if (!deviceId) throw notFound('RESOURCE_NOT_FOUND', 'El evento no existe')
+    // Ya inscripto = ya pago: mismo patrón de guard que ticket_order y membership. Sin esto,
+    // alguien podía pagar dos veces el mismo workshop.
+    const yaInscripto = await prisma.registration.findFirst({
+      where: { deviceId, eventId: resourceId, blockId: null, status: 'confirmada' },
+    })
+    if (yaInscripto) throw conflict('ALREADY_PAID', 'Ya tenés tu lugar en este evento')
+    return { kind, resourceId, titulo: ev.title, amount: ev.price }
   }
   // ad_campaign: el modelo AdCampaign NO tiene deviceId en el schema, así que acá no hay
   // pertenencia que verificar — es un gap conocido (decisión explícita, no un olvido): con el

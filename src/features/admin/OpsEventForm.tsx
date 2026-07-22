@@ -3,6 +3,7 @@ import { Button, Field, Img, Input, Select, Sheet, Textarea, toast, ImageUpload 
 import { store } from '../../data/store'
 import type { EventItem, EventType } from '../../data/types'
 import { fechaEnTexto, esTextoAutomatico, textoContradiceLaFecha } from '../../lib/eventDate'
+import { validarPrecioEvento } from '../eventos/precioEvento'
 import { config } from '../../config'
 
 const TYPE_OPTIONS: { value: EventType; label: string }[] = [
@@ -34,6 +35,12 @@ type Form = {
   address: string
   description: string
   cover: string
+  /** Precio en pesos, como texto porque viene de un input. Vacío = sin precio (no se vende). */
+  price: string
+  /** Cupo total del evento. Vacío = sin tope, que es como se comportó siempre. */
+  capacity: string
+  /** Los que el organizador ya anotó por fuera (WhatsApp, planilla) y no están en la base. */
+  seedTaken: string
   // Flags de visibilidad: sin estos en el Form, nunca entraban al patch y la whitelist
   // `if (k in patch)` del backend jamás los veía → quedaban congelados en el default del
   // create. El organizador no podía archivar un evento ni marcarlo exclusivo de Socios.
@@ -54,6 +61,9 @@ const empty: Form = {
   venue: config.venue.name,
   address: config.venue.address,
   description: '',
+  price: '',
+  capacity: '',
+  seedTaken: '',
   past: false,
   socioOnly: false,
   cover: COVER_OPTIONS[0].value,
@@ -71,6 +81,9 @@ function fromEvent(e: EventItem): Form {
     address: e.address,
     description: e.description,
     cover: e.cover,
+    price: e.price != null ? String(e.price) : '',
+    capacity: e.capacity != null ? String(e.capacity) : '',
+    seedTaken: e.seedTaken ? String(e.seedTaken) : '',
     past: e.past ?? false,
     socioOnly: e.socioOnly ?? false,
   }
@@ -80,11 +93,17 @@ interface Props {
   open: boolean
   /** Evento a editar; omitido = crear nuevo. */
   event?: EventItem
+  /**
+   * Al crear: de qué evento cuelga esta INICIATIVA. Se pasa desde la ficha del padre, así el
+   * organizador no elige "qué tipo de entidad es" — elige dónde está parado y el sistema
+   * completa el resto.
+   */
+  parentId?: string
   onClose: () => void
 }
 
 /** Alta y edición de eventos desde el admin (CRUD real sobre la capa local). */
-export function OpsEventForm({ open, event, onClose }: Props) {
+export function OpsEventForm({ open, event, parentId, onClose }: Props) {
   const [f, setF] = useState<Form>(empty)
   const [error, setError] = useState('')
 
@@ -138,6 +157,13 @@ export function OpsEventForm({ open, event, onClose }: Props) {
       setError('Completá los campos obligatorios.')
       return
     }
+    // Reglas del precio (vacío ≠ cero, y precio ≠ candado de Socios) en precioEvento.ts, con tests.
+    const precio = validarPrecioEvento({ price: f.price, socioOnly: f.socioOnly })
+    if (!precio.ok) {
+      setError(precio.error)
+      return
+    }
+    const price = precio.price
     // El link de mapa se recalcula cuando cambia la SEDE. Antes la condición era
     // `event?.mapsUrl ? conservarlo : generarlo`, usando "existe" como proxy de "lo cargó el
     // organizador a mano" — pero el form nunca expuso mapsUrl y el create siempre lo genera,
@@ -159,6 +185,9 @@ export function OpsEventForm({ open, event, onClose }: Props) {
       mapsUrl,
       description: f.description.trim(),
       cover: f.cover,
+      // Explícito como los booleanos: borrar el precio tiene que llegar como null, no
+      // desaparecer del patch y quedar congelado en el valor anterior.
+      price,
       // Booleanos SIEMPRE explícitos (no `|| undefined`): destildar un flag tiene que llegar
       // al backend como false, no desaparecer del patch.
       past: f.past,
@@ -177,7 +206,7 @@ export function OpsEventForm({ open, event, onClose }: Props) {
             : '✓ Borrador guardado',
       )
     } else {
-      store.createEvent({ ...data, sponsorIds: [] })
+      store.createEvent({ ...data, sponsorIds: [], ...(parentId ? { parentId } : {}) })
       toast(publicar ? '✓ Publicado · ya aparece en la app' : '✓ Borrador guardado · no lo ve el público')
     }
     onClose()
@@ -254,9 +283,38 @@ export function OpsEventForm({ open, event, onClose }: Props) {
             Escribir otro texto (ej: un evento de dos días)
           </button>
         )}
-        <Field label="Horario" hint="Opcional">
-          <Input value={f.timeLabel} onChange={set('timeLabel')} placeholder="17 a 21 hs" />
-        </Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Horario" hint="Opcional">
+            <Input value={f.timeLabel} onChange={set('timeLabel')} placeholder="17 a 21 hs" />
+          </Field>
+          <Field
+            label="Precio"
+            hint="En pesos, sin puntos. Vacío = no se vende, se entra con inscripción."
+          >
+            <Input
+              value={f.price}
+              onChange={set('price')}
+              inputMode="numeric"
+              placeholder="45000"
+            />
+          </Field>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Cupo" hint="Lugares totales. Vacío = sin tope.">
+            <Input value={f.capacity} onChange={set('capacity')} inputMode="numeric" placeholder="30" />
+          </Field>
+          <Field label="Inscriptos previos" hint="Los que ya anotaste por fuera de la app.">
+            <Input value={f.seedTaken} onChange={set('seedTaken')} inputMode="numeric" placeholder="0" />
+          </Field>
+        </div>
+        {f.price.trim() !== '' && f.socioOnly && (
+          // El candado rechaza al no-socio antes de mirar el precio: con los dos puestos, la
+          // venta no existe. Se avisa mientras escribe, no recién al guardar.
+          <p className="text-[12px] leading-relaxed text-danger">
+            Con precio cargado, «Solo Socios» impide que alguien que no es Socio pueda comprar.
+            Sacá el candado, o dejá el precio vacío.
+          </p>
+        )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Lugar" required>
             <Input value={f.venue} onChange={set('venue')} placeholder="Hotel Quinto Centenario" required />

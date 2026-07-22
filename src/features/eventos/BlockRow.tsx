@@ -10,7 +10,7 @@ import type { EventBlock } from '../../data/types'
  * con disponibilidad EN VIVO (cupo seed + inscripciones locales) e inscripción D22.
  * Renderizar SIEMPRE con key={block.id} (la reactividad del selector depende del remount).
  */
-export function BlockRow({ block }: { block: EventBlock }) {
+export function BlockRow({ block, dePago = false }: { block: EventBlock; dePago?: boolean }) {
   const availability = useAvailability(block.id)
   const registration = useRegistrations().find(
     (r) => r.status === 'confirmada' && r.eventId === block.eventId && r.blockId === block.id,
@@ -96,6 +96,11 @@ export function BlockRow({ block }: { block: EventBlock }) {
               Cancelar
             </Button>
           </>
+        ) : dePago ? (
+          // El evento tiene precio: el lugar se compra una sola vez, arriba, y da acceso a toda
+          // la jornada. Ofrecer "Inscribime" acá regalaría lo que el precio venía a filtrar.
+          // El server además lo rechaza (EVENT_REQUIRES_PAYMENT): esto es la mitad visible.
+          <span className="text-[12px] text-ink-soft">Incluido con tu lugar</span>
         ) : availability.full ? (
           <>
             <Badge tone="danger">Completo</Badge>

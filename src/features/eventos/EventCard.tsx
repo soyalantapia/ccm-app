@@ -3,6 +3,7 @@ import { ArrowRight, CalendarDays, Lock, MapPin } from 'lucide-react'
 import { Badge, Img } from '../../components/ui'
 import type { EventItem } from '../../data/types'
 import { EVENT_TYPE_LABELS } from './eventMeta'
+import { formatMoney } from '../tickets/format'
 
 interface EventCardProps {
   event: EventItem
@@ -62,6 +63,10 @@ export function EventCard({ event, registered, locked = false }: EventCardProps)
             <span className="eyebrow flex items-center gap-1.5 text-accent-strong">
               <Lock size={11} /> Hacete Socio
             </span>
+          ) : event.price != null ? (
+            // Con precio cargado, el precio ES la señal: reemplaza al "cupo limitado" genérico.
+            // Que el número se vea desde la grilla es lo que filtra antes de entrar a la ficha.
+            <span className="text-[15px] font-medium text-ink">{formatMoney(event.price)}</span>
           ) : (
             <span className="eyebrow text-ink-soft">Cupo limitado</span>
           )}

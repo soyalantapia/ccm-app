@@ -27,11 +27,27 @@ export async function register(
   blockId?: string,
 ): Promise<Registration> {
   const event = await prisma.event.findUnique({ where: { id: eventId } })
-  if (!event) throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
+  // Un borrador responde igual que un evento inexistente. getEvents/getEvent ya lo hacían, pero
+  // acá NO se miraba `published`: con el id de un evento sin publicar —visible en el panel— se
+  // podía crear una inscripción CONFIRMADA, con su QR, contra algo que el organizador todavía
+  // estaba armando. Va primero, antes que past y socioOnly, para no filtrar por el mensaje de error.
+  if (!event || !event.published) throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
 
   // Evento finalizado: cerrar la inscripción (antes se podía inscribir a un evento pasado y
   // recibir un QR para algo que ya sucedió). El front revierte el optimista ante este 409.
   if (event.past) throw conflict('EVENT_PAST', 'Este evento ya finalizó; las inscripciones están cerradas.')
+
+  // Evento con precio: no se entra gratis, ni por el CTA ni por un bloque de la grilla. El lugar
+  // lo crea el aviso de pago de Mercado Pago (mpWebhookService.activar), no esta ruta.
+  // Sin este guard, apagar el botón en la pantalla es cosmético: el POST sigue abierto y alguien
+  // que sepa el id del bloque se lleva el lugar sin pagar. Y es justo lo que el precio venía a
+  // evitar — el cliente lo puso como filtro, no como decoración.
+  if (event.price != null) {
+    throw conflict(
+      'EVENT_REQUIRES_PAYMENT',
+      'Este evento tiene un valor: el lugar se confirma al completar el pago.',
+    )
+  }
 
   // Gate socioOnly a nivel evento (el bloque lo hereda).
   if (event.socioOnly) {
@@ -77,6 +93,20 @@ export async function register(
     const existing = await tx.registration.findFirst({ where: { deviceId, eventId, blockId: null } })
     if (existing?.status === 'confirmada') {
       throw conflict('ALREADY_REGISTERED', 'Ya estás inscripto a este evento')
+    }
+
+    // Cupo del evento. El lock de arriba ya existía pero no se comparaba contra nada: el
+    // comentario original decía "sin bloque, sin cupo". Mientras todo era gratis no dolía; con
+    // un evento que se cobra, sobrevender obliga a devolver plata. Sólo aplica si el organizador
+    // cargó un tope: capacity null = como siempre, sin límite.
+    // Reactivar una inscripción cancelada también consume lugar, por eso el chequeo va antes.
+    if (event.capacity != null) {
+      const confirmadas = await tx.registration.count({
+        where: { eventId, blockId: null, status: 'confirmada' },
+      })
+      if (event.seedTaken + confirmadas >= event.capacity) {
+        throw conflict('EVENT_FULL', 'Este evento está completo')
+      }
     }
     if (existing) {
       return tx.registration.update({

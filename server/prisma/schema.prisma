@@ -109,6 +109,7 @@ enum PaymentKind {
   ticket_order
   membership
   ad_campaign
+  event // un evento con precio (capacitación, workshop): se cobra solo, sin pasar por TicketPlan
 }
 
 // Estado del cobro en MP (independiente del estado de negocio del recurso).
@@ -227,6 +228,13 @@ model Event {
   description String    @db.Text
   cover       String
   price       Int?
+  // Cupo del EVENTO, para lo que se vende o se inscribe a nivel evento (una capacitación, un
+  // workshop). null = sin tope, que es como se comportó siempre. Los bloques de la grilla siguen
+  // teniendo el suyo: son cosas distintas — el del evento limita cuánta gente entra en total.
+  capacity    Int?
+  // Baseline de ocupación, igual que EventBlock.seedTaken: los que el organizador ya anotó por
+  // fuera (WhatsApp, planilla) y no están en la base.
+  seedTaken   Int       @default(0)
   past        Boolean   @default(false)
   socioOnly   Boolean   @default(false) // gate a nivel EVENTO (canon 17); el bloque lo hereda
   // Un evento nace BORRADOR: se puede cargar de a poco sin que el público lo vea a medio hacer.
@@ -236,6 +244,15 @@ model Event {
   // ⚠️ La migración pone DEFAULT true para que los eventos que YA existían sigan publicados, y
   // recién después baja el default a false. Sin ese orden, todo lo que está al aire desaparecía.
   published   Boolean   @default(false)
+
+  // Una INICIATIVA (workshop, capacitación, lo que sea) es un evento colgado de otro: hereda la
+  // ficha, la portada, el link propio y el formulario que el organizador ya conoce, en vez de
+  // duplicar todo eso en el bloque de agenda. `null` = evento de primer nivel.
+  // Restrict, no Cascade: borrar un evento no puede llevarse en silencio las iniciativas que
+  // cuelgan de él (y que pueden tener gente inscripta o pagando).
+  parentId      String?
+  parent        Event?  @relation("EventoHijo", fields: [parentId], references: [id], onDelete: Restrict)
+  iniciativas   Event[] @relation("EventoHijo")
 
   blocks        EventBlock[]
   registrations Registration[]
@@ -247,6 +264,7 @@ model Event {
 
   @@index([type, startDate])
   @@index([past])
+  @@index([parentId])
   // El público sólo ve lo publicado: el índice acompaña ese filtro, que corre en cada visita.
   @@index([published])
 }

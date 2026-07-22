@@ -10,7 +10,7 @@ import { EventCard } from '../features/eventos/EventCard'
 import { formatMoney } from '../features/tickets/format'
 import { vipDesde } from '../features/tickets/vipDesde'
 import { estaPorVenir } from '../lib/eventDate'
-import { EVENT_TYPE_ORDER, EVENT_TYPE_TABS } from '../features/eventos/eventMeta'
+import { EVENT_TYPE_ORDER, EVENT_TYPE_TABS, esDePrimerNivel } from '../features/eventos/eventMeta'
 import {
   CorazonesCta,
   LanzamientoCard,
@@ -23,7 +23,9 @@ import {
 
 /** Listado /eventos: banner del evento principal + Caminos y capacitaciones. */
 export default function Eventos() {
-  const events = useEvents()
+  // Sólo eventos de primer nivel: las iniciativas se ven adentro de la ficha de su padre, no
+  // sueltas en la grilla como si fueran encuentros independientes.
+  const events = useEvents().filter(esDePrimerNivel)
   const registrations = useRegistrations()
   const isSocio = useStore((s) => s.isSocio())
   // El más barato de los VIP, no el primero de la lista (ver features/tickets/vipDesde).

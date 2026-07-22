@@ -23,6 +23,49 @@ eventsRouter.get('/admin/events', requirePermission('events:write'), async (_req
   }
 })
 
+/** GET /api/v1/admin/events/:id/blocks — la agenda de CUALQUIER evento, borradores incluidos.
+ *  Las rutas públicas de abajo devuelven 404 para un borrador (un evento sin publicar no existe
+ *  para nadie fuera del panel); el organizador necesita ver y armar esa agenda igual. */
+eventsRouter.get(
+  '/admin/events/:id/blocks',
+  requirePermission('events:write'),
+  async (req, res, next) => {
+    try {
+      res.json(await eventService.getBlocks(req.params.id, { admin: true }))
+    } catch (err) {
+      next(err)
+    }
+  },
+)
+
+/** GET /api/v1/admin/events/:id/blocks-availability — ídem, el cupo de un borrador. */
+eventsRouter.get(
+  '/admin/events/:id/blocks-availability',
+  requirePermission('events:write'),
+  async (req, res, next) => {
+    try {
+      res.json(await eventService.getEventAvailability(req.params.id, { admin: true }))
+    } catch (err) {
+      next(err)
+    }
+  },
+)
+
+/** GET /api/v1/admin/events/:id/inscriptos — los inscriptos REALES del evento, de todos los
+ *  dispositivos. Devuelve PII, así que va detrás de `people:read` (el permiso del CRM), no de
+ *  `events:write`: quien arma la agenda no necesariamente puede ver datos personales. */
+eventsRouter.get(
+  '/admin/events/:id/inscriptos',
+  requirePermission('people:read'),
+  async (req, res, next) => {
+    try {
+      res.json(await eventService.getInscriptos(req.params.id))
+    } catch (err) {
+      next(err)
+    }
+  },
+)
+
 /** GET /api/v1/events/with-blocks — eventos con bloques embebidos (1 query vs 1+N).
  *  DEBE ir antes de /events/:slug para que Express no capture "with-blocks" como slug. */
 eventsRouter.get('/events/with-blocks', async (_req, res, next) => {

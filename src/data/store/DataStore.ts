@@ -11,6 +11,7 @@ import type {
   EventBlock,
   EventItem,
   Gallery,
+  InscriptoAdmin,
   Membership,
   OrderStatus,
   PlanId,
@@ -63,7 +64,8 @@ export type NewConvocatoria = Omit<Convocatoria, 'id' | 'slug'> & { slug?: strin
 
 /** Una línea del carrito de pago. El monto NO viaja: lo calcula el server. */
 export interface CheckoutItem {
-  kind: 'ticket_order' | 'membership' | 'ad_campaign'
+  /** `event` = un evento con precio (capacitación, workshop). Se cobra solo, sin TicketPlan. */
+  kind: 'ticket_order' | 'membership' | 'ad_campaign' | 'event'
   resourceId: string
 }
 
@@ -284,4 +286,13 @@ export interface DataStore {
    * el `initPoint` de ese pago para ofrecer "retomar el pago en curso".
    */
   startCheckout(items: CheckoutItem[]): Promise<{ initPoint: string; amount: number } | null>
+
+  /**
+   * Inscriptos REALES de un evento (todos los dispositivos), para el panel.
+   *
+   * Es async y va contra el server a propósito: `getRegistrations()` es device-scoped y usarlo
+   * en el panel mostraba sólo las inscripciones del teléfono desde el que se miraba — o sea
+   * casi siempre una lista vacía que se lee como "no se anotó nadie".
+   */
+  fetchInscriptos(eventId: string): Promise<InscriptoAdmin[]>
 }

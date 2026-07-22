@@ -44,6 +44,16 @@ export interface EventItem {
   description: string
   cover: string
   price?: number | null
+  /** Cupo total del evento (para lo que se inscribe o se compra a nivel evento). null = sin tope. */
+  capacity?: number | null
+  /**
+   * De qué evento cuelga esta INICIATIVA (workshop, capacitación, lo que sea). null/ausente =
+   * evento de primer nivel. Las hijas se filtran en los selectores de RENDER del front, no en la
+   * consulta del server: si se filtraran ahí, desaparecerían de la ficha de su propio padre.
+   */
+  parentId?: string | null
+  /** Baseline de ocupación: los que el organizador anotó por fuera y no están en la base. */
+  seedTaken?: number
   sponsorIds?: string[]
   past?: boolean
   /** Capacitación/evento reservado a la membresía Socio CCM (niveles de suscripción). */
@@ -71,6 +81,19 @@ export interface EventBlock {
   seedTaken: number
   speakers: string[]
   description?: string
+}
+
+/** Una inscripción tal como la ve el PANEL: con la persona, no sólo el dispositivo. */
+export interface InscriptoAdmin {
+  id: string
+  deviceId: string
+  blockId: string | null
+  blockTitle: string | null
+  status: string
+  ts: string
+  nombre: string | null
+  email: string | null
+  telefono: string | null
 }
 
 export interface Registration {

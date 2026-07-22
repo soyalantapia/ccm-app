@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowUpRight, CalendarDays, Check, ChevronLeft, Clock, Lock, MapPin } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, Check, ChevronLeft, Clock, Lock, MapPin, Ticket } from 'lucide-react'
 import { ButtonLink, EmptyState, Eyebrow, Img, PagePending, SectionTitle } from '../components/ui'
 import { store, useStore } from '../data/store'
 import { useEvents } from '../data/queries'
 import type { EventBlock } from '../data/types'
 import { BlockRow } from '../features/eventos/BlockRow'
+import { EventCard } from '../features/eventos/EventCard'
 import { EventCta } from '../features/eventos/EventCta'
 import { ConvocatoriaBanner } from '../features/eventos/ConvocatoriaBanner'
 import { PrincipalBody } from '../features/eventos/PrincipalBody'
@@ -93,6 +94,10 @@ export default function EventoFicha() {
   }
   const dayEntries = [...days.entries()]
 
+  /* Iniciativas que cuelgan de este evento. Se listan sólo acá y en el panel: el filtro de la
+     grilla general las saca a propósito, para que no aparezcan como encuentros sueltos. */
+  const iniciativas = events.filter((e) => e.parentId === event.id)
+
   return (
     <>
       {/* Hero: cover con overlay night + volver (app-style) */}
@@ -141,6 +146,15 @@ export default function EventoFicha() {
             <MapPin size={15} className="shrink-0 text-accent" />
             {event.venue} · {event.address}
           </span>
+          {event.price != null && (
+            // El precio va en la misma fila que fecha, horario y sede: es un dato del evento,
+            // no una promoción. Se muestra aunque todavía no haya checkout — que exista el
+            // número ya cumple la regla del cliente de que una capacitación no salga gratis.
+            <span className="flex items-center gap-2 text-sm font-medium text-ink">
+              <Ticket size={15} className="shrink-0 text-accent" />
+              {formatMoney(event.price)}
+            </span>
+          )}
           <ButtonLink
             href={event.mapsUrl}
             target="_blank"
@@ -192,13 +206,34 @@ export default function EventoFicha() {
                   <div key={day} className={i > 0 ? 'mt-4' : ''}>
                     {dayEntries.length > 1 && <Eyebrow className="pb-5 pt-2">{dayLabel(day)}</Eyebrow>}
                     {dayBlocks.map((block) => (
-                      <BlockRow key={block.id} block={block} />
+                      <BlockRow key={block.id} block={block} dePago={event.price != null} />
                     ))}
                   </div>
                 ))}
               </div>
             )}
           </section>
+          )}
+
+          {/* Iniciativas: lo que pasa ADENTRO de este evento y se difunde o se cobra aparte —
+              un workshop, una capacitación. Cada una tiene su propia ficha y su propio link. */}
+          {iniciativas.length > 0 && (
+            <section className="mx-auto max-w-6xl px-5 pb-12 md:pb-16">
+              <SectionTitle
+                eyebrow="Adentro de este evento"
+                title={
+                  <>
+                    Workshops y <em className="text-accent">capacitaciones</em>
+                  </>
+                }
+                lead="Actividades con cupo propio que se reservan aparte."
+              />
+              <div className="mt-8 grid gap-5 md:mt-10 md:grid-cols-2 lg:grid-cols-3">
+                {iniciativas.map((ini) => (
+                  <EventCard key={ini.id} event={ini} registered={false} />
+                ))}
+              </div>
+            </section>
           )}
 
           {/* Convocatoria asociada (solo Caminos) */}

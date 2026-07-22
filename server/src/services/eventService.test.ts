@@ -15,7 +15,8 @@ const mockPrisma = {
 
 vi.mock('../lib/prisma.js', () => ({ prisma: mockPrisma }))
 
-const { getEventAvailability, blockAvailability } = await import('./eventService.js')
+const { getEventAvailability, blockAvailability, getBlocks, generalRegistrationCount } =
+  await import('./eventService.js')
 
 // Escenario: 3 bloques del mismo evento con seedTaken distinto y un bloque que se
 // pasa de capacidad (confirmadas + seedTaken > capacity) para ejercitar el clamp.
@@ -29,9 +30,14 @@ const CONFIRMADAS: Record<string, number> = { blk_a: 2, blk_b: 1, blk_c: 0 }
 beforeEach(() => {
   vi.clearAllMocks()
   mockPrisma.eventBlock.findMany.mockResolvedValue(BLOCKS)
-  mockPrisma.eventBlock.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
-    Promise.resolve(BLOCKS.find((b) => b.id === where.id) ?? null),
-  )
+  // El evento padre existe y está PUBLICADO salvo que un test diga lo contrario: la agenda, el
+  // cupo y la inscripción heredan `published` del evento, así que sin esto todo da 404.
+  mockPrisma.event.findUnique.mockResolvedValue({ id: 'ev_1', published: true })
+  mockPrisma.eventBlock.findUnique.mockImplementation(({ where }: { where: { id: string } }) => {
+    const b = BLOCKS.find((x) => x.id === where.id)
+    // blockAvailability incluye el evento para poder mirar `published`.
+    return Promise.resolve(b ? { ...b, event: { published: true } } : null)
+  })
   mockPrisma.registration.groupBy.mockResolvedValue(
     Object.entries(CONFIRMADAS).map(([blockId, n]) => ({ blockId, _count: { _all: n } })),
   )
@@ -80,5 +86,62 @@ describe('getEventAvailability (batch) vs blockAvailability (individual)', () =>
     const r = await getEventAvailability('ev_vacio')
     expect(r.blocks).toEqual([])
     expect(r.generals).toBe(7)
+  })
+})
+
+/**
+ * Un evento en BORRADOR no existe para el público — tampoco por sus rutas hijas.
+ * getEvents/getEvent ya lo filtraban, pero la agenda y el cupo NO heredaban la regla: con el id
+ * de un borrador (que se ve en el panel, no es secreto) se leía la grilla entera y los cupos.
+ * Estos tests salen en ROJO contra el código anterior al gate: ése es su punto.
+ */
+describe('borradores: la agenda y el cupo heredan `published` del evento', () => {
+  const draft = { id: 'ev_draft', published: false }
+
+  it('getBlocks de un borrador da 404, igual que un evento inexistente', async () => {
+    mockPrisma.event.findUnique.mockResolvedValue(draft)
+    await expect(getBlocks('ev_draft')).rejects.toMatchObject({
+      status: 404,
+      code: 'EVENT_NOT_FOUND',
+    })
+  })
+
+  it('getEventAvailability de un borrador da 404', async () => {
+    mockPrisma.event.findUnique.mockResolvedValue(draft)
+    await expect(getEventAvailability('ev_draft')).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('generalRegistrationCount de un borrador da 404', async () => {
+    mockPrisma.event.findUnique.mockResolvedValue(draft)
+    await expect(generalRegistrationCount('ev_draft')).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('blockAvailability de un bloque de borrador da 404 (mismo código que un bloque inexistente)', async () => {
+    mockPrisma.eventBlock.findUnique.mockResolvedValue({
+      ...BLOCKS[0],
+      event: { published: false },
+    })
+    await expect(blockAvailability('blk_a')).rejects.toMatchObject({
+      status: 404,
+      code: 'BLOCK_NOT_FOUND',
+    })
+  })
+
+  it('el panel SÍ los ve: con { admin: true } el borrador responde normal', async () => {
+    mockPrisma.event.findUnique.mockResolvedValue(draft)
+    mockPrisma.eventBlock.findMany.mockResolvedValue(BLOCKS)
+    const blocks = await getBlocks('ev_draft', { admin: true })
+    expect(blocks).toHaveLength(3)
+
+    const avail = await getEventAvailability('ev_draft', { admin: true })
+    expect(avail.blocks).toHaveLength(3)
+
+    mockPrisma.eventBlock.findUnique.mockResolvedValue({
+      ...BLOCKS[0],
+      event: { published: false },
+    })
+    await expect(blockAvailability('blk_a', { admin: true })).resolves.toMatchObject({
+      capacity: 10,
+    })
   })
 })
