@@ -5,7 +5,12 @@ import { IDS } from '../ids'
  * Grilla de bloques por evento. Speakers FICTICIOS de demostración.
  * Camino 18/06: blk-c18-2 nace completo (seedTaken === capacity) — DoD #3.
  */
-export const seedBlocks: EventBlock[] = [
+/* ⚠️ Gateado a DEV a propósito: en un build de producción este literal NO se compila.
+ * Antes viajaba adentro del bundle y RemoteDataStore caía acá al fallar la hidratación,
+ * así que con la red mala la app mostraba contenido inventado como si fuera real —
+ * y cargaba impecable, porque el service worker precachea el shell. Ver el docstring de
+ * RemoteDataStore. Si necesitás la demo, corré `npm run dev`. */
+export const seedBlocks: EventBlock[] = !import.meta.env?.PROD ? [
   /* ─── CCM 2026 · 14ª Edición (19 y 20/09) ─── */
   {
     id: 'blk-p-1',
@@ -283,4 +288,4 @@ export const seedBlocks: EventBlock[] = [
     description:
       'Cierre práctico: armado de la ficha técnica, el line sheet y el kit de prensa que marcas, compradores y medios esperan recibir.',
   },
-]
+] : []

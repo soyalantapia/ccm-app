@@ -201,7 +201,7 @@ Documentación de trabajo del proyecto (no es código). Mapa:
 - **Panel admin:** `…/admin` con el `ADMIN_TOKEN` (Railway → variables del servicio `ccm-api`).
 - **DB de prod:** plugin Postgres de Railway. Inspección: `DATABASE_URL` en `server/.env` + `npx prisma studio` (o `psql`).
 - **Deploy:** `railway up . --path-as-root -s ccm-api -c` (front + API juntos).
-- **Seed reproducible:** `cd server && npm run db:seed` (idempotente).
+- **Seed de desarrollo:** `cd server && npm run db:seed`. 🔴 **No es inofensivo:** hace `deleteMany` de fotos, obras de portfolio y campos de convocatoria, y sus upsert pisan lo cargado desde el panel. Una guardia lo aborta si la base no es local.
 - **CLI:** `railway` (proyecto enlazado), `gh` (cuenta `soyalantapia`).
 
 ---

@@ -143,7 +143,7 @@ export function OpsSponsorForm({ open, sponsor, onClose }: Props) {
     <Sheet open={open} onClose={onClose} title={sponsor ? 'Editar sponsor' : 'Crear sponsor'} size="lg">
       <form onSubmit={submit} className="space-y-4">
         <Field label="Nombre" required>
-          <Input value={f.name} onChange={set('name')} placeholder="Ej: Vialux Eyewear" required />
+          <Input value={f.name} onChange={set('name')} placeholder="Ej: nombre del sponsor" required />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Rubro" required>
@@ -235,7 +235,7 @@ export function OpsSponsorForm({ open, sponsor, onClose }: Props) {
                 <Input
                   value={c.headline}
                   onChange={setCreative(c._key, 'headline')}
-                  placeholder="Mirá distinto con Vialux"
+                  placeholder="Ej: el claim de la marca"
                   required
                 />
               </Field>

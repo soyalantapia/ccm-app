@@ -5,7 +5,12 @@ import type { CatalogProfile } from '../types'
  * que representan el ecosistema real (diseño, arte, belleza, gastronomía,
  * turismo, tecnología, sustentabilidad) y las ciudades del interior.
  */
-export const seedCatalog: CatalogProfile[] = [
+/* ⚠️ Gateado a propósito: fuera del build de producción. en un build de producción este literal NO se compila.
+ * Antes viajaba adentro del bundle y RemoteDataStore caía acá al fallar la hidratación,
+ * así que con la red mala la app mostraba contenido inventado como si fuera real —
+ * y cargaba impecable, porque el service worker precachea el shell. Ver el docstring de
+ * RemoteDataStore. Si necesitás la demo, corré `npm run dev`. */
+export const seedCatalog: CatalogProfile[] = !import.meta.env?.PROD ? [
   {
     id: 'cat-01',
     slug: 'valentina-roldan',
@@ -411,4 +416,4 @@ export const seedCatalog: CatalogProfile[] = [
       { id: 'cat-23-2', image: 'img/catalogo/marcela-blangino/obra-2.jpg', title: 'Presencia en ferias — 02' },
     ],
   },
-]
+] : []

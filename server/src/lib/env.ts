@@ -102,6 +102,18 @@ export function assertProd(): void {
   // quedarían hasheados con un pepper débil. Nada de fallback silencioso a un valor de juguete.
   if (!env.ADMIN_TOKEN_SECRET) missing.push('ADMIN_TOKEN_SECRET — sin él no se pueden firmar las sesiones del panel (nadie entra)')
   if (!env.OTP_PEPPER) missing.push('OTP_PEPPER — sin él los códigos OTP no se pueden hashear de forma segura')
+  // Correo: el código por mail es el ÚNICO login del panel (no hay contraseña de respaldo),
+  // así que un deploy sin correo deja al organizador afuera de su propio sistema. Y con un
+  // proveedor configurado pero sin MAIL_FROM es PEOR que no tener nada: el default apunta a
+  // corazondemoda.com, un dominio que todavía no existe, y el servidor rechaza cada envío con
+  // "450 Sender address rejected: Domain not found" (verificado contra Hostinger el 22/07/2026).
+  // Autentica bien, parece configurado, y no sale un solo mail.
+  const correoConfigurado = !!(env.SMTP_HOST || env.RESEND_API_KEY)
+  if (!correoConfigurado) {
+    missing.push('SMTP_HOST o RESEND_API_KEY — sin proveedor de correo el mailer cae a consola y NADIE puede entrar al panel (el código por mail es el único login)')
+  } else if (!env.MAIL_FROM) {
+    missing.push('MAIL_FROM — con proveedor configurado y sin remitente propio se usa un dominio inexistente y el servidor rechaza el 100% de los envíos')
+  }
   // Cobros: se exigen SÓLO si Mercado Pago está configurado — un deploy que no cobra nada tiene
   // que poder arrancar sin ninguna de estas. Lo que no puede existir es MP a medias, que es el
   // estado más peligroso: el panel dice "conectado", el comprador paga de verdad y no se activa

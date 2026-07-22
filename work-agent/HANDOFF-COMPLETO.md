@@ -117,14 +117,20 @@ server/
 
 ```bash
 # Deploy del backend (sube SOLO server/ como raíz del build):
-cd ~/dev/ccm-app && railway up server --path-as-root -s ccm-api -c
+> 🔴 **El path importa.** `railway up` empaqueta el directorio donde se lo corre. Este repo
+> tiene varios worktrees y varios están commits atrás: deployar desde el equivocado hace
+> RETROCEDER producción sin que nada avise. Deployá SIEMPRE desde un worktree en `origin/main`
+> y verificá después con `GET /api/v1/version` que el `commit` coincida.
+cd "$(git -C ~/dev/ccm-merge rev-parse --show-toplevel)" && railway up server --path-as-root -s ccm-api -c
+# ⚠️ NO deployes desde ~/dev/ccm-app: ese worktree quedó en una rama vieja.
 
 # Seed contra la DB (poblar/restaurar datos del front):
 PUB=$(railway variables --service Postgres-WTPk --kv | grep '^DATABASE_PUBLIC_URL=' | cut -d= -f2-)
-cd ~/dev/ccm-app/server && DATABASE_URL="$PUB" npx tsx prisma/seed.ts
+# 🔴 NO correr contra prod: el seed BORRA fotos/portfolios/campos y pisa lo cargado a mano.
+#    La guardia aborta si la DB no es local; sólo se saltea con --force, y no deberías necesitarlo.
 
 # Typecheck del server:
-cd ~/dev/ccm-app/server && npx tsc --noEmit
+cd ~/dev/ccm-merge/server && npx tsc --noEmit
 
 # Logs de Railway (OJO: necesita --lines, sino streamea y cuelga headless):
 railway logs -s ccm-api -d --lines 60

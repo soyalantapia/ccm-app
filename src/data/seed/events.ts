@@ -2,7 +2,12 @@ import type { EventItem } from '../types'
 import { IDS } from '../ids'
 import { config } from '../../config'
 
-export const seedEvents: EventItem[] = [
+/* ⚠️ Gateado a propósito: fuera del build de producción. en un build de producción este literal NO se compila.
+ * Antes viajaba adentro del bundle y RemoteDataStore caía acá al fallar la hidratación,
+ * así que con la red mala la app mostraba contenido inventado como si fuera real —
+ * y cargaba impecable, porque el service worker precachea el shell. Ver el docstring de
+ * RemoteDataStore. Si necesitás la demo, corré `npm run dev`. */
+export const seedEvents: EventItem[] = !import.meta.env?.PROD ? [
   {
     id: IDS.events.principal,
     slug: IDS.slugs.principal,
@@ -108,4 +113,4 @@ export const seedEvents: EventItem[] = [
     sponsorIds: [IDS.sponsors.eyewear],
     socioOnly: true,
   },
-]
+] : []
