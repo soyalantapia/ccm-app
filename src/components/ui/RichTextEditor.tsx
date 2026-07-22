@@ -213,7 +213,14 @@ export function RichTextEditor({ value, onChange, placeholder }: Props) {
           </div>
           <textarea
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            // Se propaga en cada tecla, no sólo al volver al editor visual. Antes lo escrito acá
+            // vivía SOLO en el estado interno: quien pegaba el texto en HTML y guardaba derecho
+            // perdía todo. Creando, el formulario le pedía completar un cuerpo que estaba a la
+            // vista; EDITANDO era peor — guardaba contento y dejaba el cuerpo VIEJO.
+            onChange={(e) => {
+              setDraft(e.target.value)
+              onChange(e.target.value)
+            }}
             rows={14}
             spellCheck={false}
             placeholder="<h2>Título</h2>&#10;<p>Párrafo…</p>"
