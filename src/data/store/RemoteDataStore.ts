@@ -308,20 +308,40 @@ export class RemoteDataStore extends LocalDataStore {
     this.fetchAvailability(blockId)
   }
 
+
+  /* ─────────────────────────────────────────────────────────────────────────────────────────
+   *  CONTENIDO PÚBLICO: nunca cae al seed
+   *
+   *  RemoteDataStore extiende LocalDataStore, así que `super.getX()` devuelve los datos de
+   *  DEMOSTRACIÓN — que van compilados adentro del bundle que descarga cada visitante. Mientras
+   *  el fallback existió, cualquier fallo de hidratación (wifi saturada, un 500, el server
+   *  arrancando) hacía que la app renderizara disertantes inventados, marcas que no existen y
+   *  cupos falsos. Y como el service worker precachea el armazón, cargaba impecable: sin error,
+   *  sin spinner, sin ninguna señal. Se veía llena y mentía. Limpiar la base no lo arreglaba,
+   *  porque el dato falso nunca venía de la base.
+   *
+   *  Ahora estas lecturas devuelven VACÍO hasta que el server conteste. Mostrar nada es peor
+   *  para la foto y mucho mejor para la verdad; las páginas que lo necesitan ya distinguen
+   *  "cargando" de "no hay" con isHydrating().
+   *
+   *  Las lecturas de abajo que SÍ conservan `super` son las del propio dispositivo (inscripciones,
+   *  favoritos, descargas, membresía, órdenes): ahí `super` no es el seed, es el localStorage de
+   *  esta persona, que es un dato legítimo suyo.
+   * ───────────────────────────────────────────────────────────────────────────────────────── */
   override getEvents(): EventItem[] {
-    return this.events ?? super.getEvents()
+    return this.events ?? []
   }
   override getEvent(slug: string): EventItem | undefined {
-    return this.events ? this.events.find((e) => e.slug === slug) : super.getEvent(slug)
+    return this.events?.find((e) => e.slug === slug)
   }
   override getEventById(id: string): EventItem | undefined {
-    return this.events ? this.events.find((e) => e.id === id) : super.getEventById(id)
+    return this.events?.find((e) => e.id === id)
   }
   override getBlocks(eventId: string): EventBlock[] {
-    return this.blocksByEvent.get(eventId) ?? super.getBlocks(eventId)
+    return this.blocksByEvent.get(eventId) ?? []
   }
   override getBlock(blockId: string): EventBlock | undefined {
-    return this.blocksById.get(blockId) ?? super.getBlock(blockId)
+    return this.blocksById.get(blockId)
   }
   override blockAvailability(blockId: string): BlockAvailability {
     const cached = this.availCache.get(blockId)
@@ -612,13 +632,13 @@ export class RemoteDataStore extends LocalDataStore {
   }
   private refetchNotas(): void { this.hydrateNotas(); this.hydrateAdminNotas() }
   override getNotas(): Nota[] {
-    return this.notas ?? super.getNotas()
+    return this.notas ?? []
   }
   override getNota(slug: string): Nota | undefined {
-    return this.notas ? this.notas.find((n) => n.slug === slug) : super.getNota(slug)
+    return this.notas?.find((n) => n.slug === slug)
   }
   override getAdminNotas(): Nota[] {
-    return this.adminNotas ?? super.getAdminNotas()
+    return this.adminNotas ?? []
   }
   override createNota(input: NewNota): Nota {
     const prevCache = this.adminNotas // para deshacer si el backend rechaza
@@ -666,10 +686,10 @@ export class RemoteDataStore extends LocalDataStore {
   }
   private refetchBanners(): void { this.hydrateBanners(); this.hydrateAdminBanners() }
   override getBanners(): Banner[] {
-    return this.banners ?? super.getBanners()
+    return this.banners ?? []
   }
   override getAdminBanners(): Banner[] {
-    return this.adminBanners ?? super.getAdminBanners()
+    return this.adminBanners ?? []
   }
   override createBanner(input: NewBanner): Banner {
     const prevCache = this.adminBanners // para deshacer si el backend rechaza
@@ -747,19 +767,19 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override getSponsors(): Sponsor[] {
-    return this.sponsors ?? super.getSponsors()
+    return this.sponsors ?? []
   }
   override getSponsor(id: string): Sponsor | undefined {
-    return this.sponsors ? this.sponsors.find((s) => s.id === id) : super.getSponsor(id)
+    return this.sponsors?.find((s) => s.id === id)
   }
   override getPlans(): TicketPlan[] {
-    return this.plans ?? super.getPlans()
+    return this.plans ?? []
   }
   override getPlan(id: PlanId): TicketPlan | undefined {
-    return this.plans ? this.plans.find((p) => p.id === id) : super.getPlan(id)
+    return this.plans?.find((p) => p.id === id)
   }
   override getConvocatorias(): Convocatoria[] {
-    return this.convocatoriasList ?? super.getConvocatorias()
+    return this.convocatoriasList ?? []
   }
   override getConvocatoria(slug: string): Convocatoria | undefined {
     const inList = this.convocatoriasList?.find((c) => c.slug === slug)
@@ -772,7 +792,8 @@ export class RemoteDataStore extends LocalDataStore {
         .then((cv) => { this.convocatorias.set(slug, cv); this.convoInflight.delete(slug); bus.emit('convocatoria') })
         .catch(() => this.convoInflight.delete(slug))
     }
-    return super.getConvocatoria(slug)
+    // Sin respuesta del server todavía: undefined, no la convocatoria de demostración.
+    return undefined
   }
   override createConvocatoria(input: NewConvocatoria): Convocatoria {
     const prevCache = this.convocatoriasList // para deshacer si el backend rechaza
@@ -881,7 +902,7 @@ export class RemoteDataStore extends LocalDataStore {
 
   /** TODAS (vista del organizador): la lista admin si está cargada, si no cae al device/seed. */
   override getApplications(): Application[] {
-    return this.adminApplications ?? this.applications ?? super.getApplications()
+    return this.adminApplications ?? this.applications ?? []
   }
   /**
    * Postulaciones para el PANEL, sin fallback al seed.
@@ -900,7 +921,10 @@ export class RemoteDataStore extends LocalDataStore {
   }
   /** Solo las del PROPIO device (vistas de usuario): NUNCA la lista admin. */
   override getMyApplications(): Application[] {
-    return this.applications ?? super.getMyApplications()
+    // super.getMyApplications() cae en getApplications() de LocalDataStore, que MEZCLA las 24
+    // postulaciones del seed con las locales: sin hidratar, el visitante veía dos docenas de
+    // postulaciones inventadas como si fueran suyas.
+    return this.applications ?? []
   }
 
   /* ─── Membresía (Fase D parcial): persiste server-side, antes solo en localStorage ─── */
@@ -957,10 +981,10 @@ export class RemoteDataStore extends LocalDataStore {
   }
   private refetchBenefits(): void { this.hydrateBenefits(); this.hydrateAdminBenefits() }
   override getBenefits(): Benefit[] {
-    return this.benefits ?? super.getBenefits()
+    return this.benefits ?? []
   }
   override getAdminBenefits(): Benefit[] {
-    return this.adminBenefits ?? super.getAdminBenefits()
+    return this.adminBenefits ?? []
   }
   override createBenefit(input: NewBenefit): Benefit {
     const prevCache = this.adminBenefits // para deshacer si el backend rechaza
@@ -1303,10 +1327,12 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override getCampaigns(): AdCampaign[] {
-    return this.campaigns ?? super.getCampaigns()
+    return this.campaigns ?? []
   }
   override getActiveCampaign(slot: AdSlot): AdCampaign | undefined {
-    if (!this.campaigns) return super.getActiveCampaign(slot)
+    // Sin campañas hidratadas no hay ninguna al aire: mostrar la de demo pondría una marca
+    // inventada en el espacio que se le vende a un sponsor real.
+    if (!this.campaigns) return undefined
     const forSlot = this.campaigns.filter((c) => c.slot === slot)
     return forSlot.length ? forSlot[forSlot.length - 1] : undefined
   }
@@ -1332,19 +1358,19 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override getCatalog(): CatalogProfile[] {
-    return this.catalog ?? super.getCatalog()
+    return this.catalog ?? []
   }
   override getCatalogProfile(slug: string): CatalogProfile | undefined {
-    return this.catalog ? this.catalog.find((c) => c.slug === slug) : super.getCatalogProfile(slug)
+    return this.catalog?.find((c) => c.slug === slug)
   }
   override getGalleries(): Gallery[] {
-    return this.galleries ?? super.getGalleries()
+    return this.galleries ?? []
   }
   override getGallery(slug: string): Gallery | undefined {
-    return this.galleries ? this.galleries.find((g) => g.slug === slug) : super.getGallery(slug)
+    return this.galleries?.find((g) => g.slug === slug)
   }
   override getContents(): ContentItem[] {
-    return this.contents ?? super.getContents()
+    return this.contents ?? []
   }
   override getFavorites(): string[] {
     return this.favorites ?? super.getFavorites()
@@ -1442,10 +1468,10 @@ export class RemoteDataStore extends LocalDataStore {
   }
   /** El panel ve los borradores; las páginas públicas usan getEvents(), que trae sólo lo publicado. */
   override getAdminEvents(): EventItem[] {
-    return this.adminEvents ?? super.getAdminEvents()
+    return this.adminEvents ?? []
   }
   override getAdminContents(): ContentItem[] {
-    return this.adminContents ?? super.getAdminContents()
+    return this.adminContents ?? []
   }
 
   override createEvent(input: NewEvent): EventItem {
