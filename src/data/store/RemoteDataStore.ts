@@ -57,12 +57,24 @@ interface BufferedEvent {
 }
 
 /**
- * Fase A (incremental seguro) — extiende LocalDataStore y SOLO sobreescribe los
- * métodos de identidad + analytics para sincronizar con el backend real. El resto
- * (eventos, órdenes, catálogo, etc.) se hereda y sigue en LocalDataStore hasta sus
- * fases. La interfaz sigue SÍNCRONA: el caché local da las lecturas al instante y el
- * bus mantiene la reactividad; el backend recibe escrituras en segundo plano. Si no
- * hay VITE_API_URL, ni se instancia esta clase (index.ts cae a LocalDataStore).
+ * Store contra el backend real. Extiende LocalDataStore para reusar el storage
+ * device-scoped y los helpers, pero YA sobreescribe todas las lecturas de contenido.
+ * La interfaz sigue SÍNCRONA: el caché hidratado da las lecturas al instante y el bus
+ * mantiene la reactividad; el backend recibe escrituras en segundo plano. Si no hay
+ * VITE_API_URL, ni se instancia esta clase (index.ts cae a LocalDataStore).
+ *
+ * ⚠️ REGLA DURA — las lecturas de CONTENIDO nunca caen al seed de demo.
+ * El patrón viejo `this.x ?? super.getX()` hacía que, al fallar la hidratación, la app
+ * renderizara el seed compilado en el bundle: speakers ficticios, sponsors inventados,
+ * banners con dominios .example y cupos como `seedTaken: 142`. Y como el service worker
+ * precachea el shell, cargaba impecable — sin error, sin spinner, sin aviso de offline.
+ * Se veía llena y mentía, justo con la wifi saturada del venue el día del evento.
+ * Ahora devuelven vacío neutro (`?? []` / `undefined`) y la UI muestra su EmptyState.
+ * Mostrar NADA es infinitamente mejor que mostrar la demo.
+ *
+ * Lo que SÍ sigue cayendo a `super.` es lo device-scoped con write-through
+ * (registrations, orders, membership, favorites, downloads, campaigns): ahí el fallback
+ * es el último snapshot conocido DEL SERVER en localStorage, no contenido fabricado.
  */
 export class RemoteDataStore extends LocalDataStore {
   private readonly api: ApiClient
@@ -307,19 +319,19 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override getEvents(): EventItem[] {
-    return this.events ?? super.getEvents()
+    return this.events ?? []
   }
   override getEvent(slug: string): EventItem | undefined {
-    return this.events ? this.events.find((e) => e.slug === slug) : super.getEvent(slug)
+    return this.events?.find((e) => e.slug === slug)
   }
   override getEventById(id: string): EventItem | undefined {
-    return this.events ? this.events.find((e) => e.id === id) : super.getEventById(id)
+    return this.events?.find((e) => e.id === id)
   }
   override getBlocks(eventId: string): EventBlock[] {
-    return this.blocksByEvent.get(eventId) ?? super.getBlocks(eventId)
+    return this.blocksByEvent.get(eventId) ?? []
   }
   override getBlock(blockId: string): EventBlock | undefined {
-    return this.blocksById.get(blockId) ?? super.getBlock(blockId)
+    return this.blocksById.get(blockId)
   }
   override blockAvailability(blockId: string): BlockAvailability {
     const cached = this.availCache.get(blockId)
@@ -550,7 +562,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.api.get<AnalyticsEvent[]>('/admin/analytics').then((a) => { this.analytics = a; bus.emit('analytics') }).catch(() => {})
   }
   override getAnalytics(): AnalyticsEvent[] {
-    return this.analytics ?? super.getAnalytics()
+    return this.analytics ?? []
   }
 
   /**
@@ -610,13 +622,13 @@ export class RemoteDataStore extends LocalDataStore {
   }
   private refetchNotas(): void { this.hydrateNotas(); this.hydrateAdminNotas() }
   override getNotas(): Nota[] {
-    return this.notas ?? super.getNotas()
+    return this.notas ?? []
   }
   override getNota(slug: string): Nota | undefined {
-    return this.notas ? this.notas.find((n) => n.slug === slug) : super.getNota(slug)
+    return this.notas?.find((n) => n.slug === slug)
   }
   override getAdminNotas(): Nota[] {
-    return this.adminNotas ?? super.getAdminNotas()
+    return this.adminNotas ?? []
   }
   override createNota(input: NewNota): Nota {
     const prevCache = this.adminNotas // para deshacer si el backend rechaza
@@ -664,10 +676,10 @@ export class RemoteDataStore extends LocalDataStore {
   }
   private refetchBanners(): void { this.hydrateBanners(); this.hydrateAdminBanners() }
   override getBanners(): Banner[] {
-    return this.banners ?? super.getBanners()
+    return this.banners ?? []
   }
   override getAdminBanners(): Banner[] {
-    return this.adminBanners ?? super.getAdminBanners()
+    return this.adminBanners ?? []
   }
   override createBanner(input: NewBanner): Banner {
     const prevCache = this.adminBanners // para deshacer si el backend rechaza
@@ -745,19 +757,19 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override getSponsors(): Sponsor[] {
-    return this.sponsors ?? super.getSponsors()
+    return this.sponsors ?? []
   }
   override getSponsor(id: string): Sponsor | undefined {
-    return this.sponsors ? this.sponsors.find((s) => s.id === id) : super.getSponsor(id)
+    return this.sponsors?.find((s) => s.id === id)
   }
   override getPlans(): TicketPlan[] {
-    return this.plans ?? super.getPlans()
+    return this.plans ?? []
   }
   override getPlan(id: PlanId): TicketPlan | undefined {
-    return this.plans ? this.plans.find((p) => p.id === id) : super.getPlan(id)
+    return this.plans?.find((p) => p.id === id)
   }
   override getConvocatorias(): Convocatoria[] {
-    return this.convocatoriasList ?? super.getConvocatorias()
+    return this.convocatoriasList ?? []
   }
   override getConvocatoria(slug: string): Convocatoria | undefined {
     const inList = this.convocatoriasList?.find((c) => c.slug === slug)
@@ -770,7 +782,7 @@ export class RemoteDataStore extends LocalDataStore {
         .then((cv) => { this.convocatorias.set(slug, cv); this.convoInflight.delete(slug); bus.emit('convocatoria') })
         .catch(() => this.convoInflight.delete(slug))
     }
-    return super.getConvocatoria(slug)
+    return undefined
   }
   override createConvocatoria(input: NewConvocatoria): Convocatoria {
     const prevCache = this.convocatoriasList // para deshacer si el backend rechaza
@@ -879,7 +891,7 @@ export class RemoteDataStore extends LocalDataStore {
 
   /** TODAS (vista del organizador): la lista admin si está cargada, si no cae al device/seed. */
   override getApplications(): Application[] {
-    return this.adminApplications ?? this.applications ?? super.getApplications()
+    return this.adminApplications ?? this.applications ?? []
   }
   /**
    * Postulaciones para el PANEL, sin fallback al seed.
@@ -955,10 +967,10 @@ export class RemoteDataStore extends LocalDataStore {
   }
   private refetchBenefits(): void { this.hydrateBenefits(); this.hydrateAdminBenefits() }
   override getBenefits(): Benefit[] {
-    return this.benefits ?? super.getBenefits()
+    return this.benefits ?? []
   }
   override getAdminBenefits(): Benefit[] {
-    return this.adminBenefits ?? super.getAdminBenefits()
+    return this.adminBenefits ?? []
   }
   override createBenefit(input: NewBenefit): Benefit {
     const prevCache = this.adminBenefits // para deshacer si el backend rechaza
@@ -1330,19 +1342,19 @@ export class RemoteDataStore extends LocalDataStore {
   }
 
   override getCatalog(): CatalogProfile[] {
-    return this.catalog ?? super.getCatalog()
+    return this.catalog ?? []
   }
   override getCatalogProfile(slug: string): CatalogProfile | undefined {
-    return this.catalog ? this.catalog.find((c) => c.slug === slug) : super.getCatalogProfile(slug)
+    return this.catalog?.find((c) => c.slug === slug)
   }
   override getGalleries(): Gallery[] {
-    return this.galleries ?? super.getGalleries()
+    return this.galleries ?? []
   }
   override getGallery(slug: string): Gallery | undefined {
-    return this.galleries ? this.galleries.find((g) => g.slug === slug) : super.getGallery(slug)
+    return this.galleries?.find((g) => g.slug === slug)
   }
   override getContents(): ContentItem[] {
-    return this.contents ?? super.getContents()
+    return this.contents ?? []
   }
   override getFavorites(): string[] {
     return this.favorites ?? super.getFavorites()

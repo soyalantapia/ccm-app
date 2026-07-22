@@ -107,10 +107,78 @@ describe('RemoteDataStore — una escritura NUNCA delega en LocalDataStore', () 
   })
 })
 
-describe('RemoteDataStore — las LECTURAS sí pueden caer al seed', () => {
-  it('getNotas devuelve el seed mientras no hidrató (placeholder razonable, no se pierde nada)', () => {
+/**
+ * INVARIANTE: en RemoteDataStore, una LECTURA de contenido nunca cae al seed de demo.
+ *
+ * El bug que blinda este test: el patrón `this.x ?? super.getX()` hacía que, al fallar la
+ * hidratación, la app renderizara el seed que viaja COMPILADO en el bundle — speakers
+ * ficticios con sala y horario, sponsors inventados, banners apuntando a dominios .example
+ * y cupos como `seedTaken: 142`. Y como el service worker precachea el shell, la app cargaba
+ * impecable: sin pantalla de error, sin spinner, sin aviso de offline. Se veía llena y mentía.
+ *
+ * El escenario NO es teórico: es exactamente lo que pasa con la wifi saturada del venue el
+ * día del evento, en cada teléfono a la vez y con más gente mirando que nunca.
+ *
+ * Acá forzamos el peor caso — TODA hidratación falla — y exigimos vacío, no demo.
+ */
+describe('RemoteDataStore — las LECTURAS de contenido NUNCA caen al seed', () => {
+  /** Colecciones de contenido que vienen del server. El seed tiene ≥1 item en todas. */
+  const COLECCIONES: { nombre: string; leer: (s: RemoteDataStore) => unknown[] }[] = [
+    { nombre: 'getEvents', leer: (s) => s.getEvents() },
+    { nombre: 'getBlocks', leer: (s) => s.getBlocks('ev-principal-2026') },
+    { nombre: 'getNotas', leer: (s) => s.getNotas() },
+    { nombre: 'getAdminNotas', leer: (s) => s.getAdminNotas() },
+    { nombre: 'getBanners', leer: (s) => s.getBanners() },
+    { nombre: 'getAdminBanners', leer: (s) => s.getAdminBanners() },
+    { nombre: 'getSponsors', leer: (s) => s.getSponsors() },
+    { nombre: 'getPlans', leer: (s) => s.getPlans() },
+    { nombre: 'getConvocatorias', leer: (s) => s.getConvocatorias() },
+    { nombre: 'getBenefits', leer: (s) => s.getBenefits() },
+    { nombre: 'getAdminBenefits', leer: (s) => s.getAdminBenefits() },
+    { nombre: 'getCatalog', leer: (s) => s.getCatalog() },
+    { nombre: 'getGalleries', leer: (s) => s.getGalleries() },
+    { nombre: 'getContents', leer: (s) => s.getContents() },
+    { nombre: 'getAnalytics', leer: (s) => s.getAnalytics() },
+    { nombre: 'getAdminEvents', leer: (s) => s.getAdminEvents() },
+    { nombre: 'getAdminContents', leer: (s) => s.getAdminContents() },
+  ]
+
+  for (const { nombre, leer } of COLECCIONES) {
+    it(`${nombre} devuelve vacío cuando la hidratación falla, no el seed de demo`, () => {
+      const s = storeSinHidratar()
+      const filas = leer(s)
+      expect(Array.isArray(filas)).toBe(true)
+      expect(filas, `${nombre} devolvió ${filas.length} filas del seed compilado`).toEqual([])
+    })
+  }
+
+  /** Las fichas individuales tenían el mismo agujero: el detalle de un evento o de un
+   *  sponsor que no existe en el server salía renderizado con datos inventados. */
+  const FICHAS: { nombre: string; leer: (s: RemoteDataStore) => unknown }[] = [
+    { nombre: 'getEvent', leer: (s) => s.getEvent('ccm-2026') },
+    { nombre: 'getEventById', leer: (s) => s.getEventById('ev-principal-2026') },
+    { nombre: 'getNota', leer: (s) => s.getNota('nota-apertura') },
+    { nombre: 'getSponsor', leer: (s) => s.getSponsor('sp-ccm') },
+    { nombre: 'getCatalogProfile', leer: (s) => s.getCatalogProfile('andrea-destefani') },
+    { nombre: 'getGallery', leer: (s) => s.getGallery('gal-camino-marzo') },
+    { nombre: 'getConvocatoria', leer: (s) => s.getConvocatoria('camino-a-ccm') },
+  ]
+
+  for (const { nombre, leer } of FICHAS) {
+    it(`${nombre} devuelve undefined cuando la hidratación falla, no la ficha del seed`, () => {
+      const s = storeSinHidratar()
+      expect(leer(s)).toBeUndefined()
+    })
+  }
+
+  /** Lo device-scoped SÍ debe seguir cayendo a localStorage: ahí el fallback es el último
+   *  snapshot conocido DEL SERVER (write-through), no contenido fabricado. Sin esto, un
+   *  arranque con la red caída dejaría a un inscripto sin su QR y a un socio como no-socio. */
+  it('lo device-scoped conserva el fallback al último snapshot del server', () => {
     const s = storeSinHidratar()
-    expect(Array.isArray(s.getNotas())).toBe(true)
+    expect(Array.isArray(s.getRegistrations())).toBe(true)
+    expect(Array.isArray(s.getOrders())).toBe(true)
+    expect(s.getMembership()).toHaveProperty('tier')
   })
 })
 
