@@ -73,6 +73,14 @@ class SmtpMailer implements Mailer {
   }
 }
 
+/**
+ * ⚠️ Este default apunta a un dominio que TODAVÍA NO EXISTE (corazondemoda.com está sin
+ * comprar). Si se usa de verdad, el servidor SMTP rechaza cada envío con
+ * `450 4.1.8 Sender address rejected: Domain not found` — verificado contra Hostinger el
+ * 22/07/2026. O sea: sin MAIL_FROM no sale un solo mail, y el código por mail es el ÚNICO
+ * login del panel. Por eso assertProd lo exige (lib/env.ts) en vez de dejar que degrade solo.
+ * Cuando se compre el dominio, además de cambiar MAIL_FROM hay que configurarle SPF y DKIM.
+ */
 const DEFAULT_FROM = 'CCM <no-reply@corazondemoda.com>'
 
 let override: Mailer | null = null
