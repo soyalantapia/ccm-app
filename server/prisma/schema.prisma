@@ -335,6 +335,14 @@ model TicketOrder {
   buyerEmail String?
   ts         DateTime    @default(now())
 
+  /// AdminUser.id de quien REGALÓ esta entrada. null = venta real.
+  /// Sin FK a propósito, mismo criterio que AdminUser.invitedBy: el dato tiene que sobrevivir
+  /// a que esa persona se vaya del equipo.
+  /// NO es decorativo: `total === 0` NO alcanza para reconocer una cortesía, porque un plan con
+  /// `price: null` produce órdenes REALES de total 0. Sin este campo el Dashboard cuenta los
+  /// regalos de Gastón como ventas (statsService).
+  grantedById String?
+
   // La plomería MP vive en Payment (kind='ticket_order'), no acá (canon 7).
   device  Device?    @relation(fields: [deviceId], references: [id], onDelete: SetNull)
   plan    TicketPlan @relation(fields: [planId], references: [id])
@@ -343,6 +351,7 @@ model TicketOrder {
   @@index([status, ts])
   @@index([planId])
   @@index([buyerEmail])
+  @@index([grantedById])
 }
 
 // Acreditación: estado de uso del QR en puerta. El QR es un JWT firmado con
@@ -896,4 +905,85 @@ model MpConnection {
   scope        String?
   connectedAt  DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────
+//  ENTRADAS DE CORTESÍA
+// ─────────────────────────────────────────────────────────
+
+/// Qué se regaló. Misma forma polimórfica que PaymentItem (kind + resourceId, sin FK formal):
+/// no introduce un patrón nuevo en el schema.
+enum GrantKind {
+  ticket_plan // resourceId = TicketPlan.id → materializa una TicketOrder
+  event //       resourceId = Event.id      → materializa una Registration
+}
+
+/// Los dos caminos por los que el invitado puede reclamar, decididos con el cliente:
+/// tocando el link del mail, o entrando a la app y poniendo su email.
+enum GrantClaimVia {
+  link //  tocó el link con el token. Un solo paso.
+  code // entró a la app, puso su email y confirmó con un código de un solo uso.
+}
+
+/// Una invitación de cortesía. Existe ANTES que el dispositivo de la persona y sobrevive sin
+/// dueño hasta que alguien la reclama — por eso es una entidad propia y no una TicketOrder de $0:
+/// regalar un EVENTO no produce orden ninguna, produce inscripción.
+model TicketGrant {
+  id         String    @id // "grant_..."
+  kind       GrantKind
+  resourceId String
+  /// Email destino NORMALIZADO (trim + lowercase). Es la clave con la que se busca al reclamar
+  /// por código, así que guardarlo crudo rompería el reclamo de quien lo tipea distinto.
+  email      String
+  qty        Int       @default(1) // un pase que vale por N personas, no N códigos
+  message    String? // mensaje personal del organizador; se inserta en el mail
+
+  /// AdminUser.id de quien lo regaló. Sin FK, mismo criterio que TicketOrder.grantedById.
+  grantedById String
+  createdAt   DateTime @default(now())
+
+  /// Secreto del link. Se guarda en claro a propósito y NO es una credencial de sesión: es de
+  /// un solo uso, se invalida al reclamar y se puede revocar. Hashearlo impediría reenviar el
+  /// mismo link, que es justo lo que el organizador necesita cuando el mail no llegó.
+  claimToken        String         @unique
+  claimedAt         DateTime?
+  claimedVia        GrantClaimVia?
+  claimedByDeviceId String?
+
+  revokedAt     DateTime?
+  revokedReason String?
+
+  /// Resultado del aviso por mail. Mismo par que Application.notifiedAt/notifyError.
+  notifiedAt  DateTime?
+  notifyError String?
+
+  /// Lo que se materializó al reclamar. Es lo que hace IDEMPOTENTE el reclamo: si ya hay
+  /// orden (o inscripción), reintentar no duplica el regalo.
+  orderId        String?
+  registrationId String?
+
+  // Reclamar por código busca los grants vivos de un email.
+  @@index([email, claimedAt])
+  @@index([grantedById, createdAt])
+}
+
+/// Código de un solo uso para reclamar una cortesía ENTRANDO A LA APP (sin el link del mail).
+/// Espejo exacto de AdminLoginCode pero con el email como sujeto en vez de un AdminUser: acá
+/// no hay cuenta previa, justamente porque el invitado nunca abrió la app.
+///
+/// Por qué existe: sin este paso, "poner tu email y llevarte la entrada" es robable por quien
+/// conozca el email del invitado — que en prensa y sponsors es el dato más fácil de averiguar.
+/// Reusa el módulo puro server/src/lib/adminOtp.ts entero (hash con pepper, ventana, intentos).
+model GrantClaimCode {
+  id         String    @id @default(cuid())
+  email      String // normalizado, igual que TicketGrant.email
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  // Las dos consultas del reclamo: el último código vivo de ese email, y cuántos se
+  // emitieron en la ventana de rate limit.
+  @@index([email, createdAt])
 }
