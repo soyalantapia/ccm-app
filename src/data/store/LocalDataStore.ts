@@ -223,7 +223,9 @@ export class LocalDataStore implements DataStore {
     return readJSON<Registration[]>(K.registrations, [])
   }
 
-  generalRegistrationCount(eventId: string): number {
+  /** Sin backend el dispositivo ES la fuente completa, así que acá el total siempre se conoce.
+   *  El tipo admite null porque RemoteDataStore sí puede no conocerlo (ver DataStore). */
+  generalRegistrationCount(eventId: string): number | null {
     return this.getRegistrations().filter(
       (r) => r.eventId === eventId && !r.blockId && r.status === 'confirmada',
     ).length
