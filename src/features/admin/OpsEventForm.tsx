@@ -93,11 +93,17 @@ interface Props {
   open: boolean
   /** Evento a editar; omitido = crear nuevo. */
   event?: EventItem
+  /**
+   * Al crear: de qué evento cuelga esta INICIATIVA. Se pasa desde la ficha del padre, así el
+   * organizador no elige "qué tipo de entidad es" — elige dónde está parado y el sistema
+   * completa el resto.
+   */
+  parentId?: string
   onClose: () => void
 }
 
 /** Alta y edición de eventos desde el admin (CRUD real sobre la capa local). */
-export function OpsEventForm({ open, event, onClose }: Props) {
+export function OpsEventForm({ open, event, parentId, onClose }: Props) {
   const [f, setF] = useState<Form>(empty)
   const [error, setError] = useState('')
 
@@ -200,7 +206,7 @@ export function OpsEventForm({ open, event, onClose }: Props) {
             : '✓ Borrador guardado',
       )
     } else {
-      store.createEvent({ ...data, sponsorIds: [] })
+      store.createEvent({ ...data, sponsorIds: [], ...(parentId ? { parentId } : {}) })
       toast(publicar ? '✓ Publicado · ya aparece en la app' : '✓ Borrador guardado · no lo ve el público')
     }
     onClose()

@@ -1,12 +1,26 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Button, Field, Input, Select, Sheet, Textarea, toast } from '../../components/ui'
+import { Button, Field, Input, InputConSugerencias, Sheet, Textarea, toast } from '../../components/ui'
 import { store } from '../../data/store'
 import type { EventBlock } from '../../data/types'
 
-const KIND_OPTIONS = ['Charla', 'Masterclass', 'Desfile', 'Workshop', 'Networking', 'Panel'].map((k) => ({
-  value: k,
-  label: k,
-}))
+/**
+ * Sugerencias de tipo de actividad, NO una lista cerrada. La columna `kind` siempre fue texto
+ * libre en la base; el que la encerraba era este formulario. La prueba está en producción: hay
+ * un bloque con tipo "Art Show" que este selector nunca ofreció y que, con un Select, el
+ * organizador no podía volver a cargar. Ahora se escribe lo que sea y esto sólo ahorra tipeo.
+ */
+const KIND_SUGERENCIAS = [
+  'Charla',
+  'Masterclass',
+  'Desfile',
+  'Workshop',
+  'Networking',
+  'Panel',
+  'Art Show',
+  'Cata',
+  'Ronda de negocios',
+  'Mentoría',
+]
 
 type Form = {
   title: string
@@ -113,8 +127,15 @@ export function OpsBlockForm({ open, eventId, block, onClose }: Props) {
           <Input value={f.title} onChange={set('title')} placeholder="Ej: Masterclass de pasarela" required />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Tipo" required>
-            <Select options={KIND_OPTIONS} value={f.kind} onChange={set('kind')} />
+          <Field label="Tipo" hint="Escribí lo que sea; las de abajo son sugerencias." required>
+            <InputConSugerencias
+              listId="block-kind-sugerencias"
+              sugerencias={KIND_SUGERENCIAS}
+              value={f.kind}
+              onChange={set('kind')}
+              placeholder="Workshop"
+              required
+            />
           </Field>
           <Field label="Sala">
             <Input value={f.room} onChange={set('room')} placeholder="Salón principal" />

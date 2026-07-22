@@ -104,6 +104,7 @@ export function toEventItem(ev: Event & { sponsors?: { sponsorId: string }[] }):
     cover: ev.cover,
     ...(ev.price != null ? { price: ev.price } : {}),
     ...(ev.capacity != null ? { capacity: ev.capacity } : {}),
+    ...(ev.parentId ? { parentId: ev.parentId } : {}),
     ...(ev.seedTaken ? { seedTaken: ev.seedTaken } : {}),
     ...(sponsorIds.length ? { sponsorIds } : {}),
     past: ev.past,

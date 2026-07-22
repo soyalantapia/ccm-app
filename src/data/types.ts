@@ -46,6 +46,12 @@ export interface EventItem {
   price?: number | null
   /** Cupo total del evento (para lo que se inscribe o se compra a nivel evento). null = sin tope. */
   capacity?: number | null
+  /**
+   * De qué evento cuelga esta INICIATIVA (workshop, capacitación, lo que sea). null/ausente =
+   * evento de primer nivel. Las hijas se filtran en los selectores de RENDER del front, no en la
+   * consulta del server: si se filtraran ahí, desaparecerían de la ficha de su propio padre.
+   */
+  parentId?: string | null
   /** Baseline de ocupación: los que el organizador anotó por fuera y no están en la base. */
   seedTaken?: number
   sponsorIds?: string[]

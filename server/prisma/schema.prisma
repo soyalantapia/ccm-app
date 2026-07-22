@@ -245,6 +245,15 @@ model Event {
   // recién después baja el default a false. Sin ese orden, todo lo que está al aire desaparecía.
   published   Boolean   @default(false)
 
+  // Una INICIATIVA (workshop, capacitación, lo que sea) es un evento colgado de otro: hereda la
+  // ficha, la portada, el link propio y el formulario que el organizador ya conoce, en vez de
+  // duplicar todo eso en el bloque de agenda. `null` = evento de primer nivel.
+  // Restrict, no Cascade: borrar un evento no puede llevarse en silencio las iniciativas que
+  // cuelgan de él (y que pueden tener gente inscripta o pagando).
+  parentId      String?
+  parent        Event?  @relation("EventoHijo", fields: [parentId], references: [id], onDelete: Restrict)
+  iniciativas   Event[] @relation("EventoHijo")
+
   blocks        EventBlock[]
   registrations Registration[]
   sponsors      EventSponsor[]
@@ -255,6 +264,7 @@ model Event {
 
   @@index([type, startDate])
   @@index([past])
+  @@index([parentId])
   // El público sólo ve lo publicado: el índice acompaña ese filtro, que corre en cada visita.
   @@index([published])
 }

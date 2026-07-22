@@ -34,3 +34,16 @@ export function blockSortKey(block: { day: string; start: string }): string {
   const [d = '', m = ''] = block.day.split('/')
   return `${m}${d} ${block.start}`
 }
+
+/**
+ * ¿Es un evento de primer nivel, o una INICIATIVA que cuelga de otro?
+ *
+ * ⚠️ REGLA: este filtro va en los selectores de RENDER —qué sube a la portada, qué lista la
+ * grilla, qué aparece en la landing— y NO en getEvents/getEventsWithBlocks del server. Si se
+ * moviera a la consulta, las iniciativas desaparecerían de la ficha de su propio evento padre,
+ * que es justo el único lugar donde tienen que verse. Tampoco se aplica en la búsqueda por slug:
+ * una iniciativa tiene su ficha propia y su link para compartir.
+ */
+export function esDePrimerNivel(e: { parentId?: string | null }): boolean {
+  return e.parentId == null
+}

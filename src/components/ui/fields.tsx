@@ -39,6 +39,38 @@ export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputEleme
   return <input className={`${inputClass} ${className ?? ''}`} {...rest} />
 }
 
+interface InputConSugerenciasProps extends InputHTMLAttributes<HTMLInputElement> {
+  /** Id del `<datalist>`: tiene que ser único en la página. */
+  listId: string
+  sugerencias: string[]
+}
+
+/**
+ * Input de texto libre CON sugerencias. Se ve y se comporta como un input normal: la lista
+ * ayuda a no tipear de más, pero no limita lo que se puede escribir.
+ *
+ * Existe porque un `<Select>` de opciones fijas miente cuando la columna de abajo es texto
+ * libre: en producción hay un bloque con tipo "Art Show" que el selector nunca ofreció y que
+ * el organizador no podía volver a cargar desde el panel.
+ */
+export function InputConSugerencias({
+  listId,
+  sugerencias,
+  className,
+  ...rest
+}: InputConSugerenciasProps) {
+  return (
+    <>
+      <input list={listId} className={`${inputClass} ${className ?? ''}`} {...rest} />
+      <datalist id={listId}>
+        {sugerencias.map((s) => (
+          <option key={s} value={s} />
+        ))}
+      </datalist>
+    </>
+  )
+}
+
 export function Textarea({ className, rows = 4, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea rows={rows} className={`${inputClass} resize-y ${className ?? ''}`} {...rest} />
 }

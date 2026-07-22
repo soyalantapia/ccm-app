@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Check, Lock, MessageCircle, QrCode, Sparkles, Star } from 'lucide-react'
 import { Badge, Button, ButtonLink, QR, SectionTitle } from '../components/ui'
+import { esDePrimerNivel } from '../features/eventos/eventMeta'
 import { store, useStore } from '../data/store'
 import { config } from '../config'
 import { formatMoney } from '../features/tickets/format'
@@ -20,7 +21,7 @@ function PremiumList() {
   // Sólo las que todavía se pueden aprovechar: ofrecer una capacitación vencida como beneficio
   // de la membresía sería venderle a alguien algo a lo que ya no puede entrar.
   const capacitaciones = useStore((s) =>
-    s.getEvents().filter((e) => e.socioOnly && estaPorVenir(e)),
+    s.getEvents().filter((e) => esDePrimerNivel(e) && e.socioOnly && estaPorVenir(e)),
   )
   if (capacitaciones.length === 0) return null
 

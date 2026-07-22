@@ -4,6 +4,7 @@ import { ButtonLink, Card, Img, SectionTitle } from '../../components/ui'
 import { useStore } from '../../data/store'
 import { IDS } from '../../data/ids'
 import { estaPorVenir } from '../../lib/eventDate'
+import { esDePrimerNivel } from '../eventos/eventMeta'
 
 /** Próximos Caminos a CCM (PRD §6.1.6) — los 2 eventos previos con postulación.
  *  "Próximos" lo decide la FECHA: antes filtraba sólo por el tilde de finalizado y el landing
@@ -12,6 +13,7 @@ export function CaminosSection() {
   const caminos = useStore((s) =>
     s
       .getEvents()
+      .filter(esDePrimerNivel)
       .filter((e) => e.type === 'camino' && estaPorVenir(e))
       .sort((a, b) => a.startDate.localeCompare(b.startDate))
       .slice(0, 2),

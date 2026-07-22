@@ -10,6 +10,7 @@ import { CoreOccupancyBar } from '../../features/admin/CoreOccupancyBar'
 import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
 import { OpsEventForm } from '../../features/admin/OpsEventForm'
 import { OpsBlockForm } from '../../features/admin/OpsBlockForm'
+import { formatMoney } from '../../features/tickets/format'
 import { EVENT_TYPE_META, formatDateTime, percent } from '../../features/admin/coreFormat'
 import { AVISO_BORRADO } from '../../features/admin/copyDestructivo'
 
@@ -19,6 +20,7 @@ export default function AdminEventoDetalle() {
   const [editOpen, setEditOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [blockForm, setBlockForm] = useState<{ open: boolean; block?: EventBlock }>({ open: false })
+  const [iniciativaOpen, setIniciativaOpen] = useState(false)
   const [deleteBlock, setDeleteBlock] = useState<EventBlock | null>(null)
 
   const event = useStore((s) => s.getEventById(id))
@@ -31,6 +33,9 @@ export default function AdminEventoDetalle() {
       return { block, avail, localTaken }
     }),
   )
+  // Las INICIATIVAS que cuelgan de este evento. Se leen de la lista del panel (que incluye
+  // borradores): una iniciativa a medio armar tiene que verse acá, que es donde se la termina.
+  const iniciativas = useStore((s) => s.getAdminEvents().filter((e) => e.parentId === id))
   const registrations = useStore((s) =>
     s
       .getRegistrations()
@@ -106,6 +111,50 @@ export default function AdminEventoDetalle() {
       <div className="mt-10 grid gap-x-10 gap-y-10 lg:grid-cols-3">
         <div className="space-y-10 lg:col-span-2">
           {/* Bloques con ocupación en vivo */}
+          {/* Iniciativas: workshops, capacitaciones o lo que sea, adentro de este evento.
+              Cada una es un evento con su ficha, su portada, su link propio y su precio — por eso
+              se cargan con el MISMO formulario de evento, sólo que ya saben de quién cuelgan. */}
+          <CorePanel title="Iniciativas" note="Workshops y capacitaciones adentro de este evento">
+            <div className="mb-5">
+              <Button variant="outline" size="sm" onClick={() => setIniciativaOpen(true)}>
+                <Plus size={13} strokeWidth={2} /> Agregar iniciativa
+              </Button>
+            </div>
+            {iniciativas.length === 0 ? (
+              <p className="py-2 text-sm text-ink-soft">
+                Todavía no hay iniciativas. Una iniciativa es cualquier cosa que pase adentro de
+                este evento y que quieras difundir o cobrar aparte: un workshop, una capacitación,
+                una masterclass. Tiene su propia página y su propio link para compartir.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {iniciativas.map((ini) => (
+                  <li
+                    key={ini.id}
+                    className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-1 border-b border-line pb-3 last:border-b-0 last:pb-0"
+                  >
+                    <div className="min-w-0">
+                      <Link
+                        to={`/admin/eventos/${ini.id}`}
+                        className="type-serif text-[15px] text-ink hover:text-accent-strong"
+                      >
+                        {ini.title}
+                      </Link>
+                      <p className="mt-0.5 text-[12px] text-ink-soft">
+                        {ini.dateLabel}
+                        {ini.price != null && ` · ${formatMoney(ini.price)}`}
+                        {ini.capacity != null && ` · ${ini.capacity} lugares`}
+                      </p>
+                    </div>
+                    <Badge tone={ini.published ? 'success' : 'outline'}>
+                      {ini.published ? 'Publicada' : 'Borrador'}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CorePanel>
+
           <CorePanel title="Bloques" note="Cupo seed + inscripciones de esta demo, en vivo">
             <div className="mb-5">
               <Button variant="outline" size="sm" onClick={() => setBlockForm({ open: true })}>
@@ -214,6 +263,11 @@ export default function AdminEventoDetalle() {
 
       {/* Modales: editar evento, crear/editar bloque, confirmaciones de borrado */}
       <OpsEventForm open={editOpen} event={event} onClose={() => setEditOpen(false)} />
+      <OpsEventForm
+        open={iniciativaOpen}
+        parentId={event.id}
+        onClose={() => setIniciativaOpen(false)}
+      />
       <OpsBlockForm
         open={blockForm.open}
         eventId={event.id}

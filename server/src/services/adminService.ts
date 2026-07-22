@@ -54,7 +54,7 @@ export async function createEvent(e: EventItem): Promise<EventItem> {
       dateLabel: e.dateLabel, startDate: parseDate(e.startDate, 'fecha del evento'), timeLabel: e.timeLabel ?? null,
       venue: e.venue, address: e.address, mapsUrl: cleanStoredUrl(e.mapsUrl, 'mapa') ?? '', description: e.description,
       cover: e.cover, price: precioValido(e.price, 'precio del evento'),
-      capacity: cupoValido(e.capacity), seedTaken: cupoValido(e.seedTaken) ?? 0,
+      capacity: cupoValido(e.capacity), seedTaken: cupoValido(e.seedTaken) ?? 0, parentId: e.parentId ?? null,
       past: e.past ?? false, socioOnly: e.socioOnly ?? false,
       // Borrador salvo que el panel pida publicarlo: lo que no se decide, no sale al aire.
       published: e.published ?? false,
@@ -71,7 +71,7 @@ export async function createEvent(e: EventItem): Promise<EventItem> {
 
 export async function updateEvent(id: string, patch: Partial<EventItem>): Promise<EventItem> {
   const data: Record<string, unknown> = {}
-  for (const k of ['type', 'title', 'subtitle', 'dateLabel', 'timeLabel', 'venue', 'address', 'description', 'cover', 'past', 'socioOnly', 'published', 'slug'] as const) {
+  for (const k of ['type', 'title', 'subtitle', 'dateLabel', 'timeLabel', 'venue', 'address', 'description', 'cover', 'past', 'socioOnly', 'published', 'slug', 'parentId'] as const) {
     if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   }
   if ('price' in patch) data.price = precioValido(patch.price, 'precio del evento')
@@ -115,6 +115,11 @@ export async function deleteEvent(id: string): Promise<void> {
     // lo mapea al mensaje genérico de "galerías". Damos un 409 claro.
     const convs = await tx.convocatoria.count({ where: { eventId: id } })
     if (convs > 0) throw conflict('HAS_CONVOCATORIAS', `No se puede borrar: tiene ${convs} convocatoria(s) asociada(s)`)
+    // Event.parentId es FK RESTRICT: sin este pre-chequeo el delete tira P2003 y el errorHandler
+    // lo mapea al mensaje genérico de "galerías", que no tiene nada que ver. Y borrar un evento
+    // no puede llevarse las iniciativas que cuelgan de él — pueden tener gente pagando.
+    const hijas = await tx.event.count({ where: { parentId: id } })
+    if (hijas > 0) throw conflict('HAS_INICIATIVAS', `No se puede borrar: tiene ${hijas} iniciativa(s) adentro`)
     await tx.event.delete({ where: { id } }) // cascade a bloques sin inscripciones
   })
 }
