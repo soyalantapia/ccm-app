@@ -112,7 +112,18 @@ export async function decideApplication(
     where: volviendo ? { id, status: { in: ['aceptada', 'rechazada'] } } : { id, status: 'preinscripta' },
     data: volviendo
       ? { status, decidedAt: null, decidedBy: null, decisionNote: null, notifiedAt: null, notifyError: null }
-      : { status, decidedAt: new Date(), decidedBy: admin?.email ?? null, decisionNote: opts.note?.trim() || null },
+      : {
+          status,
+          decidedAt: new Date(),
+          decidedBy: admin?.email ?? null,
+          decisionNote: opts.note?.trim() || null,
+          // Una decisión nueva arranca SIN rastro de avisos anteriores: si esta postulación ya
+          // había sido decidida, deshecha (que ya limpia estos campos) y decidida de nuevo, sin
+          // este reset un notifiedAt/notifyError de la decisión ANTERIOR sobrevivía acá y la
+          // ficha mostraba el estado de un aviso que no corresponde a esta decisión.
+          notifiedAt: null,
+          notifyError: null,
+        },
   })
   if (count === 0) {
     throw conflict(
@@ -148,11 +159,18 @@ export async function decideApplication(
 
   // Best-effort y DESPUÉS de persistir: que el correo falle no puede desarmar una decisión
   // que el organizador ya tomó y que el postulante ya ve en su app.
+  //
+  // Ambos updateMany de acá abajo condicionan por `{ id, status }` (no solo `id`): el envío es
+  // async y puede tardar. Si mientras el SMTP tarda alguien toca "Deshacer" (vuelve a
+  // preinscripta) o decide de nuevo, esta fila ya NO representa la decisión que originó este
+  // mail — escribir notifiedAt/notifyError encima sería atribuirle a la decisión ACTUAL (o a
+  // ninguna) el resultado de un envío que ya no le corresponde. Con la condición, esos updates
+  // simplemente no matchean ninguna fila (count 0) y no hacen nada.
   try {
     await getMailer().send(to, msg)
-    await prisma.application.updateMany({ where: { id }, data: { notifiedAt: new Date(), notifyError: null } })
+    await prisma.application.updateMany({ where: { id, status }, data: { notifiedAt: new Date(), notifyError: null } })
   } catch (err) {
     const detalle = err instanceof Error ? err.message : String(err)
-    await prisma.application.updateMany({ where: { id }, data: { notifyError: detalle.slice(0, 500) } })
+    await prisma.application.updateMany({ where: { id, status }, data: { notifyError: detalle.slice(0, 500) } })
   }
 }

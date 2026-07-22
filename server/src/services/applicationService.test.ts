@@ -101,6 +101,15 @@ describe('decideApplication — transición condicionada', () => {
     // guardado mal (undefined, '' o cualquier otra cosa que no sea null).
     expect(args.data.decisionNote).toBeNull()
   })
+
+  // Sin esto, una postulación decidida → deshecha → decidida de nuevo podía mostrar el
+  // notifiedAt/notifyError de la decisión ANTERIOR como si fuera de la actual (la rama de
+  // "volver a revisión" ya limpiaba estos dos campos; a esta rama, la de decidir, le faltaba).
+  it('la transición también limpia notifiedAt/notifyError: una decisión nueva no hereda el aviso de la anterior', async () => {
+    await decideApplication('app-1', 'aceptada', { adminUserId: 'u1' })
+    const args = mockPrisma.application.updateMany.mock.calls[0][0]
+    expect(args.data).toMatchObject({ notifiedAt: null, notifyError: null })
+  })
 })
 
 describe('decideApplication — volver a revisión (deshacer)', () => {
@@ -191,6 +200,40 @@ describe('decideApplication — aviso al postulante', () => {
     await expect(decideApplication('app-4', 'aceptada', { adminUserId: 'u1' })).resolves.toBeUndefined()
     const ultima = mockPrisma.application.updateMany.mock.calls.at(-1)![0]
     expect(ultima.data.notifyError).toContain('SMTP caído')
+    vi.restoreAllMocks()
+  })
+
+  /**
+   * Carrera entre el envío y "Deshacer" (review, IMPORTANTE 5). El envío es async; si mientras
+   * el SMTP tarda alguien deshace (vuelve a preinscripta) o decide de nuevo, la fila ya NO
+   * representa la decisión que originó este mail. Antes el update posterior al envío usaba
+   * `where: { id }` a secas, así que aterrizaba igual sobre la fila ya revertida y le dejaba un
+   * notifiedAt de un aviso que no corresponde a la decisión actual. Acá se verifica que el
+   * `where` de esos dos updates (éxito y error) incluya el status recién decidido — en la DB
+   * real, eso hace que el update no matchee ninguna fila (count 0) si el estado ya cambió.
+   */
+  it('el update de éxito condiciona por { id, status } — no solo por id', async () => {
+    mockPrisma.application.findUnique.mockResolvedValue({
+      id: 'app-6', status: 'aceptada', fromSeed: false,
+      data: { nombre: 'Lautaro', email: 'lau@mail.test' }, convocatoria: { title: 'C' },
+    })
+    await decideApplication('app-6', 'aceptada', { adminUserId: 'u1' })
+    const ultima = mockPrisma.application.updateMany.mock.calls.at(-1)![0]
+    expect(ultima.where).toMatchObject({ id: 'app-6', status: 'aceptada' })
+  })
+
+  it('el update de error TAMBIÉN condiciona por { id, status } — no solo por id', async () => {
+    mockPrisma.application.findUnique.mockResolvedValue({
+      id: 'app-7', status: 'rechazada', fromSeed: false,
+      data: { nombre: 'W', email: 'w@mail.test' }, convocatoria: { title: 'C' },
+    })
+    const mailer = await import('../mail/mailer.js')
+    vi.spyOn(mailer, 'getMailer').mockReturnValue({
+      send: async () => { throw new Error('SMTP caído') },
+    })
+    await decideApplication('app-7', 'rechazada', { adminUserId: 'u1' })
+    const ultima = mockPrisma.application.updateMany.mock.calls.at(-1)![0]
+    expect(ultima.where).toMatchObject({ id: 'app-7', status: 'rechazada' })
     vi.restoreAllMocks()
   })
 

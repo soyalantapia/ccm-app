@@ -1,10 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react'
-import { Badge, Button, EmptyState, toast } from '../../components/ui'
-import { store, useStore } from '../../data/store'
+import { Badge, Button, EmptyState } from '../../components/ui'
+import { useStore } from '../../data/store'
 import type { ConvocatoriaField } from '../../data/types'
 import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
+import { OpsDecisionSheet } from '../../features/admin/OpsDecisionSheet'
 import { formatDateTime } from '../../features/admin/opsFormat'
 import { APPLICATION_STATUS_META } from '../../features/admin/coreFormat'
 import {
@@ -24,10 +25,21 @@ const linkCls = 'text-[15px] text-ink underline decoration-line underline-offset
  */
 export default function AdminPostulacionDetalle() {
   const { id = '' } = useParams()
+  // key={id}: fuerza un remount COMPLETO de la ficha al cambiar de postulación. Sin esto, React
+  // Router cambia el :id de la URL pero reutiliza la MISMA instancia (mismo tipo de elemento, misma
+  // posición en el árbol) — el estado `decision` de acá abajo (panel de aceptar/rechazar abierto) y
+  // el `note`/`skipEmail` de OpsDecisionSheet sobreviven al cambio de id. Es la tercera pata del
+  // BLOQUEANTE 1 del review: junto con los dos guards del atajo de teclado, esto asegura que el
+  // estado de UNA postulación nunca quede flotando sobre otra.
+  return <AdminPostulacionDetalleFicha key={id} id={id} />
+}
+
+function AdminPostulacionDetalleFicha({ id }: { id: string }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const tab = parseApplicationTab(searchParams.get('tab'))
   const backTo = `/admin/postulaciones${applicationTabQuery(tab)}`
+  const [decision, setDecision] = useState<'aceptada' | 'rechazada' | null>(null)
 
   const applications = useStore((s) => s.getAdminApplications())
   const fallo = useStore((s) => s.applicationsFailed())
@@ -45,12 +57,32 @@ export default function AdminPostulacionDetalle() {
   useEffect(() => {
     if (index < 0) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp' && prevId) navigate(`/admin/postulaciones/${prevId}${applicationTabQuery(tab)}`)
-      if (e.key === 'ArrowDown' && nextId) navigate(`/admin/postulaciones/${nextId}${applicationTabQuery(tab)}`)
+      // Guard 1: con el panel de decisión abierto, ↑/↓ NO tiene que cambiar de postulación —
+      // confirmar ahí manda un mail real e irreversible, y no puede terminar apuntando a otra
+      // persona por una flecha de más.
+      if (decision !== null) return
+      // Guard 2: si el foco está escribiendo (la nota interna es un textarea; también cubre
+      // inputs y cualquier contenteditable), ↓ es "bajar una línea", no "siguiente postulación".
+      // Hoy este guard es defensa A FUTURO, no cubre un caso hoy alcanzable: el único campo de
+      // escritura de esta ficha es la nota de OpsDecisionSheet, que solo existe en el DOM con el
+      // panel de decisión abierto — ahí Guard 1 (decision !== null) ya corta antes de llegar acá.
+      // Si el día de mañana aparece un input/textarea fuera del panel (ej. un buscador en el
+      // layout admin), este guard es lo que evita que ↓ navegue mientras se escribe ahí.
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
+      if (e.key === 'ArrowUp' && prevId) {
+        e.preventDefault() // si no, además de navegar, scrollea la página
+        navigate(`/admin/postulaciones/${prevId}${applicationTabQuery(tab)}`)
+      }
+      if (e.key === 'ArrowDown' && nextId) {
+        e.preventDefault()
+        navigate(`/admin/postulaciones/${nextId}${applicationTabQuery(tab)}`)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [index, prevId, nextId, tab, navigate])
+  }, [index, prevId, nextId, tab, navigate, decision])
 
   // null = todavía no hidrató o falló el fetch real (mismo criterio que AdminPostulaciones):
   // nunca cae al seed cuando SÍ hay backend, y "cargando" es un estado DISTINTO de "no existe".
@@ -91,14 +123,6 @@ export default function AdminPostulacionDetalle() {
   const fields: ConvocatoriaField[] = convocatoria?.fields ?? []
   const { title, story, email, telefono, rowKeys, labelOf } = deriveApplicationFields(app, fields)
   const meta = APPLICATION_STATUS_META[app.status]
-
-  const decide = (status: 'aceptada' | 'rechazada') => {
-    store.decideApplication(app.id, status)
-    toast(
-      status === 'aceptada' ? '✓ Postulación aceptada' : 'Postulación rechazada',
-      status === 'aceptada' ? 'success' : 'info',
-    )
-  }
 
   return (
     <div className="px-5 py-8 md:px-10">
@@ -212,27 +236,34 @@ export default function AdminPostulacionDetalle() {
                     No se avisó a la persona (sin más detalle disponible).
                   </p>
                 )}
+                {/* Nota interna del equipo al decidir — el server solo la manda en esta ruta
+                 *  (forAdmin): el postulante NUNCA la ve, ni por acá ni por mail. Si nadie la
+                 *  muestra, escribirla es un gesto vacío — por eso va junto al resto del
+                 *  registro de la decisión. */}
+                {app.decisionNote && (
+                  <p className="text-ink-soft">
+                    <span className="eyebrow text-[10px] text-ink-soft/70">Nota interna: </span>
+                    {app.decisionNote}
+                  </p>
+                )}
               </div>
             )}
           </section>
 
           {app.status === 'preinscripta' && (
-            <section className="space-y-2.5">
-              <div className="flex gap-2.5">
-                <OpsDangerButton className="flex-1 justify-center" onClick={() => decide('rechazada')}>
-                  Rechazar
-                </OpsDangerButton>
-                <Button className="flex-1 justify-center" onClick={() => decide('aceptada')}>
-                  Aceptar
-                </Button>
-              </div>
-              <p className="text-[11px] leading-relaxed text-ink-soft/80">
-                Al aceptar, en Fase 1 se dispara el mail de invitación + WhatsApp automático.
-              </p>
+            <section className="flex gap-2.5">
+              <OpsDangerButton className="flex-1 justify-center" onClick={() => setDecision('rechazada')}>
+                Rechazar
+              </OpsDangerButton>
+              <Button className="flex-1 justify-center" onClick={() => setDecision('aceptada')}>
+                Aceptar
+              </Button>
             </section>
           )}
         </aside>
       </div>
+
+      {decision && <OpsDecisionSheet app={app} status={decision} open onClose={() => setDecision(null)} />}
     </div>
   )
 }

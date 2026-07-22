@@ -819,13 +819,32 @@ export class RemoteDataStore extends LocalDataStore {
   private hydrateApplications(): void {
     this.api.get<Application[]>('/applications').then((a) => { this.applications = a; bus.emit('applications') }).catch(() => {})
   }
+  /**
+   * El endpoint pagina por cursor y devuelve `{ items, nextCursor }` (antes un array plano con
+   * `take: 500`). Acá se pide TODA la cola siguiendo el cursor hasta que se agota — no solo la
+   * primera página — para que `this.adminApplications` vuelva a ser la lista COMPLETA, como antes
+   * del cambio a paginación server-side.
+   *
+   * Es la única lectura que no cae al seed: los contadores de los tabs de AdminPostulaciones y,
+   * sobre todo, el guard de borrado en cascada de AdminConvocatorias (`Application.convocatoriaId`
+   * es `onDelete: Cascade`) se calculan sobre este mismo caché. Hidratar solo la primera página
+   * (50 de N) dejaba a una convocatoria con postulaciones fuera del corte mostrando "0
+   * postulaciones" y habilitando un borrado que se las llevaba puestas — BLOQUEANTE del review.
+   *
+   * `limit=100` (el máximo que acepta el server) para minimizar la cantidad de requests; si el
+   * paginado falla a mitad de camino, se descarta todo (no se deja el caché en un estado
+   * "parcial pero sin avisar" — la garantía de esta función es "completo o error", nunca "a medias").
+   *
+   * El loop en sí no confía ciegamente en que el server avanza: si `nextCursor` viniera repetido
+   * (mismo valor que el cursor recién usado) o si se pasara de un tope de páginas razonable, corta
+   * y lo trata IGUAL que el fallo de una página — error, nunca una lista parcial disfrazada de
+   * completa. Hoy el backend avanza bien (verificado incluso con `ts` duplicados); esto es defensa
+   * ante un cambio futuro del server que se quede pisando el mismo cursor.
+   */
   private hydrateAdminApplications(): void {
-    // El endpoint ahora pagina por cursor y devuelve { items, nextCursor } (antes un array plano
-    // con take:500). Acá solo hidratamos la primera página; el cursor queda para paginación futura.
-    this.api
-      .get<{ items: Application[]; nextCursor: string | null }>('/admin/applications')
-      .then((r) => {
-        this.adminApplications = r.items
+    this.fetchAllAdminApplications()
+      .then((items) => {
+        this.adminApplications = items
         this.appsError = false
       })
       .catch(() => {
@@ -834,6 +853,28 @@ export class RemoteDataStore extends LocalDataStore {
         this.appsError = true
       })
       .finally(() => bus.emit('applications'))
+  }
+
+  private async fetchAllAdminApplications(): Promise<Application[]> {
+    const items: Application[] = []
+    let cursor: string | undefined
+    // Tope de páginas: con limit=100 esto cubre 20.000 postulaciones. Si se llega acá es que el
+    // server no está agotando el cursor — cortar es mejor que colgar la pestaña en un loop infinito.
+    const MAX_PAGES = 200
+    for (let pagina = 0; pagina < MAX_PAGES; pagina++) {
+      const qs = cursor ? `?limit=100&cursor=${encodeURIComponent(cursor)}` : '?limit=100'
+      const page = await this.api.get<{ items: Application[]; nextCursor: string | null }>(
+        `/admin/applications${qs}`,
+      )
+      items.push(...page.items)
+      if (!page.nextCursor) return items
+      if (page.nextCursor === cursor) {
+        // El cursor no avanzó: pedir la "próxima" página otra vez traería lo mismo para siempre.
+        throw new Error('fetchAllAdminApplications: el cursor no avanzó entre páginas')
+      }
+      cursor = page.nextCursor
+    }
+    throw new Error('fetchAllAdminApplications: se superó el tope de páginas sin agotar el cursor')
   }
 
   /** TODAS (vista del organizador): la lista admin si está cargada, si no cae al device/seed. */

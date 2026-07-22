@@ -329,12 +329,20 @@ export function toMembership(m: Membership): DomainMembership {
 }
 
 /**
- * `forAdmin` decide si se incluye `decidedBy`. Esta misma fila alimenta DOS rutas:
- * /admin/applications (panel del organizador, protegida con requirePermission) y
- * /applications ("Mis postulaciones" del propio postulante, solo device-scoped). `decidedBy`
- * es el EMAIL del admin que decidió — PII interna del equipo — así que solo viaja con
- * forAdmin=true. `notifiedAt`/`notifyError` sí viajan siempre: son sobre el aviso de la
- * PROPIA postulación, no exponen a nadie más.
+ * `forAdmin` decide si se incluye `decidedBy`, `decisionNote` y `notifyError`. Esta misma fila
+ * alimenta DOS rutas: /admin/applications (panel del organizador, protegida con
+ * requirePermission) y /applications ("Mis postulaciones" del propio postulante, solo
+ * device-scoped).
+ *
+ * - `decidedBy` es el EMAIL del admin que decidió — PII interna del equipo.
+ * - `decisionNote` es la nota interna que el organizador escribe al decidir — nunca se le
+ *   manda al postulante por mail, así que tampoco puede viajarle por esta ruta.
+ * - `notifyError` guarda el `err.message` CRUDO de un envío fallido (SMTP/Resend): puede traer
+ *   host, puerto, usuario o el cuerpo de la respuesta del proveedor — detalle de infraestructura,
+ *   no algo para mostrarle a la persona que postuló.
+ *
+ * Los tres solo viajan con forAdmin=true. `notifiedAt` sí viaja siempre: es sobre el aviso de la
+ * PROPIA postulación (si salió o no), no expone a nadie más ni ningún detalle de infra.
  */
 export function toApplication(a: Application, forAdmin = false): DomainApplication {
   return {
@@ -346,8 +354,9 @@ export function toApplication(a: Application, forAdmin = false): DomainApplicati
     ...(a.fromSeed ? { fromSeed: a.fromSeed } : {}),
     ...(a.decidedAt ? { decidedAt: a.decidedAt.toISOString() } : {}),
     ...(forAdmin && a.decidedBy ? { decidedBy: a.decidedBy } : {}),
+    ...(forAdmin && a.decisionNote ? { decisionNote: a.decisionNote } : {}),
     ...(a.notifiedAt ? { notifiedAt: a.notifiedAt.toISOString() } : {}),
-    ...(a.notifyError ? { notifyError: a.notifyError } : {}),
+    ...(forAdmin && a.notifyError ? { notifyError: a.notifyError } : {}),
   }
 }
 

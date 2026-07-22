@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
-import { Badge, Button, Card, toast } from '../../components/ui'
-import { store, useStore } from '../../data/store'
+import { Badge, Button, Card } from '../../components/ui'
+import { useStore } from '../../data/store'
 import type { Application, ConvocatoriaField } from '../../data/types'
 import { OpsDangerButton } from './OpsDangerButton'
+import { OpsDecisionSheet } from './OpsDecisionSheet'
 import { formatDateTime, relativeTime } from './opsFormat'
 import { APPLICATION_STATUS_META } from './coreFormat'
 import { applicationTabQuery, deriveApplicationFields, type ApplicationTab } from './applicationFields'
@@ -14,18 +16,11 @@ import { applicationTabQuery, deriveApplicationFields, type ApplicationTab } fro
  *  + todo "—". Ahora deriva título, historia y filas de convocatoria.fields (o de app.data). */
 export function OpsApplicationCard({ app, tab }: { app: Application; tab: ApplicationTab }) {
   const meta = APPLICATION_STATUS_META[app.status]
+  const [decision, setDecision] = useState<'aceptada' | 'rechazada' | null>(null)
 
   const convocatoria = useStore((s) => s.getConvocatorias().find((c) => c.id === app.convocatoriaId))
   const fields: ConvocatoriaField[] = convocatoria?.fields ?? []
   const { title, story } = deriveApplicationFields(app, fields)
-
-  const decide = (status: 'aceptada' | 'rechazada') => {
-    store.decideApplication(app.id, status)
-    toast(
-      status === 'aceptada' ? '✓ Postulación aceptada' : 'Postulación rechazada',
-      status === 'aceptada' ? 'success' : 'info',
-    )
-  }
 
   return (
     <Card className="p-5 md:p-6">
@@ -33,6 +28,9 @@ export function OpsApplicationCard({ app, tab }: { app: Application; tab: Applic
         <h3 className="type-serif text-xl text-ink">{title}</h3>
         <div className="flex items-center gap-3">
           <span className="text-xs text-ink-soft">{relativeTime(app.ts)}</span>
+          {/* La lista ya las agrupa aparte bajo un rótulo; esto es un segundo aviso a nivel
+           *  card, para que "Ejemplo" sea visible aunque se mire una card suelta. */}
+          {app.fromSeed && <Badge tone="neutral">Ejemplo</Badge>}
           <Badge tone={meta.tone}>{meta.label}</Badge>
         </div>
       </div>
@@ -49,10 +47,10 @@ export function OpsApplicationCard({ app, tab }: { app: Application; tab: Applic
 
         {app.status === 'preinscripta' ? (
           <div className="flex gap-2.5">
-            <OpsDangerButton size="sm" onClick={() => decide('rechazada')}>
+            <OpsDangerButton size="sm" onClick={() => setDecision('rechazada')}>
               Rechazar
             </OpsDangerButton>
-            <Button size="sm" onClick={() => decide('aceptada')}>
+            <Button size="sm" onClick={() => setDecision('aceptada')}>
               Aceptar
             </Button>
           </div>
@@ -63,11 +61,7 @@ export function OpsApplicationCard({ app, tab }: { app: Application; tab: Applic
         )}
       </div>
 
-      {app.status === 'preinscripta' && (
-        <p className="mt-3 text-right text-[11px] leading-relaxed text-ink-soft/80">
-          Al aceptar, en Fase 1 se dispara el mail de invitación + WhatsApp automático.
-        </p>
-      )}
+      {decision && <OpsDecisionSheet app={app} status={decision} open onClose={() => setDecision(null)} />}
     </Card>
   )
 }
