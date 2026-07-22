@@ -117,6 +117,7 @@ export class RemoteDataStore extends LocalDataStore {
   private adminNotas?: Nota[]
   private adminContents?: ContentItem[] // /admin/contents: sin gate de socio (el panel debe ver el youtubeId)
   private adminEvents?: EventItem[] // /admin/events: incluye BORRADORES, que la ruta pública no devuelve
+  private draftBlocksInflight = new Set<string>() // evita pedir dos veces la agenda del mismo borrador
   private analytics?: AnalyticsEvent[] // analítica real cross-device (GET /admin/analytics), P1
   // Métricas del Dashboard (GET /admin/stats). Sin fallback al seed a propósito.
   private adminStats?: AdminStats
@@ -1411,7 +1412,32 @@ export class RemoteDataStore extends LocalDataStore {
     this.hydrateAdminEvents()
   }
   private hydrateAdminEvents(): void {
-    this.api.get<EventItem[]>('/admin/events').then((e) => { this.adminEvents = e; bus.emit('events') }).catch(() => {})
+    this.api.get<EventItem[]>('/admin/events').then((e) => {
+      this.adminEvents = e
+      bus.emit('events')
+      this.hydrateDraftBlocks(e)
+    }).catch(() => {})
+  }
+
+  /** La agenda de los BORRADORES. El bootstrap público (/events/with-blocks) sólo trae eventos
+   *  publicados, así que los bloques de un borrador nunca entraban al caché y `getBlocks()` caía
+   *  al seed: el organizador abría su evento a medio armar y veía la grilla de la demo como si
+   *  fuera suya. Se piden por la ruta de admin, que es la única que devuelve borradores. */
+  private hydrateDraftBlocks(adminEvents: EventItem[]): void {
+    const publicados = new Set((this.events ?? []).map((e) => e.id))
+    for (const ev of adminEvents) {
+      if (publicados.has(ev.id) || this.draftBlocksInflight.has(ev.id)) continue
+      this.draftBlocksInflight.add(ev.id)
+      this.api
+        .get<EventBlock[]>(`/admin/events/${ev.id}/blocks`)
+        .then((blocks) => {
+          this.blocksByEvent.set(ev.id, blocks)
+          for (const b of blocks) this.blocksById.set(b.id, b)
+          bus.emit('events')
+        })
+        .catch(() => {})
+        .finally(() => this.draftBlocksInflight.delete(ev.id))
+    }
   }
   /** El panel ve los borradores; las páginas públicas usan getEvents(), que trae sólo lo publicado. */
   override getAdminEvents(): EventItem[] {

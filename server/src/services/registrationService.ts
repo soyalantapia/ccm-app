@@ -27,7 +27,11 @@ export async function register(
   blockId?: string,
 ): Promise<Registration> {
   const event = await prisma.event.findUnique({ where: { id: eventId } })
-  if (!event) throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
+  // Un borrador responde igual que un evento inexistente. getEvents/getEvent ya lo hacían, pero
+  // acá NO se miraba `published`: con el id de un evento sin publicar —visible en el panel— se
+  // podía crear una inscripción CONFIRMADA, con su QR, contra algo que el organizador todavía
+  // estaba armando. Va primero, antes que past y socioOnly, para no filtrar por el mensaje de error.
+  if (!event || !event.published) throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
 
   // Evento finalizado: cerrar la inscripción (antes se podía inscribir a un evento pasado y
   // recibir un QR para algo que ya sucedió). El front revierte el optimista ante este 409.
