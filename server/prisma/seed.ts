@@ -1,7 +1,17 @@
 /**
- * Seed → prod (doc 10 §10). Idempotente (upsert por id). Lee los MISMOS datos del
- * front (src/data/seed/*, src/config/plans) — cero traducción — y los inserta en
- * Postgres reusando los IDs/slugs canónicos (no se regeneran: son contrato de deep-links).
+ * Seed de DESARROLLO. Lee los MISMOS datos del front (src/data/seed/*, src/config/plans)
+ * — cero traducción — y los inserta en Postgres reusando los IDs/slugs canónicos (no se
+ * regeneran: son contrato de deep-links).
+ *
+ * ⚠️ NO ES IDEMPOTENTE EN EL SENTIDO INOFENSIVO DE LA PALABRA. Cada upsert lleva un
+ * `update:` que reescribe TODOS los campos, y para los hijos hace deleteMany+createMany.
+ * Correrlo contra producción:
+ *   · pisa `price` y `mpLink` de los planes de entrada → borra los links de pago cargados
+ *     a mano y devuelve los precios VIP a los del archivo, en medio de una venta;
+ *   · devuelve los 18 bloques de agenda a los datos de demostración, speakers ficticios
+ *     incluidos, encima de lo que el organizador haya corregido.
+ * Por eso el guard de abajo. La doc vieja lo llamaba "idempotente" a secas y esa palabra
+ * ya indujo a correrlo donde no correspondía.
  *
  * Cubre lo necesario para Fase B (eventos + bloques + cupos) + sus FKs (sponsors,
  * planes). 🔶 Fases E/F/etc.: catálogo, galerías, contenidos, convocatorias.
@@ -25,7 +35,40 @@ import { seedPlans } from '../../src/config/plans'
 
 const prisma = new PrismaClient()
 
+/** Aborta si la base de destino parece producción. Dos señales independientes, porque una sola
+ *  falla sola: NODE_ENV puede venir sin setear en una consola suelta, y la URL puede apuntar a
+ *  prod desde una máquina local. Se destraba a propósito con SEED_FORZADO=si, que obliga a
+ *  escribirlo y por lo tanto a pensarlo. */
+function guardDeProduccion(): void {
+  if (process.env.SEED_FORZADO === 'si') {
+    console.warn('⚠️  SEED_FORZADO=si — corriendo el seed sin guard. Esto PISA datos cargados a mano.')
+    return
+  }
+  const url = process.env.DATABASE_URL ?? ''
+  const señales: string[] = []
+  if (process.env.NODE_ENV === 'production') señales.push('NODE_ENV=production')
+  if (/railway|rlwy\.net|proxy\.rlwy/i.test(url)) señales.push('DATABASE_URL apunta a Railway')
+  if (señales.length === 0) return
+
+  console.error(
+    [
+      '',
+      '🛑  SEED ABORTADO: la base de destino parece PRODUCCIÓN.',
+      `    Señales: ${señales.join(' · ')}`,
+      '',
+      '    Este seed no es inofensivo: reescribe todos los campos de lo que toca.',
+      '    Contra prod te borra los links de pago de las entradas y devuelve la agenda',
+      '    a los datos de demostración, con los speakers ficticios incluidos.',
+      '',
+      '    Si de verdad querés correrlo igual: SEED_FORZADO=si npm run db:seed',
+      '',
+    ].join('\n'),
+  )
+  process.exit(1)
+}
+
 async function main() {
+  guardDeProduccion()
   // ── Sponsors (+ creatives) — FK de EventSponsor y galerías ──
   for (const s of seedSponsors) {
     await prisma.sponsor.upsert({
