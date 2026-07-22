@@ -37,6 +37,10 @@ type Form = {
   cover: string
   /** Precio en pesos, como texto porque viene de un input. Vacío = sin precio (no se vende). */
   price: string
+  /** Cupo total del evento. Vacío = sin tope, que es como se comportó siempre. */
+  capacity: string
+  /** Los que el organizador ya anotó por fuera (WhatsApp, planilla) y no están en la base. */
+  seedTaken: string
   // Flags de visibilidad: sin estos en el Form, nunca entraban al patch y la whitelist
   // `if (k in patch)` del backend jamás los veía → quedaban congelados en el default del
   // create. El organizador no podía archivar un evento ni marcarlo exclusivo de Socios.
@@ -58,6 +62,8 @@ const empty: Form = {
   address: config.venue.address,
   description: '',
   price: '',
+  capacity: '',
+  seedTaken: '',
   past: false,
   socioOnly: false,
   cover: COVER_OPTIONS[0].value,
@@ -76,6 +82,8 @@ function fromEvent(e: EventItem): Form {
     description: e.description,
     cover: e.cover,
     price: e.price != null ? String(e.price) : '',
+    capacity: e.capacity != null ? String(e.capacity) : '',
+    seedTaken: e.seedTaken ? String(e.seedTaken) : '',
     past: e.past ?? false,
     socioOnly: e.socioOnly ?? false,
   }
@@ -283,6 +291,14 @@ export function OpsEventForm({ open, event, onClose }: Props) {
               inputMode="numeric"
               placeholder="45000"
             />
+          </Field>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Cupo" hint="Lugares totales. Vacío = sin tope.">
+            <Input value={f.capacity} onChange={set('capacity')} inputMode="numeric" placeholder="30" />
+          </Field>
+          <Field label="Inscriptos previos" hint="Los que ya anotaste por fuera de la app.">
+            <Input value={f.seedTaken} onChange={set('seedTaken')} inputMode="numeric" placeholder="0" />
           </Field>
         </div>
         {f.price.trim() !== '' && f.socioOnly && (

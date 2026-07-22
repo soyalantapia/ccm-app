@@ -169,6 +169,41 @@ describe('register con bloque — cupo y lock', () => {
   })
 })
 
+describe('cupo a nivel evento', () => {
+  it('sin capacity no hay tope: se comporta como siempre', async () => {
+    mockPrisma.event.findUnique.mockResolvedValue({ ...EVENTO_VIVO, capacity: null })
+    tx.registration.count.mockResolvedValue(9999)
+    await expect(register('dev_1', 'ev_1')).resolves.toMatchObject({ eventId: 'ev_1' })
+  })
+
+  it('con capacity lleno → 409 EVENT_FULL, contando seedTaken', async () => {
+    // Hasta acá el lock sobre la fila del Event existía pero no se comparaba con nada: el
+    // comentario decía literal "sin bloque, sin cupo". Con eventos que se cobran, sobrevender
+    // obliga a devolver plata.
+    mockPrisma.event.findUnique.mockResolvedValue({ ...EVENTO_VIVO, capacity: 30, seedTaken: 4 })
+    tx.registration.count.mockResolvedValue(26) // 4 + 26 = 30
+    await expect(register('dev_1', 'ev_1')).rejects.toMatchObject({
+      status: 409,
+      code: 'EVENT_FULL',
+    })
+  })
+
+  it('el último lugar del evento se puede tomar', async () => {
+    mockPrisma.event.findUnique.mockResolvedValue({ ...EVENTO_VIVO, capacity: 30, seedTaken: 4 })
+    tx.registration.count.mockResolvedValue(25) // 4 + 25 = 29 < 30
+    await expect(register('dev_1', 'ev_1')).resolves.toMatchObject({ eventId: 'ev_1' })
+  })
+
+  it('el cupo se chequea DESPUÉS de tomar el lock, no antes', async () => {
+    mockPrisma.event.findUnique.mockResolvedValue({ ...EVENTO_VIVO, capacity: 30, seedTaken: 0 })
+    tx.registration.count.mockResolvedValue(0)
+    await register('dev_1', 'ev_1')
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.registration.count.mock.invocationCallOrder[0],
+    )
+  })
+})
+
 describe('register sin bloque — el lock sobre Event no es redundante', () => {
   it('lockea la fila del Event: el @@unique no cubre blockId null', async () => {
     // En Postgres dos NULL son distintos dentro de un índice único, así que sin este lock dos

@@ -44,6 +44,10 @@ export interface EventItem {
   description: string
   cover: string
   price?: number | null
+  /** Cupo total del evento (para lo que se inscribe o se compra a nivel evento). null = sin tope. */
+  capacity?: number | null
+  /** Baseline de ocupación: los que el organizador anotó por fuera y no están en la base. */
+  seedTaken?: number
   sponsorIds?: string[]
   past?: boolean
   /** Capacitación/evento reservado a la membresía Socio CCM (niveles de suscripción). */

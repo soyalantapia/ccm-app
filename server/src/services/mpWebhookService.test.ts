@@ -15,7 +15,9 @@ vi.mock('../lib/prisma.js', () => {
     // Un evento con precio se entrega creando la inscripción, así que `activar()` toca
     // Registration. Y `$queryRaw` porque esa creación va detrás del mismo `SELECT ... FOR UPDATE`
     // sobre la fila del Event que usa register(): el @@unique no protege con blockId null.
-    registration: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    registration: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), count: vi.fn() },
+    // activar() relee el evento para chequear el cupo antes de inscribir.
+    event: { findUnique: vi.fn() },
     $queryRaw: vi.fn(),
     // `$transaction` en sus dos formas. Con callback le pasa el MISMO cliente mockeado (un tx de
     // Prisma expone la misma superficie). No simula rollback: lo que estos tests verifican es el
@@ -66,6 +68,9 @@ beforeEach(() => {
   vi.mocked(prisma.registration.findFirst).mockResolvedValue(null as never)
   vi.mocked(prisma.registration.create).mockResolvedValue({} as never)
   vi.mocked(prisma.registration.update).mockResolvedValue({} as never)
+  vi.mocked(prisma.registration.count).mockResolvedValue(0 as never)
+  // Por default el evento no tiene tope de cupo (capacity null = como se comportó siempre).
+  vi.mocked(prisma.event.findUnique).mockResolvedValue({ capacity: null, seedTaken: 0 } as never)
 })
 
 function pagoAprobado(ref: string, status: string = 'approved') {

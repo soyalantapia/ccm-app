@@ -26,6 +26,18 @@ function precioValido(raw: unknown, campo = 'precio'): number | null {
   return Math.round(n)
 }
 
+/** Tope de cupo. No es un precio: acá el 0 SÍ es válido (un evento sin lugares disponibles) y no
+ *  hay techo de plata que respetar, sólo que sea un entero no negativo y razonable. */
+const CUPO_MAX = 1_000_000
+function cupoValido(raw: unknown, campo = 'cupo'): number | null {
+  if (raw == null || raw === '') return null
+  const n = Number(raw)
+  if (!Number.isInteger(n) || n < 0 || n > CUPO_MAX) {
+    throw badRequest('INVALID_CAPACITY', `El ${campo} debe ser un número entero entre 0 y ${CUPO_MAX}.`)
+  }
+  return n
+}
+
 /* ─── Eventos ─── */
 async function readEvent(id: string): Promise<EventItem> {
   const ev = await prisma.event.findUniqueOrThrow({
@@ -41,7 +53,9 @@ export async function createEvent(e: EventItem): Promise<EventItem> {
       id: e.id, slug: e.slug, type: e.type, title: e.title, subtitle: e.subtitle ?? null,
       dateLabel: e.dateLabel, startDate: parseDate(e.startDate, 'fecha del evento'), timeLabel: e.timeLabel ?? null,
       venue: e.venue, address: e.address, mapsUrl: cleanStoredUrl(e.mapsUrl, 'mapa') ?? '', description: e.description,
-      cover: e.cover, price: precioValido(e.price, 'precio del evento'), past: e.past ?? false, socioOnly: e.socioOnly ?? false,
+      cover: e.cover, price: precioValido(e.price, 'precio del evento'),
+      capacity: cupoValido(e.capacity), seedTaken: cupoValido(e.seedTaken) ?? 0,
+      past: e.past ?? false, socioOnly: e.socioOnly ?? false,
       // Borrador salvo que el panel pida publicarlo: lo que no se decide, no sale al aire.
       published: e.published ?? false,
     },
@@ -61,6 +75,10 @@ export async function updateEvent(id: string, patch: Partial<EventItem>): Promis
     if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   }
   if ('price' in patch) data.price = precioValido(patch.price, 'precio del evento')
+  // Cupo del evento: mismo tratamiento explícito que el precio — vaciarlo tiene que llegar como
+  // null (sin tope), no desaparecer del patch y quedar congelado en el valor anterior.
+  if ('capacity' in patch) data.capacity = cupoValido(patch.capacity)
+  if ('seedTaken' in patch) data.seedTaken = cupoValido(patch.seedTaken) ?? 0
   if ('mapsUrl' in patch) data.mapsUrl = cleanStoredUrl(patch.mapsUrl, 'mapa') ?? '' // valida esquema (no javascript:/data:)
   if (patch.startDate) data.startDate = parseDate(patch.startDate, 'fecha del evento')
   await prisma.$transaction(async (tx) => {

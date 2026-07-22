@@ -138,7 +138,7 @@ function mapearEstado(estadoMp: string): EstadoPago {
 /** Subconjunto del cliente Prisma que usa `activar` — así acepta tanto `prisma` como un `tx`. */
 type ClientePrisma = Pick<
   typeof prisma,
-  'ticketOrder' | 'adCampaign' | 'membership' | 'registration' | '$queryRaw'
+  'ticketOrder' | 'adCampaign' | 'membership' | 'registration' | 'event' | '$queryRaw'
 >
 
 /**
@@ -194,6 +194,28 @@ async function activar(
       where: { deviceId, eventId: resourceId, blockId: null },
     })
     if (previa?.status === 'confirmada') return // ya entregado: el reintento de MP no duplica
+
+    // Cupo: si el evento se llenó entre el checkout y el aviso, se entrega IGUAL y se avisa
+    // fuerte. Es una decisión deliberada, no un olvido. El checkout no reserva el asiento (no hay
+    // scheduler que lo libere si el comprador abandona), así que la ventana existe. Y si acá se
+    // rechazara, MP reintentaría para siempre contra un evento que nunca se va a vaciar: quedaría
+    // plata cobrada y sin lugar, que es peor que sobrevender por uno. El organizador se entera
+    // por el log y resuelve a mano — devolver o agrandar el cupo es una decisión suya.
+    const ev = await tx.event.findUnique({
+      where: { id: resourceId },
+      select: { capacity: true, seedTaken: true },
+    })
+    if (ev?.capacity != null) {
+      const confirmadas = await tx.registration.count({
+        where: { eventId: resourceId, blockId: null, status: 'confirmada' },
+      })
+      if (ev.seedTaken + confirmadas >= ev.capacity) {
+        console.error(
+          '[mpWebhookService] SOBREVENTA: entró un pago para un evento que ya está completo. Se entrega igual (la plata ya está cobrada) y hay que resolverlo a mano.',
+          { eventId: resourceId, deviceId, capacity: ev.capacity, ocupados: ev.seedTaken + confirmadas },
+        )
+      }
+    }
     if (previa) {
       await tx.registration.update({
         where: { id: previa.id },

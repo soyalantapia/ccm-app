@@ -94,6 +94,20 @@ export async function register(
     if (existing?.status === 'confirmada') {
       throw conflict('ALREADY_REGISTERED', 'Ya estás inscripto a este evento')
     }
+
+    // Cupo del evento. El lock de arriba ya existía pero no se comparaba contra nada: el
+    // comentario original decía "sin bloque, sin cupo". Mientras todo era gratis no dolía; con
+    // un evento que se cobra, sobrevender obliga a devolver plata. Sólo aplica si el organizador
+    // cargó un tope: capacity null = como siempre, sin límite.
+    // Reactivar una inscripción cancelada también consume lugar, por eso el chequeo va antes.
+    if (event.capacity != null) {
+      const confirmadas = await tx.registration.count({
+        where: { eventId, blockId: null, status: 'confirmada' },
+      })
+      if (event.seedTaken + confirmadas >= event.capacity) {
+        throw conflict('EVENT_FULL', 'Este evento está completo')
+      }
+    }
     if (existing) {
       return tx.registration.update({
         where: { id: existing.id },

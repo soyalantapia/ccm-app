@@ -228,6 +228,13 @@ model Event {
   description String    @db.Text
   cover       String
   price       Int?
+  // Cupo del EVENTO, para lo que se vende o se inscribe a nivel evento (una capacitación, un
+  // workshop). null = sin tope, que es como se comportó siempre. Los bloques de la grilla siguen
+  // teniendo el suyo: son cosas distintas — el del evento limita cuánta gente entra en total.
+  capacity    Int?
+  // Baseline de ocupación, igual que EventBlock.seedTaken: los que el organizador ya anotó por
+  // fuera (WhatsApp, planilla) y no están en la base.
+  seedTaken   Int       @default(0)
   past        Boolean   @default(false)
   socioOnly   Boolean   @default(false) // gate a nivel EVENTO (canon 17); el bloque lo hereda
   // Un evento nace BORRADOR: se puede cargar de a poco sin que el público lo vea a medio hacer.
