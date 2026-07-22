@@ -30,6 +30,11 @@ const DIA = 86_400_000
 const hace = (d: number) => new Date(Date.now() - d * DIA)
 const dentroDe = (d: number) => new Date(Date.now() + d * DIA)
 
+/** Lo justo del arg de `convocatoria.findMany` que el mock necesita mirar para contar. */
+type ConvocatoriaFindManyArgs = {
+  include?: { _count?: { select?: { applications?: true | { where?: { fromSeed?: boolean } } } } }
+}
+
 /** Mismos números que siembra scripts/audit-metricas/audit-seed.mjs. */
 beforeEach(() => {
   vi.clearAllMocks()
@@ -60,9 +65,23 @@ beforeEach(() => {
     { id: 'blk-cero', title: 'Bloque sin cupo', capacity: 0, seedTaken: 0, day: '01/09', event: ev },
   ])
   mockPrisma.registration.groupBy.mockResolvedValue([{ blockId: 'blk-flojo', _count: { _all: 3 } }])
-  mockPrisma.convocatoria.findMany.mockResolvedValue([
-    { id: 'conv-cerca', slug: 'cierra-pronto', title: 'Cierra en 3 días', deadline: dentroDe(3), _count: { applications: 3 } },
-  ])
+  // El mock CUENTA como contaría la base: 3 si la query pide el filtro, 27 si pide todas (3
+  // reales + 24 del seed, los números que hay hoy en producción). Con un `_count` fijo, el test
+  // de "informa cuántas postulaciones juntó cada una" daba 3 con filtro y sin filtro — o sea,
+  // pasaba igual si alguien volvía a `applications: true`, que es justo la reversión que duele.
+  mockPrisma.convocatoria.findMany.mockImplementation(async (args: ConvocatoriaFindManyArgs) => {
+    const pedido = args?.include?._count?.select?.applications
+    const soloReales = pedido !== true && pedido?.where?.fromSeed === false
+    return [
+      {
+        id: 'conv-cerca',
+        slug: 'cierra-pronto',
+        title: 'Cierra en 3 días',
+        deadline: dentroDe(3),
+        _count: { applications: soloReales ? 3 : 27 },
+      },
+    ]
+  })
   mockPrisma.photoDownload.groupBy.mockResolvedValue([{ sponsorId: 'sp-1', _count: { _all: 7 } }])
   mockPrisma.sponsor.findMany.mockResolvedValue([{ id: 'sp-1', name: 'Sponsor Uno', level: 'Oro' }])
 })
@@ -170,9 +189,20 @@ describe('Convocatorias por cerrar', () => {
     expect(gte.getTime()).toBeLessThanOrEqual(Date.now())
   })
 
-  it('informa cuántas postulaciones juntó cada una', async () => {
+  it('informa cuántas postulaciones juntó cada una, contando SOLO las reales', async () => {
     const s = await getAdminStats()
+    // 3, no 27: si el filtro se cayera, el mock devolvería las 24 del seed también y este
+    // bloque volvería a decir "cierra en 3 días · 27 postulaciones" al lado de un KPI que
+    // dice 3.
     expect(s.convocatoriasPorCerrar.items[0]).toMatchObject({ slug: 'cierra-pronto', postulaciones: 3 })
+  })
+
+  it('pide el conteo por convocatoria con el MISMO filtro que el KPI', async () => {
+    await getAdminStats()
+    const args = mockPrisma.convocatoria.findMany.mock.calls[0][0]
+    // `applications: true` también compila y también devuelve un número; lo único que separa
+    // "postulaciones reales" de "postulaciones + demo" es este where.
+    expect(args.include._count.select.applications).toEqual({ where: { fromSeed: false } })
   })
 })
 

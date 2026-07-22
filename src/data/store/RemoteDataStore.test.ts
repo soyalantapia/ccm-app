@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { RemoteDataStore } from './RemoteDataStore'
+import { seedConvocatorias } from '../seed/convocatorias'
 
 /**
  * INVARIANTE: en RemoteDataStore, una ESCRITURA nunca delega en LocalDataStore.
@@ -107,10 +108,99 @@ describe('RemoteDataStore — una escritura NUNCA delega en LocalDataStore', () 
   })
 })
 
-describe('RemoteDataStore — las LECTURAS sí pueden caer al seed', () => {
-  it('getNotas devuelve el seed mientras no hidrató (placeholder razonable, no se pierde nada)', () => {
+/**
+ * Las LECTURAS tampoco caen al seed (ronda 5).
+ *
+ * El título anterior de este bloque decía lo contrario ("las LECTURAS sí pueden caer al seed") y
+ * su única aserción era `Array.isArray(getNotas())`, que pasaba con seed y sin seed. Acá se exige
+ * el invariante de verdad: con backend real y la hidratación fallando, las listas vienen VACÍAS.
+ * El seed es la demo (sponsors ficticios, agenda inventada); servirlo mezclado con lo que devuelve
+ * la base es indistinguible de lo real.
+ */
+describe('RemoteDataStore — ninguna lectura cae al seed', () => {
+  it('las listas quedan vacías si no hidrató, aunque el seed tenga contenido', () => {
     const s = storeSinHidratar()
-    expect(Array.isArray(s.getNotas())).toBe(true)
+    expect(s.getNotas()).toEqual([])
+    expect(s.getSponsors()).toEqual([])
+    expect(s.getEvents()).toEqual([])
+    expect(s.getConvocatorias()).toEqual([])
+    expect(s.getAnalytics()).toEqual([])
+  })
+
+  it('getConvocatoria no devuelve la del seed', () => {
+    const s = storeSinHidratar()
+    // Slug real del seed: si la lectura cayera al seed, esto devolvería una convocatoria.
+    expect(s.getConvocatoria(seedConvocatorias[0].slug)).toBeUndefined()
+  })
+})
+
+/**
+ * Las vistas ADMIN caen a lo PUBLICADO, que no es el seed (ronda 5).
+ *
+ * `LocalDataStore.getAdminEvents()` es `return this.getEvents()`: por despacho virtual ese `this`
+ * es RemoteDataStore, así que el fallback devuelve los eventos que trajo el backend, no el seed.
+ * Sacarlo dejaba a AdminEventos y a OpsConvocatoriaForm con la lista vacía en toda la ventana que
+ * va desde el arranque hasta que AdminLayout confirma la sesión y dispara /admin/events.
+ */
+describe('RemoteDataStore — las vistas admin caen a lo publicado, no al seed', () => {
+  function fetchSoloPublico(porRuta: Record<string, unknown>) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: { method?: string }) => {
+        calls.push({ method: init?.method ?? 'GET', url: String(url) })
+        // Las rutas /admin/* fallan siempre: es el estado previo al login del organizador.
+        if (String(url).includes('/admin/')) {
+          return Promise.resolve({ ok: false, status: 401, json: () => Promise.resolve({}) })
+        }
+        const hit = Object.entries(porRuta).find(([ruta]) => String(url).endsWith(ruta))
+        if (!hit) return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) })
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(hit[1]) })
+      }),
+    )
+  }
+
+  it('getAdminEvents muestra los eventos publicados mientras /admin/events no llegó', async () => {
+    fetchSoloPublico({
+      '/events/with-blocks': [{ id: 'ev_1', slug: 'ev', title: 'Evento real', blocks: [] }],
+    })
+    const s = new RemoteDataStore('https://api.test')
+    await vi.waitFor(() => expect(s.getEvents()).toHaveLength(1))
+    expect(s.getAdminEvents().map((e) => e.id)).toEqual(['ev_1'])
+  })
+
+  it('getAdminContents muestra los contenidos públicos mientras /admin/contents no llegó', async () => {
+    fetchSoloPublico({ '/contents': [{ id: 'cnt_1', title: 'Video real' }] })
+    const s = new RemoteDataStore('https://api.test')
+    await vi.waitFor(() => expect(s.getContents()).toHaveLength(1))
+    expect(s.getAdminContents().map((c) => c.id)).toEqual(['cnt_1'])
+  })
+
+  it('sin backend que responda quedan vacías (no aparece el seed por la puerta de atrás)', () => {
+    const s = storeSinHidratar()
+    expect(s.getAdminEvents()).toEqual([])
+    expect(s.getAdminContents()).toEqual([])
+  })
+})
+
+/**
+ * /convocatorias/:slug que falla tiene que EMITIR (ronda 5).
+ *
+ * El catch sólo borraba el slug de `convoInflight`, sin avisar al bus: la página se quedaba con el
+ * render que hizo antes de que el GET resolviera. Ahora emite —para que vuelva a renderizar— y
+ * anota el fallo en un negative cache, porque si no ese mismo render volvería a disparar el GET.
+ */
+describe('RemoteDataStore — el fallo de una convocatoria avisa y no loopea', () => {
+  it('emite al bus y no repite el GET en el render siguiente', async () => {
+    const { bus } = await import('../../lib/bus')
+    const s = storeSinHidratar()
+    let avisos = 0
+    const off = bus.on((key) => { if (key === 'convocatoria') avisos++ })
+    expect(s.getConvocatoria('mi-convocatoria')).toBeUndefined()
+    await vi.waitFor(() => expect(avisos).toBe(1))
+    calls = []
+    expect(s.getConvocatoria('mi-convocatoria')).toBeUndefined()
+    off()
+    expect(calls.filter((c) => c.url.includes('/convocatorias/'))).toEqual([])
   })
 })
 

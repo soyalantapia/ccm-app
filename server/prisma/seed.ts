@@ -98,6 +98,10 @@ async function main() {
       startDate: new Date(e.startDate), timeLabel: e.timeLabel ?? null, venue: e.venue, address: e.address,
       mapsUrl: e.mapsUrl, description: e.description, cover: e.cover, price: e.price ?? null,
       past: e.past ?? false, socioOnly: e.socioOnly ?? false,
+      // `published` no puede quedar librado al default del schema (false): las rutas públicas
+      // per-id ahora filtran por publicado, así que una base sembrada de cero dejaría TODOS los
+      // eventos en borrador y el circuito público entero (bloques, cupo, inscripción) daría 404.
+      published: e.published ?? true,
     }
     await prisma.event.upsert({ where: { id: e.id }, create: { id: e.id, ...data }, update: data })
     for (const sponsorId of e.sponsorIds ?? []) {

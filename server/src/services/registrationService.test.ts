@@ -70,6 +70,24 @@ describe('register — gates del evento', () => {
     await expect(register('dev_1', 'ev_1')).rejects.toMatchObject({ code: 'EVENT_NOT_FOUND' })
   })
 
+  it('un borrador socioOnly tampoco dice SOCIO_ONLY: dice EVENT_NOT_FOUND', async () => {
+    // El orden de los gates importa para no filtrar información: si el borrador contestara
+    // SOCIO_ONLY, ya estaría confirmando que ese evento existe y que es premium.
+    mockPrisma.event.findUnique.mockResolvedValue({
+      ...EVENTO_VIVO,
+      published: false,
+      socioOnly: true,
+    })
+    await expect(register('dev_1', 'ev_1')).rejects.toMatchObject({ code: 'EVENT_NOT_FOUND' })
+  })
+
+  it('el borrador se rechaza ANTES de abrir la transacción: no toca cupos ni crea filas', async () => {
+    mockPrisma.event.findUnique.mockResolvedValue({ ...EVENTO_VIVO, published: false })
+    await expect(register('dev_1', 'ev_1', 'blk_1')).rejects.toMatchObject({ status: 404 })
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+    expect(tx.registration.create).not.toHaveBeenCalled()
+  })
+
   it('evento finalizado → 409 EVENT_PAST', async () => {
     mockPrisma.event.findUnique.mockResolvedValue({ ...EVENTO_VIVO, past: true })
     await expect(register('dev_1', 'ev_1')).rejects.toMatchObject({

@@ -15,8 +15,14 @@ const mockPrisma = {
 
 vi.mock('../lib/prisma.js', () => ({ prisma: mockPrisma }))
 
-const { getEventAvailability, blockAvailability, getBlocks, generalRegistrationCount } =
-  await import('./eventService.js')
+const {
+  getEventAvailability,
+  blockAvailability,
+  getBlocks,
+  generalRegistrationCount,
+  getAllBlocks,
+  getAllEventAvailability,
+} = await import('./eventService.js')
 
 // Escenario: 3 bloques del mismo evento con seedTaken distinto y un bloque que se
 // pasa de capacidad (confirmadas + seedTaken > capacity) para ejercitar el clamp.
@@ -29,13 +35,12 @@ const CONFIRMADAS: Record<string, number> = { blk_a: 2, blk_b: 1, blk_c: 0 }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // Por defecto el evento está PUBLICADO: los tests de cupo miden números, no visibilidad.
+  mockPrisma.event.findUnique.mockResolvedValue({ published: true })
   mockPrisma.eventBlock.findMany.mockResolvedValue(BLOCKS)
-  // El evento padre existe y está PUBLICADO salvo que un test diga lo contrario: la agenda, el
-  // cupo y la inscripción heredan `published` del evento, así que sin esto todo da 404.
-  mockPrisma.event.findUnique.mockResolvedValue({ id: 'ev_1', published: true })
+  // El `include: { event: ... }` de blockAvailability es lo que le cuelga el padre a la fila.
   mockPrisma.eventBlock.findUnique.mockImplementation(({ where }: { where: { id: string } }) => {
     const b = BLOCKS.find((x) => x.id === where.id)
-    // blockAvailability incluye el evento para poder mirar `published`.
     return Promise.resolve(b ? { ...b, event: { published: true } } : null)
   })
   mockPrisma.registration.groupBy.mockResolvedValue(
@@ -90,33 +95,57 @@ describe('getEventAvailability (batch) vs blockAvailability (individual)', () =>
 })
 
 /**
- * Un evento en BORRADOR no existe para el público — tampoco por sus rutas hijas.
- * getEvents/getEvent ya lo filtraban, pero la agenda y el cupo NO heredaban la regla: con el id
- * de un borrador (que se ve en el panel, no es secreto) se leía la grilla entera y los cupos.
- * Estos tests salen en ROJO contra el código anterior al gate: ése es su punto.
+ * Un evento en borrador tiene que ser INDISTINGUIBLE de uno inexistente para el público. El id
+ * lo genera el cliente y no es secreto: si el borrador contestara distinto que un id inventado
+ * —otro code, u otro status, o un 200 vacío— se podría sondear qué se está preparando. Antes de
+ * este gate, con el id de un borrador se leían sus bloques y sus cupos.
  */
-describe('borradores: la agenda y el cupo heredan `published` del evento', () => {
-  const draft = { id: 'ev_draft', published: false }
+describe('gate de publicado en las lecturas públicas', () => {
+  const enBorrador = () => mockPrisma.event.findUnique.mockResolvedValue({ published: false })
+  const inexistente = () => mockPrisma.event.findUnique.mockResolvedValue(null)
 
-  it('getBlocks de un borrador da 404, igual que un evento inexistente', async () => {
-    mockPrisma.event.findUnique.mockResolvedValue(draft)
-    await expect(getBlocks('ev_draft')).rejects.toMatchObject({
+  it('getBlocks: borrador e inexistente dan el MISMO 404 EVENT_NOT_FOUND', async () => {
+    enBorrador()
+    await expect(getBlocks('ev_1')).rejects.toMatchObject({ status: 404, code: 'EVENT_NOT_FOUND' })
+    inexistente()
+    await expect(getBlocks('ev_1')).rejects.toMatchObject({ status: 404, code: 'EVENT_NOT_FOUND' })
+  })
+
+  it('getBlocks: ni siquiera llega a consultar los bloques del borrador', async () => {
+    enBorrador()
+    await expect(getBlocks('ev_1')).rejects.toThrow()
+    expect(mockPrisma.eventBlock.findMany).not.toHaveBeenCalled()
+  })
+
+  it('getBlocks: un evento publicado sigue devolviendo su agenda', async () => {
+    const rows = await getBlocks('ev_1')
+    expect(rows.map((b) => b.id)).toEqual(['blk_a', 'blk_b', 'blk_c'])
+  })
+
+  it('generalRegistrationCount: borrador → 404; publicado → el conteo de siempre', async () => {
+    enBorrador()
+    await expect(generalRegistrationCount('ev_1')).rejects.toMatchObject({
       status: 404,
       code: 'EVENT_NOT_FOUND',
     })
+    mockPrisma.event.findUnique.mockResolvedValue({ published: true })
+    await expect(generalRegistrationCount('ev_1')).resolves.toBe(7)
   })
 
-  it('getEventAvailability de un borrador da 404', async () => {
-    mockPrisma.event.findUnique.mockResolvedValue(draft)
-    await expect(getEventAvailability('ev_draft')).rejects.toMatchObject({ status: 404 })
+  it('getEventAvailability: borrador → 404, sin filtrar cupos', async () => {
+    enBorrador()
+    await expect(getEventAvailability('ev_1')).rejects.toMatchObject({
+      status: 404,
+      code: 'EVENT_NOT_FOUND',
+    })
+    // Acá el gate va en paralelo con el findMany de bloques, así que ese sí se dispara; lo que
+    // no puede correr es el conteo, que es lo único que revela cupos. Ninguno de los dos sale
+    // por la respuesta: el Promise.all rechaza antes de que se arme el summary.
+    expect(mockPrisma.registration.groupBy).not.toHaveBeenCalled()
+    expect(mockPrisma.registration.count).not.toHaveBeenCalled()
   })
 
-  it('generalRegistrationCount de un borrador da 404', async () => {
-    mockPrisma.event.findUnique.mockResolvedValue(draft)
-    await expect(generalRegistrationCount('ev_draft')).rejects.toMatchObject({ status: 404 })
-  })
-
-  it('blockAvailability de un bloque de borrador da 404 (mismo código que un bloque inexistente)', async () => {
+  it('blockAvailability: bloque de borrador → BLOCK_NOT_FOUND, igual que un bloque inventado', async () => {
     mockPrisma.eventBlock.findUnique.mockResolvedValue({
       ...BLOCKS[0],
       event: { published: false },
@@ -125,23 +154,49 @@ describe('borradores: la agenda y el cupo heredan `published` del evento', () =>
       status: 404,
       code: 'BLOCK_NOT_FOUND',
     })
+    // El bloque inexistente da lo mismo: el error no delata que blk_a sí existe.
+    mockPrisma.eventBlock.findUnique.mockResolvedValue(null)
+    await expect(blockAvailability('blk_inventado')).rejects.toMatchObject({
+      status: 404,
+      code: 'BLOCK_NOT_FOUND',
+    })
   })
 
-  it('el panel SÍ los ve: con { admin: true } el borrador responde normal', async () => {
-    mockPrisma.event.findUnique.mockResolvedValue(draft)
-    mockPrisma.eventBlock.findMany.mockResolvedValue(BLOCKS)
-    const blocks = await getBlocks('ev_draft', { admin: true })
-    expect(blocks).toHaveLength(3)
-
-    const avail = await getEventAvailability('ev_draft', { admin: true })
-    expect(avail.blocks).toHaveLength(3)
-
-    mockPrisma.eventBlock.findUnique.mockResolvedValue({
-      ...BLOCKS[0],
-      event: { published: false },
-    })
-    await expect(blockAvailability('blk_a', { admin: true })).resolves.toMatchObject({
+  it('blockAvailability: bloque de evento publicado sigue devolviendo el cupo', async () => {
+    await expect(blockAvailability('blk_a')).resolves.toEqual({
       capacity: 10,
+      taken: 5,
+      left: 5,
+      full: false,
     })
+  })
+})
+
+/**
+ * El panel SÍ tiene que ver sus borradores: es donde los está armando. Va por funciones aparte
+ * —getAllBlocks / getAllEventAvailability, misma convención que getAllEvents— y no por un flag
+ * en las públicas: un getAllX no se prende de casualidad desde una ruta pública, un flag sí.
+ *
+ * Sin esto, endurecer la ruta pública dejaba al organizador sin ver la agenda del evento que
+ * todavía no publicó — y peor, cayendo al seed y mostrándole la grilla de la demo como propia.
+ */
+describe('el panel ve los borradores por la puerta de al lado', () => {
+  it('getAllBlocks devuelve la agenda de un borrador', async () => {
+    mockPrisma.event.findUnique.mockResolvedValue({ id: 'ev_draft', published: false })
+    mockPrisma.eventBlock.findMany.mockResolvedValue(BLOCKS)
+    await expect(getAllBlocks('ev_draft')).resolves.toHaveLength(3)
+  })
+
+  it('getAllEventAvailability devuelve el cupo de un borrador', async () => {
+    mockPrisma.event.findUnique.mockResolvedValue({ id: 'ev_draft', published: false })
+    mockPrisma.eventBlock.findMany.mockResolvedValue(BLOCKS)
+    const r = await getAllEventAvailability('ev_draft')
+    expect(r.blocks).toHaveLength(3)
+  })
+
+  it('pero un evento que NO EXISTE sigue siendo 404 también para el panel', async () => {
+    mockPrisma.event.findUnique.mockResolvedValue(null)
+    await expect(getAllBlocks('ev_fantasma')).rejects.toMatchObject({ status: 404 })
+    await expect(getAllEventAvailability('ev_fantasma')).rejects.toMatchObject({ status: 404 })
   })
 })

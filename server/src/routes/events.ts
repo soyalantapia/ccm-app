@@ -31,7 +31,7 @@ eventsRouter.get(
   requirePermission('events:write'),
   async (req, res, next) => {
     try {
-      res.json(await eventService.getBlocks(req.params.id, { admin: true }))
+      res.json(await eventService.getAllBlocks(req.params.id))
     } catch (err) {
       next(err)
     }
@@ -44,7 +44,7 @@ eventsRouter.get(
   requirePermission('events:write'),
   async (req, res, next) => {
     try {
-      res.json(await eventService.getEventAvailability(req.params.id, { admin: true }))
+      res.json(await eventService.getAllEventAvailability(req.params.id))
     } catch (err) {
       next(err)
     }

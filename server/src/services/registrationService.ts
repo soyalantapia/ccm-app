@@ -16,6 +16,7 @@ export async function getRegistrations(deviceId: string): Promise<Registration[]
 
 /**
  * Inscripción con regla de negocio (doc 10 §3). El cupo lo decide el SERVER:
+ *  - Evento en borrador → 404 EVENT_NOT_FOUND (indistinguible de uno inexistente).
  *  - Gate socioOnly a nivel EVENTO (canon 17) → 403 SOCIO_ONLY.
  *  - Bloque con cupo: transacción con `SELECT ... FOR UPDATE` sobre la fila del
  *    bloque → serializa inscripciones concurrentes y evita el oversell.
@@ -27,10 +28,10 @@ export async function register(
   blockId?: string,
 ): Promise<Registration> {
   const event = await prisma.event.findUnique({ where: { id: eventId } })
-  // Un borrador responde igual que un evento inexistente. getEvents/getEvent ya lo hacían, pero
-  // acá NO se miraba `published`: con el id de un evento sin publicar —visible en el panel— se
-  // podía crear una inscripción CONFIRMADA, con su QR, contra algo que el organizador todavía
-  // estaba armando. Va primero, antes que past y socioOnly, para no filtrar por el mensaje de error.
+  // Un borrador no toma inscripciones y contesta lo mismo que un id inventado. El eventId lo
+  // genera el cliente, así que sin este gate alcanzaba con adivinarlo para quedar CONFIRMADO —
+  // con QR y ocupando cupo— en un evento que todavía no salió a la calle. Va primero, antes que
+  // past y socioOnly, para no filtrar por el mensaje de error.
   if (!event || !event.published) throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
 
   // Evento finalizado: cerrar la inscripción (antes se podía inscribir a un evento pasado y

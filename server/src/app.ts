@@ -114,11 +114,25 @@ export function createApp() {
   }
 
   // SPA: si FRONT_DIST está seteada, este service también sirve el front buildeado.
-  // Estáticos con cache larga (assets hasheados); el resto de las rutas → index.html
-  // (fallback del router), EXCEPTO /api/* (que cae al notFoundHandler como 404 JSON).
+  // El orden importa: primero se busca un archivo del dist (los assets hasheados y también los
+  // `<ruta>.html` prerenderizados, ver `extensions` abajo); recién si no hay archivo, la ruta cae
+  // al index.html (fallback del router), EXCEPTO /api/* (que sigue al notFoundHandler: 404 JSON).
   if (env.FRONT_DIST) {
     const dist = env.FRONT_DIST
-    app.use(express.static(dist, { index: false }))
+    // Cache larga SOLO para /assets, que es lo único con hash en el nombre: ahí un cambio de
+    // contenido cambia la URL, así que la copia vieja no puede quedar stale. El resto del dist
+    // se queda con el default (max-age=0 + ETag: revalida y ahorra el body con un 304) porque
+    // conserva nombres estables entre deploys — el index y los .html prerenderizados son la
+    // puerta de entrada al bundle nuevo, y las imágenes de public/ (og-*.jpg, img/**) las
+    // reemplaza el equipo sin renombrarlas. Un año de cache ahí deja pantallas viejas pegadas.
+    app.use('/assets', express.static(join(dist, 'assets'), { index: false, maxAge: '1y', immutable: true }))
+    // `extensions: ['html']`: el build deja un `<ruta>.html` prerenderizado por cada sección
+    // compartible (app, admin, sponsors, eventos, entradas) con sus meta OG propios. Sin esta
+    // opción una URL sin extensión no matchea ningún archivo, las cinco caían al fallback de
+    // abajo y el link pegado en WhatsApp mostraba el título y la imagen de la home. La
+    // extensión solo se prueba en paths que no traen una: /p/j.lopez sigue siendo ruta del
+    // router, y una ruta sin prerender (/catalogo, /fotos/:slug) sigue cayendo al index.html.
+    app.use(express.static(dist, { index: false, extensions: ['html'] }))
     app.get(/^\/(?!api\/).*/, (req, res) => {
       // Un archivo que no existe tiene que decir 404. Antes caía acá y devolvía el index con
       // HTTP 200, así que el navegador se bajaba el HTML entero por cada imagen rota y —peor—

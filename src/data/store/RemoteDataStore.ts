@@ -58,12 +58,22 @@ interface BufferedEvent {
 }
 
 /**
- * Fase A (incremental seguro) — extiende LocalDataStore y SOLO sobreescribe los
- * métodos de identidad + analytics para sincronizar con el backend real. El resto
- * (eventos, órdenes, catálogo, etc.) se hereda y sigue en LocalDataStore hasta sus
- * fases. La interfaz sigue SÍNCRONA: el caché local da las lecturas al instante y el
- * bus mantiene la reactividad; el backend recibe escrituras en segundo plano. Si no
- * hay VITE_API_URL, ni se instancia esta clase (index.ts cae a LocalDataStore).
+ * Store contra el backend real. Extiende LocalDataStore por historia — arrancó sobreescribiendo
+ * sólo identidad y analytics — pero hoy le sobreescribe casi toda la superficie: eventos, bloques,
+ * cupo, órdenes, catálogo, contenido, notas, banners, beneficios, convocatorias, postulaciones y
+ * campañas. De la base siguen en uso los helpers y las lecturas device-scoped (ver la REGLA de
+ * abajo). La interfaz sigue SÍNCRONA: el caché local da las lecturas al instante y el bus mantiene
+ * la reactividad; el backend recibe escrituras en segundo plano. Si no hay VITE_API_URL, ni se
+ * instancia esta clase (index.ts cae a LocalDataStore).
+ *
+ * REGLA: acá NINGUNA lectura cae al seed. Que esta clase exista significa que hay backend real
+ * (hasBackend() === true), y el seed es el contenido de la DEMO: sponsors ficticios, agenda
+ * inventada, 6400 eventos de analítica fabricados. Servirlo mezclado con lo que devuelve la base
+ * es indistinguible de lo real — la app mostró cuatro sponsors inventados CON banner mientras se
+ * resolvía /sponsors, y para siempre cuando el pedido fallaba. Cuando el caché está vacío se
+ * devuelve vacío; el fallo queda registrado (hydrationFailed) para que la UI pueda decirlo.
+ * Sí siguen cayendo a `super` las lecturas device-scoped con write-through (inscripciones,
+ * favoritos, descargas, membresía): ahí `super` lee el último snapshot REAL del server, no el seed.
  */
 export class RemoteDataStore extends LocalDataStore {
   private readonly api: ApiClient
@@ -131,10 +141,20 @@ export class RemoteDataStore extends LocalDataStore {
   private static readonly FETCH_RETRY_MS = 30_000 // backoff 30s para fetches fallidos
   private convocatorias = new Map<string, Convocatoria>()
   private convoInflight = new Set<string>()
+  /** Negative cache: ms timestamp del último fallo de /convocatorias/:slug. Espeja availFailed y
+   *  generalFailed. Sin esto, emitir al bus tras un fallo re-dispararía el GET en cada render. */
+  private convoFailed = new Map<string, number>()
   private convocatoriasList?: Convocatoria[] // lista admin (GET /admin/convocatorias)
   // Estado de la conexión con Mercado Pago (panel del organizador). Sin fallback al seed: no
   // conectado es el default seguro mientras no se sepa qué contesta el backend.
   private mpStatus?: MpStatus
+  // Recursos cuya última hidratación FALLÓ. Ahora que las lecturas no caen al seed, un caché vacío
+  // ya no distingue "todavía no llegó" de "no se pudo traer": sin este registro, isHydrating se
+  // quedaría en true para siempre y la pantalla giraría eternamente en vez de mostrar su estado
+  // vacío. Espeja statsError/appsError, que hacen lo mismo para stats y postulaciones.
+  // Tipado con HydratableResource y no con la clave del bus: isHydrating es el único lector y sólo
+  // sabe contestar por esos cuatro (ver markHydration).
+  private hydrationFailed = new Set<HydratableResource>()
 
   constructor(apiBase: string) {
     super()
@@ -199,6 +219,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.api
       .get<(EventItem & { blocks: EventBlock[] })[]>('/events/with-blocks')
       .then((eventsWithBlocks) => {
+        this.hydrationFailed.delete('events')
         this.events = eventsWithBlocks.map(({ blocks: _b, ...e }) => e as EventItem)
         for (const e of eventsWithBlocks) {
           this.blocksByEvent.set(e.id, e.blocks)
@@ -215,6 +236,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.api
       .get<EventItem[]>('/events')
       .then(async (events) => {
+        this.hydrationFailed.delete('events')
         this.events = events
         bus.emit('events')
         await Promise.all(
@@ -230,7 +252,12 @@ export class RemoteDataStore extends LocalDataStore {
         )
         bus.emit('blocks')
       })
-      .catch(() => { /* backend caído: seguimos con el seed local */ })
+      .catch(() => {
+        // Backend caído: la agenda queda VACÍA, no con la del seed. Se anota para que
+        // isHydrating deje de decir "cargando" y la pantalla muestre su estado vacío.
+        this.hydrationFailed.add('events')
+        bus.emit('events')
+      })
   }
 
   private hydrateRegistrations(): void {
@@ -369,21 +396,28 @@ export class RemoteDataStore extends LocalDataStore {
     }
     return super.blockAvailability(blockId)
   }
-  /** true mientras el caché del recurso sea undefined (fetch en vuelo) → las páginas :slug
-   *  distinguen "cargando" de "no existe" y no flashean el EmptyState de "link vencido" (#20). */
+  /** true mientras el fetch del recurso siga en vuelo → las páginas :slug distinguen "cargando"
+   *  de "no existe" y no flashean el EmptyState de "link vencido" (#20). */
   override isHydrating(resource: HydratableResource): boolean {
+    // Si el pedido falló ya no está "cargando": el caché va a seguir vacío para siempre y, sin
+    // esto, la pantalla giraría eternamente en vez de mostrar que no hay nada para mostrar.
+    if (this.hydrationFailed.has(resource)) return false
     switch (resource) {
       case 'events': return this.events === undefined
       case 'catalog': return this.catalog === undefined
       case 'galleries': return this.galleries === undefined
       case 'notas': return this.notas === undefined
+      // Las convocatorias se piden de a una por slug (no en bloque), así que "hidratando" es
+      // "hay algún GET en vuelo": sin esto /c/:slug pintaba "No encontramos esta convocatoria"
+      // en TODAS las cargas, también las que después resolvían bien.
+      case 'convocatoria': return this.convoInflight.size > 0
     }
   }
   /** Inscripciones generales (sin bloque) server-wide de un evento (#13). getRegistrations es
    *  device-scoped; esto agrega todos los devices (stale-while-revalidate, espeja blockAvailability).
    *  Si hay bloques cargados para el evento, usa fetchEventAvailability (batch) para obtener
    *  generals + avail de todos los bloques en 1 request. */
-  override generalRegistrationCount(eventId: string): number {
+  override generalRegistrationCount(eventId: string): number | null {
     const cached = this.generalCounts.get(eventId)
     if (cached !== undefined) return cached
     // Preferir batch si ya tenemos bloques del evento; si no, fallback individual.
@@ -392,7 +426,10 @@ export class RemoteDataStore extends LocalDataStore {
     } else {
       this.fetchGeneralCount(eventId)
     }
-    return super.generalRegistrationCount(eventId)
+    // NO caer a super: ahí se cuentan las inscripciones de ESTE dispositivo, que para el panel
+    // no son el total de nadie — típicamente 0, y un 0 se lee como "no se anotó nadie" en vez de
+    // "todavía no sé". Un evento en borrador nunca sale de este camino: la ruta pública lo 404ea.
+    return null
   }
   private fetchGeneralCount(eventId: string): void {
     if (this.generalInflight.has(eventId)) return
@@ -540,11 +577,11 @@ export class RemoteDataStore extends LocalDataStore {
 
   /** Contenido PÚBLICO (no requiere identidad): catálogo, galerías, contenidos, sponsors, planes. */
   private hydratePublicContent(): void {
-    this.api.get<CatalogProfile[]>('/catalog').then((c) => { this.catalog = c; bus.emit('catalog') }).catch(() => {})
-    this.api.get<Gallery[]>('/galleries').then((g) => { this.galleries = g; bus.emit('galleries') }).catch(() => {})
-    this.api.get<ContentItem[]>('/contents').then((c) => { this.contents = c; bus.emit('contents') }).catch(() => {})
-    this.api.get<Sponsor[]>('/sponsors').then((s) => { this.sponsors = s; bus.emit('sponsors') }).catch(() => {})
-    this.api.get<TicketPlan[]>('/plans').then((p) => { this.plans = p; bus.emit('plans') }).catch(() => {})
+    this.refetch<CatalogProfile[]>('/catalog', (c) => (this.catalog = c), 'catalog')
+    this.refetch<Gallery[]>('/galleries', (g) => (this.galleries = g), 'galleries')
+    this.refetch<ContentItem[]>('/contents', (c) => (this.contents = c), 'contents')
+    this.refetch<Sponsor[]>('/sponsors', (s) => (this.sponsors = s), 'sponsors')
+    this.refetch<TicketPlan[]>('/plans', (p) => (this.plans = p), 'plans')
     this.hydrateBanners()
     this.hydrateNotas()
   }
@@ -566,21 +603,22 @@ export class RemoteDataStore extends LocalDataStore {
     this.hydrateMpStatus() // conexión con Mercado Pago (Tarea 6)
   }
 
-  /** Analítica real cross-device (admin-scoped). Una vez hidratada, getAnalytics deja de servir el
-   *  seed (~6400 eventos fabricados) → el reporte a sponsors muestra números reales. */
+  /** Analítica real cross-device (admin-scoped). getAnalytics nunca sirve el seed (~6400 eventos
+   *  fabricados): el reporte que se le muestra a un sponsor son números reales o ninguno. */
   private hydrateAnalytics(): void {
-    this.api.get<AnalyticsEvent[]>('/admin/analytics').then((a) => { this.analytics = a; bus.emit('analytics') }).catch(() => {})
+    this.refetch<AnalyticsEvent[]>('/admin/analytics', (a) => (this.analytics = a), 'analytics')
   }
   override getAnalytics(): AnalyticsEvent[] {
-    return this.analytics ?? super.getAnalytics()
+    return this.analytics ?? []
   }
 
   /**
    * Métricas del Dashboard (GET /admin/stats), calculadas por el backend sobre las tablas.
    *
-   * A diferencia del resto de las lecturas, esta NO cae a super cuando no hay dato: el
-   * seed daría números fabricados presentados como reales. Devolver null deja que el
-   * Dashboard distinga "cargando" de "falló" de "no hay nada".
+   * Ninguna lectura de esta clase cae al seed, pero acá no alcanza con devolver el vacío: un
+   * tablero de ceros se lee como un dato ("no hubo inscripciones") y no como una ausencia.
+   * Devolver null, más statsFailed(), deja que el Dashboard distinga "cargando" de "falló" de
+   * "no hay nada".
    */
   override getAdminStats(): AdminStats | null {
     return this.adminStats ?? null
@@ -625,7 +663,7 @@ export class RemoteDataStore extends LocalDataStore {
   /* ─── Notas. Público (this.notas ← /notas) separado de admin (this.adminNotas ← /admin/notas):
    *  las vistas públicas nunca ven borradores del organizador (#19). ─── */
   private hydrateNotas(): void {
-    this.api.get<Nota[]>('/notas').then((n) => { this.notas = n; bus.emit('notas') }).catch(() => {})
+    this.refetch<Nota[]>('/notas', (n) => (this.notas = n), 'notas')
   }
   private hydrateAdminNotas(): void {
     this.api.get<Nota[]>('/admin/notas').then((n) => { this.adminNotas = n; bus.emit('notas') }).catch(() => {})
@@ -679,7 +717,7 @@ export class RemoteDataStore extends LocalDataStore {
   /* ─── Banners gestionados. Público (this.banners ← /banners) vs admin (this.adminBanners ←
    *  /admin/banners): las vistas públicas no ven banners inactivos del organizador (#19). ─── */
   private hydrateBanners(): void {
-    this.api.get<Banner[]>('/banners').then((b) => { this.banners = b; bus.emit('banners') }).catch(() => {})
+    this.refetch<Banner[]>('/banners', (b) => (this.banners = b), 'banners')
   }
   private hydrateAdminBanners(): void {
     this.api.get<Banner[]>('/admin/banners').then((b) => { this.adminBanners = b; bus.emit('banners') }).catch(() => {})
@@ -733,8 +771,24 @@ export class RemoteDataStore extends LocalDataStore {
 
   /* ─── Resto Fase G: sponsors / planes / convocatorias / postulaciones ─── */
 
+  /** Trae un recurso al caché. El catch ANOTA el fallo en vez de tragárselo y emite igual: la
+   *  lectura va a devolver vacío, así que la UI necesita poder distinguir "todavía no llegó"
+   *  de "no se pudo traer" (ver isHydrating). */
   private refetch<T>(path: string, set: (v: T) => void, key: string): void {
-    this.api.get<T>(path).then((v) => { set(v); bus.emit(key) }).catch(() => {})
+    this.api.get<T>(path)
+      .then((v) => { set(v); this.markHydration(key, false); bus.emit(key) })
+      .catch(() => { this.markHydration(key, true); bus.emit(key) })
+  }
+
+  /** `refetch` recibe la clave del BUS, que tiene más valores que HydratableResource (sponsors,
+   *  plans, benefits, banners, contents, convocatorias, analytics…). El resultado de esos otros
+   *  no lo puede leer nadie: isHydrating es el único lector y su firma acepta cuatro. Cuando se
+   *  sume un quinto recurso hidratable hay que tocar los dos lados: el switch de isHydrating y
+   *  este guard. */
+  private markHydration(key: string, failed: boolean): void {
+    if (key !== 'events' && key !== 'catalog' && key !== 'galleries' && key !== 'notas') return
+    if (failed) this.hydrationFailed.add(key)
+    else this.hydrationFailed.delete(key)
   }
 
   /**
@@ -769,9 +823,9 @@ export class RemoteDataStore extends LocalDataStore {
   override getSponsors(): Sponsor[] {
     return this.sponsors ?? []
   }
-  override getSponsor(id: string): Sponsor | undefined {
-    return this.sponsors?.find((s) => s.id === id)
-  }
+  // getSponsor NO se sobreescribe: el de LocalDataStore ya busca sobre this.getSponsors() (o sea,
+  // el de acá arriba, sin seed) y, si no está, resuelve el sponsor sintético de una campaña
+  // autogestionada — que no es demo, la compró alguien. Sobreescribirlo perdía ese segundo camino.
   override getPlans(): TicketPlan[] {
     return this.plans ?? []
   }
@@ -781,16 +835,47 @@ export class RemoteDataStore extends LocalDataStore {
   override getConvocatorias(): Convocatoria[] {
     return this.convocatoriasList ?? []
   }
+  /**
+   * Una convocatoria por slug. La lista (convocatoriasList) sólo existe con sesión de organizador,
+   * así que en la página pública /c/:slug el dato llega por este GET.
+   *
+   * Devuelve undefined mientras el GET está en vuelo, y ese undefined es indistinguible de "no
+   * existe": Convocatoria.tsx:54 lo lee como convocatoria inexistente y pinta "No encontramos esta
+   * convocatoria" en TODA carga, incluidas las que después resuelven bien. Es el link con el que
+   * se recluta, así que el flash es caro.
+   *
+   * Acá queda el estado que hace falta para arreglarlo, con el mismo patrón que el resto del
+   * archivo (convoInflight = en vuelo, convoFailed = falló, como availFailed/generalFailed y como
+   * hydrationFailed para los recursos de isHydrating). Falta el lector, que está fuera de este
+   * archivo: `isHydrating` sólo acepta HydratableResource (DataStore.ts:71) y esa unión no incluye
+   * 'convocatoria', así que la página todavía no puede preguntar. Con la unión ampliada, el
+   * `switch` de isHydrating pasa a exigir el caso y Convocatoria.tsx puede hacer lo mismo que
+   * EventoFicha.tsx:55 — mostrar <PagePending /> en vez del EmptyState mientras hidrata.
+   */
   override getConvocatoria(slug: string): Convocatoria | undefined {
     const inList = this.convocatoriasList?.find((c) => c.slug === slug)
     if (inList) return inList
     const cached = this.convocatorias.get(slug)
     if (cached) return cached
-    if (!this.convoInflight.has(slug)) {
+    const failedAt = this.convoFailed.get(slug)
+    const enBackoff = failedAt !== undefined && Date.now() - failedAt < RemoteDataStore.FETCH_RETRY_MS
+    if (!this.convoInflight.has(slug) && !enBackoff) {
       this.convoInflight.add(slug)
       this.api.get<Convocatoria>(`/convocatorias/${slug}`)
-        .then((cv) => { this.convocatorias.set(slug, cv); this.convoInflight.delete(slug); bus.emit('convocatoria') })
-        .catch(() => this.convoInflight.delete(slug))
+        .then((cv) => {
+          this.convocatorias.set(slug, cv)
+          this.convoInflight.delete(slug)
+          this.convoFailed.delete(slug)
+          bus.emit('convocatoria')
+        })
+        .catch(() => {
+          // Antes el fallo no emitía nada: la página se quedaba con el primer render para
+          // siempre. Se emite para que vuelva a renderizar y se anota para que ese render no
+          // dispare el GET de nuevo (loop de requests).
+          this.convoInflight.delete(slug)
+          this.convoFailed.set(slug, Date.now())
+          bus.emit('convocatoria')
+        })
     }
     // Sin respuesta del server todavía: undefined, no la convocatoria de demostración.
     return undefined
@@ -816,8 +901,10 @@ export class RemoteDataStore extends LocalDataStore {
     this.track('admin_convocatoria_updated', { convocatoriaId: id })
     bus.emit('convocatorias')
     // Se limpia también el caché por slug: si no, la vista pública /c/:slug seguía sirviendo
-    // la versión vieja hasta recargar.
+    // la versión vieja hasta recargar. Con el negativo va lo mismo: si el slug cambió, el 404 del
+    // anterior no tiene que frenar el fetch del nuevo durante los 30s de backoff.
     this.convocatorias.clear()
+    this.convoFailed.clear()
     this.adminWrite(this.api.patch(`/admin/convocatorias/${id}`, patch), () => this.hydrateConvocatorias(),
       () => { this.convocatoriasList = prevCache; bus.emit('convocatorias') },
     )
@@ -848,11 +935,11 @@ export class RemoteDataStore extends LocalDataStore {
    * primera página — para que `this.adminApplications` vuelva a ser la lista COMPLETA, como antes
    * del cambio a paginación server-side.
    *
-   * Es la única lectura que no cae al seed: los contadores de los tabs de AdminPostulaciones y,
-   * sobre todo, el guard de borrado en cascada de AdminConvocatorias (`Application.convocatoriaId`
-   * es `onDelete: Cascade`) se calculan sobre este mismo caché. Hidratar solo la primera página
-   * (50 de N) dejaba a una convocatoria con postulaciones fuera del corte mostrando "0
-   * postulaciones" y habilitando un borrado que se las llevaba puestas — BLOQUEANTE del review.
+   * Tiene que ser la lista COMPLETA porque sobre este mismo caché se calculan los contadores de
+   * los tabs de AdminPostulaciones y, sobre todo, el guard de borrado en cascada de
+   * AdminConvocatorias (`Application.convocatoriaId` es `onDelete: Cascade`). Hidratar solo la
+   * primera página (50 de N) dejaba a una convocatoria con postulaciones fuera del corte mostrando
+   * "0 postulaciones" y habilitando un borrado que se las llevaba puestas — BLOQUEANTE del review.
    *
    * `limit=100` (el máximo que acepta el server) para minimizar la cantidad de requests; si el
    * paginado falla a mitad de camino, se descarta todo (no se deja el caché en un estado
@@ -900,22 +987,22 @@ export class RemoteDataStore extends LocalDataStore {
     throw new Error('fetchAllAdminApplications: se superó el tope de páginas sin agotar el cursor')
   }
 
-  /** TODAS (vista del organizador): la lista admin si está cargada, si no cae al device/seed. */
+  /** TODAS (vista del organizador): la lista admin si está cargada, si no la del device. */
   override getApplications(): Application[] {
     return this.adminApplications ?? this.applications ?? []
   }
   /**
-   * Postulaciones para el PANEL, sin fallback al seed.
+   * Postulaciones para el PANEL. Es la única de las tres que devuelve null.
    *
-   * A diferencia de getApplications() (que cae en cascada para no dejar sin datos al resto de
-   * la UI), esta es la que consume AdminPostulaciones: null hasta que /admin/applications
-   * resuelva, y sigue null si falló — mostrar las 24 postulaciones fabricadas del seed como si
-   * fueran reales es peor que no mostrar nada.
+   * getApplications() cae en cascada a las del device y termina en `[]`; esa lista vacía se lee
+   * como "no hay postulaciones". AdminPostulaciones consume ESTA, que es null hasta que
+   * /admin/applications resuelva y sigue null si falló, así puede decir "no se pudo traer" en vez
+   * de dar por vacía una cola que quizás está llena.
    */
   override getAdminApplications(): Application[] | null {
     return this.adminApplications ?? null
   }
-  /** true si el último intento falló → el panel muestra el error en vez de la lista de demo. */
+  /** true si el último intento falló → el panel muestra el error en vez de una cola vacía. */
   override applicationsFailed(): boolean {
     return this.appsError
   }
@@ -974,7 +1061,7 @@ export class RemoteDataStore extends LocalDataStore {
    *  está registrado) vs admin (this.adminBenefits ← /admin/benefits: todos + códigos), para que el
    *  organizador no vea todos los códigos en su vista pública del mismo tab (#19). ─── */
   private hydrateBenefits(): void {
-    this.api.get<Benefit[]>('/benefits').then((b) => { this.benefits = b; bus.emit('benefits') }).catch(() => {})
+    this.refetch<Benefit[]>('/benefits', (b) => (this.benefits = b), 'benefits')
   }
   private hydrateAdminBenefits(): void {
     this.api.get<Benefit[]>('/admin/benefits').then((b) => { this.adminBenefits = b; bus.emit('benefits') }).catch(() => {})
@@ -1064,7 +1151,7 @@ export class RemoteDataStore extends LocalDataStore {
       () => this.hydrateAdminApplications(),
       // `prev` puede ser undefined: arriba se dispara una hidratación bajo demanda, y si ESA
       // llega mientras el PATCH está en vuelo, restaurar el snapshot vacío borraría la lista
-      // real recién traída y dejaría al organizador viendo las postulaciones del seed.
+      // real recién traída y devolvería el panel a "todavía no cargó" (getAdminApplications → null).
       () => {
         if (prev) this.adminApplications = prev
         else this.hydrateAdminApplications()
@@ -1466,12 +1553,24 @@ export class RemoteDataStore extends LocalDataStore {
         .finally(() => this.draftBlocksInflight.delete(ev.id))
     }
   }
-  /** El panel ve los borradores; las páginas públicas usan getEvents(), que trae sólo lo publicado. */
+  /**
+   * El panel ve los borradores; las páginas públicas usan getEvents(), que trae sólo lo publicado.
+   *
+   * Mientras /admin/events no llegó (o falló), cae a lo publicado. Eso no es el seed: es el
+   * subconjunto que ya trajo el backend. El fallback que había acá —`super.getAdminEvents()`—
+   * hacía exactamente esto, porque `LocalDataStore.getAdminEvents()` es `return this.getEvents()`
+   * y por despacho virtual ese `this` es esta clase; se escribe directo para que se lea sin tener
+   * que saberlo. Devolver `[]` dejaba a AdminEventos y a OpsConvocatoriaForm sin eventos hasta que
+   * resolviera el fetch admin, que recién arranca cuando AdminLayout confirma la sesión
+   * (AdminLayout.tsx:116).
+   */
   override getAdminEvents(): EventItem[] {
-    return this.adminEvents ?? []
+    return this.adminEvents ?? this.getEvents()
   }
+  /** Ídem: lo publicado, no el seed. Los videos socioOnly pueden venir con el youtubeId
+   *  enmascarado hasta que llegue /admin/contents — incompleto, pero real. */
   override getAdminContents(): ContentItem[] {
-    return this.adminContents ?? []
+    return this.adminContents ?? this.getContents()
   }
 
   override createEvent(input: NewEvent): EventItem {
@@ -1513,8 +1612,9 @@ export class RemoteDataStore extends LocalDataStore {
     const prevCache = this.events // para deshacer si el backend rechaza
     const block: EventBlock = { ...input, id: newId('blk') }
     // Solo se toca el caché si YA estaba hidratado para ese evento (mismo criterio que el resto
-    // de las entidades). Sembrar la clave con un único bloque tapaba el fallback al seed de
-    // getBlocks() y el evento aparecía con un solo bloque hasta recargar.
+    // de las entidades). Sembrar la clave con un único bloque la deja indistinguible de una
+    // hidratada, así que getBlocks() devolvía ese solo bloque y el evento aparecía sin los demás
+    // hasta recargar.
     const cached = this.blocksByEvent.get(block.eventId)
     if (cached) {
       this.blocksByEvent.set(block.eventId, [...cached, block])
@@ -1543,9 +1643,10 @@ export class RemoteDataStore extends LocalDataStore {
   }
   override deleteBlock(id: string): void {
     const prevCache = this.events // para deshacer si el backend rechaza
-    // Si el mapa no está hidratado, `cur` viene undefined y el bloque del seed seguiría visible
-    // tras "borrarlo". No pasa nada grave (el onOk re-hidrata y lo corrige), pero pedimos la
-    // re-hidratación explícitamente para que la lista no quede mintiendo en el ínterin.
+    // Si el mapa no está hidratado, `cur` viene undefined y no hay nada local que sacar: cuando
+    // los bloques lleguen, el recién borrado vendría con ellos. No pasa nada grave (el onOk
+    // re-hidrata y lo corrige), pero pedimos la re-hidratación explícitamente para que la lista
+    // no quede mintiendo en el ínterin.
     const cur = this.blocksById.get(id)
     if (!cur) this.hydrateEvents()
     this.blocksById.delete(id)
