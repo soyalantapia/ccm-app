@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Plus, AlertTriangle } from 'lucide-react'
 import { Badge, Button } from '../../components/ui'
-import { useStore } from '../../data/store'
+import { IS_REMOTE, useStore } from '../../data/store'
 import { CorePageHeader } from '../../features/admin/CorePageHeader'
 import { CoreOccupancyBar } from '../../features/admin/CoreOccupancyBar'
 import { OpsEventForm } from '../../features/admin/OpsEventForm'
@@ -19,8 +19,12 @@ export default function AdminEventos() {
       const avail = blocks.map((b) => s.blockAvailability(b.id))
       const capacity = avail.reduce((n, a) => n + a.capacity, 0)
       const taken = avail.reduce((n, a) => n + a.taken, 0)
-      const generals = s.generalRegistrationCount(event.id)
-      return { event, blockCount: blocks.length, capacity, taken, registered: taken + generals }
+      // `null` = el conteo de generales no se conoce (para un borrador el endpoint público no
+      // lo entrega). Entonces el total tampoco se conoce: se propaga null y la fila pinta "—".
+      // Tratarlo como 0 daría un total corto con cara de dato exacto.
+      const generals: number | null = s.generalRegistrationCount(event.id)
+      const registered = generals === null ? null : taken + generals
+      return { event, blockCount: blocks.length, capacity, taken, registered }
     }),
   )
 
@@ -91,7 +95,18 @@ export default function AdminEventos() {
                     blockCount
                   )}
                 </td>
-                <td className="type-serif py-4 pr-4 text-right text-lg tabular-nums text-ink">{registered}</td>
+                <td className="type-serif py-4 pr-4 text-right text-lg tabular-nums text-ink">
+                  {registered === null ? (
+                    <span
+                      className="text-ink-soft/70"
+                      title="Falta el conteo de inscripciones generales de este evento, así que el total todavía no se sabe. No es cero."
+                    >
+                      —
+                    </span>
+                  ) : (
+                    registered
+                  )}
+                </td>
                 <td className="py-4 pr-4">
                   <div className="flex items-center gap-3">
                     <CoreOccupancyBar className="flex-1" taken={taken} capacity={capacity} compact />
@@ -146,7 +161,7 @@ export default function AdminEventos() {
                 </p>
               )}
               <p className="text-[12px] text-ink-soft">
-                <span className="type-serif text-base text-ink">{registered}</span> inscriptos
+                <span className="type-serif text-base text-ink">{registered ?? '—'}</span> inscriptos
               </p>
               <p className="ml-auto text-[12px] tabular-nums text-ink-soft">{percent(taken, capacity)}%</p>
             </div>
@@ -155,10 +170,14 @@ export default function AdminEventos() {
         ))}
       </div>
 
+      {/* El pie decía, sin condicionar por modo, que los inscriptos salían del seed más "esta demo"
+          y que el backend con roles llegaba en Fase 1. Contra el backend real las dos cosas son
+          falsas: los números los cuenta el server sobre todos los dispositivos, y los roles ya
+          existen (adminSession.can(), que AdminConfiguracion usa para tapar la sección de MP). */}
       <p className="mt-8 border-t border-line pt-4 text-[11px] leading-relaxed text-ink-soft/70">
-        Los inscriptos combinan los cupos previos del seed con las inscripciones de esta demo. Podés
-        crear, editar y eliminar eventos y sus bloques desde acá — los cambios aparecen al instante en
-        la app. En Fase 1 esto vive en el backend con roles y auditoría (PRD §10.2).
+        {IS_REMOTE
+          ? 'Los inscriptos suman lo que ocupa cada bloque más las inscripciones generales, contadas por el sistema sobre todos los dispositivos; un "—" es un total que todavía no se sabe, no un cero. Podés crear, editar y eliminar eventos y sus bloques desde acá — los cambios los ve el público al instante.'
+          : 'Sin conexión al sistema no hay más público que este navegador: los inscriptos suman los cupos previos del seed con lo que se anotó acá. Podés crear, editar y eliminar eventos y sus bloques desde acá — los cambios quedan sólo en este navegador.'}
       </p>
     </div>
   )
