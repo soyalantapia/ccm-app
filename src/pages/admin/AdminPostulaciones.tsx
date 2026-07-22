@@ -15,6 +15,10 @@ export default function AdminPostulaciones() {
   const applications = useStore((s) => s.getAdminApplications())
   const convocatorias = useStore((s) => s.getConvocatorias())
   const fallo = useStore((s) => s.applicationsFailed())
+  // Sin backend (demo) el Dashboard no muestra NINGÚN número: LocalDataStore.getAdminStats()
+  // devuelve null y Dashboard.tsx pinta EstadoSinDatos. Sirve para no "arreglar" acá una
+  // contradicción que en la demo no existe — ver el comentario de `contadas`.
+  const hayBackend = useStore((s) => s.hasBackend())
   // El tab vive en la URL (?tab=): así la card arma el link a la ficha con el filtro activo, y
   // "Volver" desde la ficha reconstruye exactamente esta misma vista (antes era un useState local
   // que se perdía al navegar).
@@ -47,9 +51,26 @@ export default function AdminPostulaciones() {
     )
   }
 
-  const count = (status: ApplicationStatus) => applications.filter((a) => a.status === status).length
+  // CON backend los contadores cuentan SOLO las reales, con la misma regla que el Dashboard
+  // (server/src/services/statsService.ts, SOLO_REALES). Antes sumaban también las del seed, así
+  // que el panel se contradecía a sí mismo: "Nadie esperando respuesta" en el Dashboard y
+  // "Preinscriptas 12" acá, sobre las mismas filas.
+  //
+  // Es una EXCEPCIÓN deliberada a la decisión 3 del CRM de Usuarios
+  // (docs/superpowers/specs/2026-07-20-crm-usuarios-design.md §3 y §12): allá los datos de demo
+  // "se ven como usuarios normales" y la salvaguarda única es el export. Allá la pantalla es un
+  // directorio y el riesgo era nacer vacía; acá es una cola de trabajo y el número contesta
+  // "cuántas me faltan contestar", la misma pregunta que ya contesta el Dashboard sin el seed.
+  // La decisión se respeta en lo que decide: las 24 de ejemplo se siguen viendo enteras y se
+  // siguen pudiendo abrir y decidir. Lo que se les saca es el número, no la presencia.
+  //
+  // SIN backend no se excluye nada: el seed ES el contenido de la demo y el Dashboard no muestra
+  // ningún número contra el cual contradecirse, así que descontarlas ahí sería degradar la demo
+  // para arreglar un problema que en la demo no pasa.
+  const contadas = hayBackend ? applications.filter((a) => !a.fromSeed) : applications
+  const count = (status: ApplicationStatus) => contadas.filter((a) => a.status === status).length
   const tabs = [
-    { id: 'todas', label: 'Todas', count: applications.length },
+    { id: 'todas', label: 'Todas', count: contadas.length },
     { id: 'preinscripta', label: 'Preinscriptas', count: count('preinscripta') },
     { id: 'aceptada', label: 'Aceptadas', count: count('aceptada') },
     { id: 'rechazada', label: 'Rechazadas', count: count('rechazada') },
@@ -129,19 +150,49 @@ export default function AdminPostulaciones() {
         </EmptyState>
       ) : (
         <div className="mt-6 max-w-3xl space-y-10">
-          {reales.length > 0 && (
+          {reales.length > 0 ? (
             <div className="space-y-4">
               {reales.map((app) => (
                 <OpsApplicationCard key={app.id} app={app} tab={tab} />
               ))}
             </div>
+          ) : (
+            // Con backend el hueco necesita nombre: el tab dice 0 y abajo hay tarjetas. Sin
+            // backend los contadores incluyen las de ejemplo, así que no hay cero que explicar.
+            hayBackend && (
+              <p className="text-sm leading-relaxed text-ink-soft">
+                {contadas.length === 0
+                  ? 'Todavía no llegó ninguna postulación real.'
+                  : 'Ninguna postulación real coincide con esta vista.'}
+              </p>
+            )
           )}
 
           {ejemplo.length > 0 && (
             <div>
               <p className="eyebrow text-[10px] text-ink-soft">
-                Postulaciones de ejemplo — datos de demo, no de gente real
+                {ejemplo.length} {ejemplo.length === 1 ? 'postulación' : 'postulaciones'} de ejemplo — datos de
+                demo, no de gente real
               </p>
+              {/* Va colgado del grupo de ejemplo y no del caso "no hay ninguna real": el día
+               *  después del lanzamiento la lista es 1 real + 24 de ejemplo, y ahí un "Todas 1"
+               *  con veinticinco tarjetas abajo desconcierta igual que el cero.
+               *
+               *  Dice "de esta pantalla" en vez de "los contadores" a secas porque el badge
+               *  "{n} postulaciones" de AdminConvocatorias cuenta sobre la lista sin filtrar
+               *  (appsFor) y sí las incluye: prometer que no entran en ningún contador sería
+               *  desmentirse en la pantalla de al lado. Que las dos coincidan es trabajo
+               *  pendiente en ese archivo, no algo que este rótulo pueda arreglar.
+               *
+               *  Lo de avisar es verificable acá al lado: OpsDecisionSheet apaga el envío con
+               *  `puedeEnviar = !app.fromSeed && !!emailReal`. Sin decirlo, decidir veinte de
+               *  ejemplo se siente trabajo hecho y nadie recibe nada. */}
+              {hayBackend && (
+                <p className="mt-1.5 text-[12px] leading-relaxed text-ink-soft/80">
+                  No entran en los contadores de esta pantalla ni en el Dashboard. Decidirlas no le
+                  avisa a nadie.
+                </p>
+              )}
               <div className="mt-4 space-y-4">
                 {ejemplo.map((app) => (
                   <OpsApplicationCard key={app.id} app={app} tab={tab} />

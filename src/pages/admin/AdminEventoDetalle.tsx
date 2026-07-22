@@ -106,7 +106,7 @@ export default function AdminEventoDetalle() {
       <div className="mt-10 grid gap-x-10 gap-y-10 lg:grid-cols-3">
         <div className="space-y-10 lg:col-span-2">
           {/* Bloques con ocupación en vivo */}
-          <CorePanel title="Bloques" note="Cupo seed + inscripciones de esta demo, en vivo">
+          <CorePanel title="Bloques" note="Ocupación en vivo sobre el cupo de cada bloque">
             <div className="mb-5">
               <Button variant="outline" size="sm" onClick={() => setBlockForm({ open: true })}>
                 <Plus size={13} strokeWidth={2} /> Agregar bloque
@@ -147,8 +147,11 @@ export default function AdminEventoDetalle() {
                       </div>
                     </div>
                     <CoreOccupancyBar className="mt-3" taken={avail.taken} capacity={avail.capacity} />
+                    {/* Separados con "·" y no con "+": contra el backend el total de la barra lo
+                        cuenta el server sobre todos los dispositivos, así que estos dos números no
+                        suman ese total y sugerirlo con un "+" sería mentir. */}
                     <p className="mt-1.5 text-[11px] tabular-nums text-ink-soft/80">
-                      {block.seedTaken} previos + {localTaken} de esta demo
+                      {block.seedTaken} previos · {localTaken} desde este navegador
                     </p>
                   </div>
                 ))}
@@ -156,12 +159,18 @@ export default function AdminEventoDetalle() {
             )}
           </CorePanel>
 
-          {/* Inscriptos locales */}
-          <CorePanel title="Inscriptos de esta demo" note="Identidad por dispositivo, sin contraseñas">
+          {/* Inscripciones del propio dispositivo. El título dice "desde este navegador" y no
+              "Inscriptos" a secas porque getRegistrations() es device-scoped: si se leyera como la
+              lista de inscriptos del evento, un evento lleno se vería vacío. */}
+          <CorePanel
+            title="Inscripciones desde este navegador"
+            note="No es la lista de inscriptos del evento"
+          >
             {registrations.length === 0 ? (
               <p className="py-4 text-sm leading-relaxed text-ink-soft">
-                Todavía no hay inscripciones desde este dispositivo. Abrí la app en otra pestaña e
-                inscribite a un bloque: la fila aparece acá al instante.
+                Todavía no hay inscripciones hechas desde este navegador. Acá aparecen sólo las de
+                este dispositivo; del resto del público, esta pantalla muestra únicamente lo que
+                ocupa cada bloque, arriba.
               </p>
             ) : (
               <ul>
@@ -191,9 +200,14 @@ export default function AdminEventoDetalle() {
                 })}
               </ul>
             )}
+            {/* La ocupación de arriba sólo agrega inscripciones CON bloque: blockAvailability
+                filtra por blockId. Las generales de otros dispositivos no entran en ninguna cifra
+                de esta pantalla, así que decir que "se cuentan por bloque, arriba" era falso. */}
             <p className="mt-4 text-[11px] leading-relaxed text-ink-soft/70">
-              Los {seedTotal} inscriptos previos del seed se muestran agregados por bloque; en Fase 1
-              cada inscripto tiene su ficha individual con acciones masivas (PRD §10.2).
+              Esta pantalla no lista inscriptos por evento: de los {seedTotal} previos y de los que
+              se anotaron desde otros dispositivos, acá sólo se ve lo que ocupan los bloques, arriba.
+              Las inscripciones generales — las que no eligen bloque — no aparecen en ninguna cifra
+              de esta pantalla. Para ver a una persona con todas sus inscripciones, entrá por Usuarios.
             </p>
           </CorePanel>
         </div>
@@ -203,10 +217,12 @@ export default function AdminEventoDetalle() {
           <Img src={event.cover} alt={event.title} ratio="16/10" className="rounded-md border border-line" />
           <div className="grid grid-cols-3 gap-4 border-t border-line pt-5 lg:grid-cols-1 lg:gap-8">
             <Stat value={`${percent(taken, capacity)}%`} label="Ocupación" tone="accent" />
-            <Stat value={taken} label="Inscriptos totales" />
+            {/* "en bloques" y no "totales": suma blockAvailability, que deja afuera las
+                inscripciones generales (sin bloque) que cuenta generalRegistrationCount. */}
+            <Stat value={taken} label="Inscriptos en bloques" />
             <Stat
               value={registrations.filter((r) => r.status === 'confirmada').length}
-              label="De esta demo"
+              label="En este navegador"
             />
           </div>
         </aside>

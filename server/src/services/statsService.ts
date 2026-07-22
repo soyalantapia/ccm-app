@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma.js'
 import type { AdminStats } from '@domain/types'
 
@@ -26,6 +27,20 @@ const VENTANA_CIERRE_DIAS = 14
 /** Cuántas filas se muestran de cada lista accionable. */
 const TOP = 5
 
+/**
+ * Qué cuenta como postulación de verdad, en TODO el Dashboard: las filas del seed son datos de
+ * demo — nadie las mandó y nadie las va a responder. Vive en una constante porque el problema
+ * era justamente que cada bloque decidía por su cuenta: los KPIs y las pendientes las excluían
+ * y "Convocatorias por cerrar" no, así que la misma pantalla mostraba "Postulaciones 0" arriba
+ * y "12 postulaciones" abajo, en la misma pasada.
+ *
+ * El tipo va anotado, no inferido: TypeScript sólo hace excess property check contra objetos
+ * literales escritos en el lugar donde se usan. Sacar el where a una constante sin tipo perdía
+ * ese chequeo, así que un `fromSed: false` mal tipeado compilaba y el filtro dejaba de filtrar
+ * en los cuatro bloques a la vez, en silencio.
+ */
+const SOLO_REALES: Prisma.ApplicationWhereInput = { fromSeed: false }
+
 // El shape vive en @domain/types (src/data/types.ts): una sola definición para el
 // servidor que la produce y el front que la consume, así no pueden divergir.
 export type { AdminStats }
@@ -46,8 +61,7 @@ async function contarKpis(): Promise<AdminStats['kpis']> {
       // Sólo lo COBRADO. Las trabadas tienen su propio bloque, con una acción asociada;
       // sumarlas acá daría un número que no distingue plata en mano de plata perdida.
       prisma.ticketOrder.count({ where: { status: 'confirmada' } }),
-      // fromSeed:false — las del seed son demo y nadie las va a responder.
-      prisma.application.count({ where: { fromSeed: false } }),
+      prisma.application.count({ where: SOLO_REALES }),
       prisma.photoDownload.count(),
     ])
   return {
@@ -63,7 +77,7 @@ async function contarKpis(): Promise<AdminStats['kpis']> {
 
 /** Postulaciones que esperan respuesta, las más viejas primero. */
 async function postulacionesPendientes(ahora: Date): Promise<AdminStats['postulacionesPendientes']> {
-  const where = { status: 'preinscripta' as const, fromSeed: false }
+  const where = { status: 'preinscripta' as const, ...SOLO_REALES }
   const [total, filas] = await Promise.all([
     prisma.application.count({ where }),
     prisma.application.findMany({
@@ -152,7 +166,9 @@ async function convocatoriasPorCerrar(ahora: Date): Promise<AdminStats['convocat
   const filas = await prisma.convocatoria.findMany({
     where: { deadline: { gte: ahora, lte: limite } },
     orderBy: { deadline: 'asc' },
-    include: { _count: { select: { applications: true } } },
+    // El conteo por convocatoria filtra con la misma regla que el KPI. Sin esto, este bloque
+    // decía "cierra en 3 días · 12 postulaciones" al lado de un KPI "Postulaciones 0".
+    include: { _count: { select: { applications: { where: SOLO_REALES } } } },
   })
   return {
     items: filas.map((c) => ({

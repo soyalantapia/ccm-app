@@ -68,7 +68,7 @@ export interface CheckoutItem {
 }
 
 /** Recursos hidratados en bloque desde el backend (para isHydrating → páginas :slug). */
-export type HydratableResource = 'events' | 'catalog' | 'galleries' | 'notas'
+export type HydratableResource = 'events' | 'catalog' | 'galleries' | 'notas' | 'convocatoria'
 
 /**
  * DataStore — única puerta de acceso a datos de TODA la UI (patrón repositorio).
@@ -107,8 +107,10 @@ export interface DataStore {
   deleteBlock(id: string): void
   blockAvailability(blockId: string): BlockAvailability
   /** Inscripciones generales (sin bloque) confirmadas de un evento, server-wide (para el admin).
-   *  getRegistrations() es device-scoped; esto agrega todos los devices (como blockAvailability). */
-  generalRegistrationCount(eventId: string): number
+   *  getRegistrations() es device-scoped; esto agrega todos los devices (como blockAvailability).
+   *  `null` = el total no se conoce (todavía no llegó, o el evento está en borrador y la ruta
+   *  pública no lo entrega). Devolver 0 en ese caso pinta una ausencia con cara de dato exacto. */
+  generalRegistrationCount(eventId: string): number | null
   getRegistrations(): Registration[]
   isRegistered(eventId: string, blockId?: string): boolean
   register(eventId: string, blockId?: string): Registration | null

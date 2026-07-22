@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
-import { Badge, ButtonLink, EmptyState, Eyebrow, Img } from '../components/ui'
+import { Badge, ButtonLink, EmptyState, Eyebrow, Img, PagePending } from '../components/ui'
 import { useStore } from '../data/store'
 import { bus } from '../lib/bus'
 import type { Application, ConvocatoriaLogo } from '../data/types'
@@ -36,6 +36,7 @@ function DisplayTitle({ title }: { title: string }) {
 export default function Convocatoria() {
   const { slug } = useParams<{ slug: string }>()
   const convocatoria = useStore((s) => (slug ? s.getConvocatoria(slug) : undefined))
+  const hydrating = useStore((s) => s.isHydrating('convocatoria'))
   const event = useStore((s) =>
     convocatoria ? s.getEventById(convocatoria.eventId) : undefined,
   )
@@ -52,6 +53,10 @@ export default function Convocatoria() {
   useEffect(() => bus.on((key) => { if (key === 'application:rejected') setJustSubmitted(null) }), [])
 
   if (!convocatoria) {
+    // Mientras el GET del slug esté en vuelo NO se puede afirmar que no existe: este link se
+    // comparte para reclutar, y decirle "no encontramos esta convocatoria" a alguien que sí tiene
+    // el link bueno lo hace cerrar la pestaña antes de que resuelva el pedido.
+    if (hydrating) return <PagePending />
     return (
       <section className="mx-auto max-w-6xl px-5 py-16 md:py-24">
         <EmptyState

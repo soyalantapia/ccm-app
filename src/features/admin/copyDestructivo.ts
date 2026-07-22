@@ -12,10 +12,13 @@ import { IS_REMOTE } from '../../data/store'
  * `IS_REMOTE` existe exactamente para esta distinción; su comentario ya avisa que se creó
  * "para no mentirle al organizador". Esta constante lo aplica a los cuatro diálogos, en vez de
  * repetir el condicional en cada uno.
+ *
+ * En demo el deshacer sí existe (borrar los overlays de localStorage devuelve el seed), pero se
+ * nombra por el control que hoy lo hace: no hay ningún botón que se llame "reiniciar la demo".
  */
 export const AVISO_BORRADO = IS_REMOTE
   ? 'Esta acción es permanente: se borra del sistema y el cambio lo ve todo el público al instante.'
-  : 'Podés recrearlo o reiniciar la demo para volver a los datos originales.'
+  : 'Podés volver a crearlo, o recuperar los datos originales con «Borrar los datos de este navegador», en Configuración.'
 
 /**
  * Lo mismo, para las órdenes: el panel hablaba de «las órdenes de la demo» y de «confirmación
@@ -27,6 +30,9 @@ export const LEAD_ORDENES = IS_REMOTE
   ? 'Editá precios y links de pago de Mercado Pago por plan, y gestioná las órdenes de compra.'
   : 'Editá precios y links de pago de Mercado Pago por plan, y gestioná las órdenes de la demo.'
 
+// El webhook de Mercado Pago ya concilia solo: verifica la firma (mpWebhookService.ts:52) y marca
+// la orden confirmada dentro de la misma transacción que sella el pago (:159). La confirmación a
+// mano quedó para las órdenes que se cobraron por fuera (transferencia, efectivo), no como sustituto.
 export const AVISO_CONFIRMACION_MANUAL = IS_REMOTE
-  ? 'Confirmar una orden da la entrada por pagada: verificá el pago en Mercado Pago antes. La conciliación automática por webhook llega en Fase 1.'
-  : 'Confirmación manual en la demo · la conciliación automática por webhook de Mercado Pago llega en Fase 1.'
+  ? 'Las compras por Mercado Pago se confirman solas cuando entra el pago. Confirmá a mano sólo lo que hayas cobrado por fuera: hacerlo da la entrada por pagada.'
+  : 'Confirmación manual en la demo · con backend, las compras por Mercado Pago se confirman solas cuando entra el pago.'

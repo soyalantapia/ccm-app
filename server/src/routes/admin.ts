@@ -151,7 +151,8 @@ adminRouter.get('/admin/orders', requirePermission('orders:read'), async (_req, 
 })
 
 const orderStatusSchema = z.object({ status: z.enum(['iniciada', 'redirigida_mp', 'confirmada', 'cancelada']) })
-/** El organizador confirma o cancela una orden (la conciliación por webhook de MP llega después). */
+/** El organizador confirma o cancela una orden a mano. Lo cobrado por Mercado Pago ya se concilia
+ *  solo (mpWebhookService.ts:159); esto queda para lo que se cobró por fuera del checkout. */
 adminRouter.patch('/admin/orders/:id', requirePermission('sponsors:write'), async (req, res, next) => {
   try {
     const { status } = orderStatusSchema.parse(req.body)

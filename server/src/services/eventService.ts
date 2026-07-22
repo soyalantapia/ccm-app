@@ -34,10 +34,27 @@ export async function getEvent(slug: string): Promise<EventItem> {
   return toEventItem(ev)
 }
 
+/** Un borrador responde exactamente igual que un evento inexistente. El id de un evento lo genera
+ *  el cliente y viaja en claro, así que si el borrador diera un error distinto —o un 200 vacío—
+ *  alcanzaría con probar ids para confirmar qué se está preparando sin anunciar.
+ *
+ *  Sin puerta de escape a propósito: acá hubo un `opts.includeUnpublished` que no pasaba ningún
+ *  call site (sólo su propio test). Cuando el panel necesite leer borradores va por una función
+ *  aparte —getAllEvents acá arriba, getAllNotas en notaService—, que es como este repo resuelve
+ *  "el admin ve borradores": un getAllX no se prende de casualidad desde una ruta pública, un
+ *  flag sí, alcanza con reenviarle un req.query sin castear. */
+async function requireVisibleEvent(eventId: string): Promise<void> {
+  const ev = await prisma.event.findUnique({ where: { id: eventId }, select: { published: true } })
+  if (!ev || !ev.published) {
+    throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
+  }
+}
+
 export async function getBlocks(eventId: string): Promise<EventBlock[]> {
   // Padre inexistente → 404 (antes devolvía 200 [], rompiendo la convención notFound del backend).
-  const parent = await prisma.event.findUnique({ where: { id: eventId }, select: { id: true } })
-  if (!parent) throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
+  // Y padre en borrador también: antes este chequeo traía `select: { id: true }`, o sea que ni
+  // miraba published y la agenda completa de un evento sin publicar se leía con sólo tener el id.
+  await requireVisibleEvent(eventId)
   // orderBy determinístico: sin él Postgres devuelve heap-order (agenda barajada en prod; en la
   // demo salía cronológica porque el seed preserva el array). day='19/09'/start='17:00' son
   // strings zero-padded del mismo mes → el sort lexical coincide con el cronológico del evento.
@@ -58,13 +75,21 @@ export interface Availability {
 /** Inscripciones GENERALES (sin bloque) confirmadas de un evento, server-wide (todos los devices).
  *  El admin lo necesita porque getRegistrations del front es device-scoped (solo las del admin ≈0). */
 export async function generalRegistrationCount(eventId: string): Promise<number> {
+  await requireVisibleEvent(eventId)
   return prisma.registration.count({ where: { eventId, blockId: null, status: 'confirmada' } })
 }
 
 /** Cupo real = seedTaken (baseline) + inscripciones confirmadas. Lo calcula el SERVER. */
 export async function blockAvailability(blockId: string): Promise<Availability> {
-  const block = await prisma.eventBlock.findUnique({ where: { id: blockId } })
-  if (!block) throw notFound('BLOCK_NOT_FOUND', 'Bloque no encontrado')
+  const block = await prisma.eventBlock.findUnique({
+    where: { id: blockId },
+    include: { event: { select: { published: true } } },
+  })
+  // Bloque de un borrador → el MISMO BLOCK_NOT_FOUND que un id inventado. Acá el 404 habla de
+  // bloque y no de evento a propósito: contestar EVENT_NOT_FOUND delataría que el bloque existe.
+  if (!block || !block.event.published) {
+    throw notFound('BLOCK_NOT_FOUND', 'Bloque no encontrado')
+  }
   const confirmadas = await prisma.registration.count({ where: { blockId, status: 'confirmada' } })
   const taken = Math.min(block.capacity, block.seedTaken + confirmadas)
   const left = Math.max(0, block.capacity - taken)
@@ -78,12 +103,19 @@ export interface EventAvailabilitySummary {
 }
 
 /**
- * Cupo de TODOS los bloques de un evento + inscriptos generales en 3 queries paralelas
- * (vs N queries per-bloque de blockAvailability). Usado por AdminEventos/Dashboard
- * para evitar el fan-out N+1 de las 18+ requests individuales.
+ * Cupo de TODOS los bloques de un evento + inscriptos generales en 4 queries repartidas en 2
+ * round-trips (vs las N queries per-bloque de blockAvailability). Lo sirve
+ * GET /events/:id/blocks-availability, que el front pide desde RemoteDataStore.fetchEventAvailability
+ * para no disparar el fan-out N+1 de 18+ requests individuales por evento.
  */
 export async function getEventAvailability(eventId: string): Promise<EventAvailabilitySummary> {
-  const blocks = await prisma.eventBlock.findMany({ where: { eventId } })
+  // El gate corre EN PARALELO con los bloques: es un findUnique por PK y encadenarlo le sumaba un
+  // round-trip entero justo al endpoint que existe para no hacer fan-out. No lo afloja: si el
+  // evento es borrador el Promise.all rechaza y los conteos —lo que revela cupos— no llegan a correr.
+  const [, blocks] = await Promise.all([
+    requireVisibleEvent(eventId),
+    prisma.eventBlock.findMany({ where: { eventId } }),
+  ])
   // Agrupamos por blockId IN (bloques del evento) — NO por eventId. blockAvailability (el
   // individual) cuenta por blockId sin mirar eventId; filtrar por eventId acá haría que batch e
   // individual divergieran si alguna registration tuviera eventId inconsistente con su bloque.
