@@ -51,6 +51,21 @@ eventsRouter.get(
   },
 )
 
+/** GET /api/v1/admin/events/:id/inscriptos — los inscriptos REALES del evento, de todos los
+ *  dispositivos. Devuelve PII, así que va detrás de `people:read` (el permiso del CRM), no de
+ *  `events:write`: quien arma la agenda no necesariamente puede ver datos personales. */
+eventsRouter.get(
+  '/admin/events/:id/inscriptos',
+  requirePermission('people:read'),
+  async (req, res, next) => {
+    try {
+      res.json(await eventService.getInscriptos(req.params.id))
+    } catch (err) {
+      next(err)
+    }
+  },
+)
+
 /** GET /api/v1/events/with-blocks — eventos con bloques embebidos (1 query vs 1+N).
  *  DEBE ir antes de /events/:slug para que Express no capture "with-blocks" como slug. */
 eventsRouter.get('/events/with-blocks', async (_req, res, next) => {

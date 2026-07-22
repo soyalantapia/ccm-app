@@ -157,3 +157,54 @@ export async function getEventsWithBlocks(): Promise<(EventItem & { blocks: Even
   })
   return rows.map((r) => ({ ...toEventItem(r), blocks: r.blocks.map(toEventBlock) }))
 }
+
+/** Una inscripción tal como la ve el panel: quién, a qué, cuándo. */
+export interface InscriptoAdmin {
+  id: string
+  deviceId: string
+  blockId: string | null
+  blockTitle: string | null
+  status: string
+  ts: string
+  nombre: string | null
+  email: string | null
+  telefono: string | null
+}
+
+/**
+ * Los inscriptos REALES de un evento, de todos los dispositivos.
+ *
+ * Existe porque el panel los leía de `getRegistrations()` del front, que es DEVICE-SCOPED (lo
+ * dice el propio docstring de DataStore): la ficha del evento mostraba únicamente las
+ * inscripciones del teléfono desde el que se estaba mirando. Para el organizador eso se lee como
+ * "no se anotó nadie", que es la peor forma de equivocarse — no da ningún síntoma técnico y hace
+ * tomar decisiones sobre un número inventado.
+ *
+ * Devuelve PII (nombre, email, teléfono), así que va detrás de `people:read`, el mismo permiso
+ * que gobierna el CRM de personas.
+ */
+export async function getInscriptos(eventId: string): Promise<InscriptoAdmin[]> {
+  const rows = await prisma.registration.findMany({
+    where: { eventId, status: 'confirmada' },
+    orderBy: { ts: 'desc' },
+    include: {
+      block: { select: { title: true } },
+      device: { select: { fields: { select: { key: true, value: true } } } },
+    },
+  })
+  return rows.map((r) => {
+    const campos = new Map(r.device?.fields.map((f) => [f.key as string, f.value]) ?? [])
+    const nombre = [campos.get('firstName'), campos.get('lastName')].filter(Boolean).join(' ')
+    return {
+      id: r.id,
+      deviceId: r.deviceId,
+      blockId: r.blockId,
+      blockTitle: r.block?.title ?? null,
+      status: r.status,
+      ts: r.ts.toISOString(),
+      nombre: nombre || null,
+      email: campos.get('email') ?? null,
+      telefono: campos.get('phone') ?? null,
+    }
+  })
+}

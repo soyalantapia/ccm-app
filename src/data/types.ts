@@ -83,6 +83,19 @@ export interface EventBlock {
   description?: string
 }
 
+/** Una inscripción tal como la ve el PANEL: con la persona, no sólo el dispositivo. */
+export interface InscriptoAdmin {
+  id: string
+  deviceId: string
+  blockId: string | null
+  blockTitle: string | null
+  status: string
+  ts: string
+  nombre: string | null
+  email: string | null
+  telefono: string | null
+}
+
 export interface Registration {
   id: string
   eventId: string

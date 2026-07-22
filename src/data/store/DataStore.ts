@@ -11,6 +11,7 @@ import type {
   EventBlock,
   EventItem,
   Gallery,
+  InscriptoAdmin,
   Membership,
   OrderStatus,
   PlanId,
@@ -285,4 +286,13 @@ export interface DataStore {
    * el `initPoint` de ese pago para ofrecer "retomar el pago en curso".
    */
   startCheckout(items: CheckoutItem[]): Promise<{ initPoint: string; amount: number } | null>
+
+  /**
+   * Inscriptos REALES de un evento (todos los dispositivos), para el panel.
+   *
+   * Es async y va contra el server a propósito: `getRegistrations()` es device-scoped y usarlo
+   * en el panel mostraba sólo las inscripciones del teléfono desde el que se miraba — o sea
+   * casi siempre una lista vacía que se lee como "no se anotó nadie".
+   */
+  fetchInscriptos(eventId: string): Promise<InscriptoAdmin[]>
 }

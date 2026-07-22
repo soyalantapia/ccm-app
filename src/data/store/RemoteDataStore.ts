@@ -48,6 +48,7 @@ import type {
   AdCampaign,
   OrderStatus,
   AdSlot,
+  InscriptoAdmin,
 } from '../types'
 
 interface BufferedEvent {
@@ -1595,6 +1596,13 @@ export class RemoteDataStore extends LocalDataStore {
    *  link manual. */
   private static readonly CHECKOUT_REINTENTOS = 3
   private static readonly CHECKOUT_ESPERA_MS = 600
+
+  /** Inscriptos reales del evento, de todos los dispositivos. Va contra el server porque el
+   *  caché local sólo conoce las inscripciones de ESTE device. Sin caché: el panel lo pide al
+   *  abrir la ficha y quiere el número de ahora, no uno de hace diez minutos. */
+  override async fetchInscriptos(eventId: string): Promise<InscriptoAdmin[]> {
+    return this.api.get<InscriptoAdmin[]>(`/admin/events/${eventId}/inscriptos`)
+  }
 
   override async startCheckout(items: CheckoutItem[]): Promise<{ initPoint: string; amount: number } | null> {
     let intento = 0

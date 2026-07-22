@@ -28,6 +28,7 @@ import type {
   NewBanner,
   Nota,
   NewNota,
+  InscriptoAdmin,
 } from '../types'
 import type {
   BlockAvailability,
@@ -785,5 +786,10 @@ export class LocalDataStore implements DataStore {
    *  siempre al link manual del plan. */
   async startCheckout(_items: CheckoutItem[]): Promise<{ initPoint: string; amount: number } | null> {
     return null
+  }
+
+  /** En demo no hay server: se devuelve la lista vacía en vez de inventar inscriptos. */
+  async fetchInscriptos(_eventId: string): Promise<InscriptoAdmin[]> {
+    return []
   }
 }
