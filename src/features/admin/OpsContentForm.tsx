@@ -3,6 +3,37 @@ import { Button, Field, Input, Select, Sheet, Textarea, toast } from '../../comp
 import { store } from '../../data/store'
 import type { ContentItem } from '../../data/types'
 
+/**
+ * Saca el código del video de lo que sea que hayan pegado.
+ *
+ * El campo pedía el id pelado ("el código después de v="), pero lo que cualquiera hace es
+ * copiar la URL de la barra del navegador y pegarla entera. Eso se guardaba tal cual: la
+ * miniatura quedaba en gris y el video no se reproducía, sin un solo mensaje que lo dijera.
+ * Ya pasó — en la base quedaron contenidos de prueba llamados "URL completa" y "youtu.be",
+ * guardados rotos.
+ *
+ * Cubre las formas en que YouTube reparte un link: la URL de escritorio, la corta de
+ * compartir, la de móvil, /embed, /shorts y /live, con o sin parámetros extra.
+ * Devuelve '' si no encuentra un id válido, para poder avisarlo en vez de guardar basura.
+ */
+export function extraerYoutubeId(entrada: string): string {
+  const texto = entrada.trim()
+  if (!texto) return ''
+  // Un id de YouTube son 11 caracteres de [A-Za-z0-9_-]. Si ya pegaron eso, listo.
+  const ID = /^[\w-]{11}$/
+  if (ID.test(texto)) return texto
+  const patrones = [
+    /[?&]v=([\w-]{11})/, // youtube.com/watch?v=ID  y  ...&v=ID
+    /youtu\.be\/([\w-]{11})/, // youtu.be/ID
+    /\/(?:embed|shorts|live|v)\/([\w-]{11})/, // /embed/ID, /shorts/ID, /live/ID, /v/ID
+  ]
+  for (const p of patrones) {
+    const m = texto.match(p)
+    if (m) return m[1]
+  }
+  return ''
+}
+
 /** Plataformas/secciones del catálogo CCM. */
 const PLATFORM_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'Sin plataforma' },
@@ -88,11 +119,18 @@ export function OpsContentForm({ open, content, onClose }: Props) {
       setError('Completá los campos obligatorios.')
       return
     }
+    // No se guarda un video que no se va a poder ver. Antes esto entraba igual y el error
+    // recién aparecía en la app pública, como una miniatura gris sin explicación.
+    const id = extraerYoutubeId(f.youtubeId)
+    if (!id) {
+      setError('Ese link de YouTube no se entiende. Pegá la dirección del video o su código de 11 caracteres.')
+      return
+    }
     const data = {
       type: 'video' as const,
       title: f.title.trim(),
       description: f.description.trim(),
-      youtubeId: f.youtubeId.trim(),
+      youtubeId: id,
       duration: f.duration.trim() || undefined,
       platform: f.platform || undefined,
       sponsorId: f.sponsorId || undefined,
@@ -109,7 +147,11 @@ export function OpsContentForm({ open, content, onClose }: Props) {
     onClose()
   }
 
-  const youtubeId = f.youtubeId.trim()
+  const youtubeId = extraerYoutubeId(f.youtubeId)
+  // Se pegó una URL (o algo que no es un id) y pudimos sacarle el código: lo avisamos en vez de
+  // corregir en silencio, así la próxima vez sabe qué pegar.
+  const seCorrigioSolo = youtubeId !== '' && youtubeId !== f.youtubeId.trim()
+  const idInvalido = f.youtubeId.trim() !== '' && youtubeId === ''
 
   return (
     <Sheet open={open} onClose={onClose} title={content ? 'Editar video' : 'Crear video'} size="lg">
@@ -124,12 +166,30 @@ export function OpsContentForm({ open, content, onClose }: Props) {
         </Field>
 
         <Field
-          label="ID de YouTube"
+          label="Video de YouTube"
           required
-          hint="El código después de v= en la URL de YouTube, ej: cPRpNqmziUs"
+          hint="Pegá la dirección del video, tal cual la copiás de YouTube."
         >
-          <Input value={f.youtubeId} onChange={set('youtubeId')} placeholder="cPRpNqmziUs" required />
+          <Input
+            value={f.youtubeId}
+            onChange={set('youtubeId')}
+            placeholder="https://www.youtube.com/watch?v=cPRpNqmziUs"
+            required
+          />
         </Field>
+
+        {seCorrigioSolo && (
+          <p className="-mt-2 text-[12px] leading-relaxed text-ink-soft">
+            Listo: de ese link tomamos el video <strong className="text-ink">{youtubeId}</strong>.
+          </p>
+        )}
+
+        {idInvalido && (
+          <p className="-mt-2 text-[12px] leading-relaxed text-danger">
+            No encontramos ningún video en eso. Copiá la dirección desde la barra del navegador o
+            desde el botón Compartir de YouTube.
+          </p>
+        )}
 
         {youtubeId && (
           <img
