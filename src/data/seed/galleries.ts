@@ -2,7 +2,12 @@ import type { Gallery } from '../types'
 import { IDS } from '../ids'
 
 /** Galería del Camino a CCM de marzo — sponsor S3: Aura Beauty (PRD §6.7, §12). */
-export const seedGalleries: Gallery[] = [
+/* ⚠️ Gateado a DEV a propósito: en un build de producción este literal NO se compila.
+ * Antes viajaba adentro del bundle y RemoteDataStore caía acá al fallar la hidratación,
+ * así que con la red mala la app mostraba contenido inventado como si fuera real —
+ * y cargaba impecable, porque el service worker precachea el shell. Ver el docstring de
+ * RemoteDataStore. Si necesitás la demo, corré `npm run dev`. */
+export const seedGalleries: Gallery[] = import.meta.env.DEV ? [
   {
     id: IDS.gallery.camino,
     slug: IDS.gallerySlugs.camino,
@@ -105,4 +110,4 @@ export const seedGalleries: Gallery[] = [
       { id: 'ph-gala-12', src: 'img/gallery/g21.jpg', alt: 'Pasada final con todos los diseñadores sobre la pasarela' },
     ],
   },
-]
+] : []

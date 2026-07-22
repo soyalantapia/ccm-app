@@ -4,7 +4,12 @@ import type { Nota } from '../types'
  * Notas / novedades editoriales. PLACEHOLDER — las carga y edita prensa desde el panel
  * (semanal, "como noticias"). Pueden llevar un video embebido.
  */
-export const seedNotas: Nota[] = [
+/* ⚠️ Gateado a DEV a propósito: en un build de producción este literal NO se compila.
+ * Antes viajaba adentro del bundle y RemoteDataStore caía acá al fallar la hidratación,
+ * así que con la red mala la app mostraba contenido inventado como si fuera real —
+ * y cargaba impecable, porque el service worker precachea el shell. Ver el docstring de
+ * RemoteDataStore. Si necesitás la demo, corré `npm run dev`. */
+export const seedNotas: Nota[] = import.meta.env.DEV ? [
   {
     id: 'nota-apertura',
     slug: 'ccm-2026-abre-inscripciones',
@@ -110,4 +115,4 @@ export const seedNotas: Nota[] = [
     publishedAt: '2026-06-05',
     order: 8,
   },
-]
+] : []

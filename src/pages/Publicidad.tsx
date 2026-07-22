@@ -226,7 +226,7 @@ export default function Publicidad() {
 
             <div className="space-y-3.5">
               <Field label="Marca / anunciante" required>
-                <Input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Ej: Banco Distrito" />
+                <Input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Ej: nombre de tu marca" />
               </Field>
               <Field label="Titular del aviso" required>
                 <Input value={headline} onChange={(e) => setHeadline(e.target.value)} placeholder="Ej: 20% en moda con tu tarjeta" />

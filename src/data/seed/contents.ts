@@ -6,7 +6,12 @@ import { IDS } from '../ids'
  * HTTP 200 el 15/06/2026). Editables desde Admin → Contenido. Se omiten las
  * duraciones (se muestran solo si se cargan) para no exhibir datos incorrectos.
  */
-export const seedContents: ContentItem[] = [
+/* ⚠️ Gateado a DEV a propósito: en un build de producción este literal NO se compila.
+ * Antes viajaba adentro del bundle y RemoteDataStore caía acá al fallar la hidratación,
+ * así que con la red mala la app mostraba contenido inventado como si fuera real —
+ * y cargaba impecable, porque el service worker precachea el shell. Ver el docstring de
+ * RemoteDataStore. Si necesitás la demo, corré `npm run dev`. */
+export const seedContents: ContentItem[] = import.meta.env.DEV ? [
   {
     id: 'vid-01',
     type: 'video',
@@ -40,4 +45,4 @@ export const seedContents: ContentItem[] = [
     platform: 'Moda',
     publishedAt: '2026-04-15',
   },
-]
+] : []

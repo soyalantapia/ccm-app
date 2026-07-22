@@ -91,7 +91,7 @@ export function OpsBannerForm({ open, banner, onClose }: Props) {
       <form onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Anunciante" required>
-            <Input value={f.brand} onChange={set('brand')} placeholder="Banco Distrito" required />
+            <Input value={f.brand} onChange={set('brand')} placeholder="Ej: nombre de la marca" required />
           </Field>
           <Field label="Ubicación (slot)" required>
             <Select options={SLOT_OPTIONS} value={f.slot} onChange={set('slot')} />
@@ -109,7 +109,7 @@ export function OpsBannerForm({ open, banner, onClose }: Props) {
         )}
 
         <Field label="Texto alternativo" hint="Accesibilidad (opcional)">
-          <Input value={f.alt} onChange={set('alt')} placeholder="Banco Distrito en CCM 2026" />
+          <Input value={f.alt} onChange={set('alt')} placeholder="Ej: la marca en CCM 2026" />
         </Field>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

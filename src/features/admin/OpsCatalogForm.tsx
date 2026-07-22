@@ -197,7 +197,7 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
     >
       <form onSubmit={submit} className="space-y-4">
         <Field label="Nombre" required>
-          <Input value={f.name} onChange={set('name')} placeholder="Ej: Valentina Roldán" required />
+          <Input value={f.name} onChange={set('name')} placeholder="Nombre y apellido" required />
         </Field>
         <Field label="Tipo" hint="Participante (hasta 4 imágenes) o expositor (hasta 2 + cuenta proyectos)">
           <Select

@@ -5,7 +5,12 @@ import type { Banner } from '../types'
  * imágenes y destinos reales los pone el equipo. `fixed` = principal siempre visible;
  * el resto del slot rota. El destino (wa.me / link / form) lo da el cliente.
  */
-export const seedBanners: Banner[] = [
+/* ⚠️ Gateado a DEV a propósito: en un build de producción este literal NO se compila.
+ * Antes viajaba adentro del bundle y RemoteDataStore caía acá al fallar la hidratación,
+ * así que con la red mala la app mostraba contenido inventado como si fuera real —
+ * y cargaba impecable, porque el service worker precachea el shell. Ver el docstring de
+ * RemoteDataStore. Si necesitás la demo, corré `npm run dev`. */
+export const seedBanners: Banner[] = import.meta.env.DEV ? [
   {
     id: 'bnr-home-principal',
     slot: 'home',
@@ -42,4 +47,4 @@ export const seedBanners: Banner[] = [
     order: 3,
     active: true,
   },
-]
+] : []
