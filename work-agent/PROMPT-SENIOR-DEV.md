@@ -48,7 +48,7 @@ PWA de un evento de moda (CCM 2026, 14ª edición, 19–20/09/2026, Córdoba; cl
 
 == CÓMO TRABAJAMOS (reglas) ==
 - Patrón por fase: backend (route + service + serializer en lib/serialize.ts) → override en RemoteDataStore (optimista + re-hidrata/revierte, interfaz sync salvo que hagamos la migración async) → ampliar server/prisma/seed.ts si hay datos nuevos → deploy → VERIFICAR e2e con curl Y en navegador (Playwright contra el dev con VITE_API_URL) → limpiar la data de prueba.
-- Comandos: deploy = `cd ~/dev/ccm-app && railway up server --path-as-root -s ccm-api -c`. Seed = `DATABASE_URL=<Postgres-WTPk DATABASE_PUBLIC_URL> npx tsx prisma/seed.ts` desde server/. Logs = `railway logs -s ccm-api -d --lines 60` (necesita --lines). ADMIN_TOKEN: ver con `railway variables --service ccm-api`.
+- Comandos: deploy = `railway up server --path-as-root -s ccm-api -c` **desde un worktree que esté en `origin/main`** (⚠️ NO desde `~/dev/ccm-app`: quedó en una rama vieja y deployar de ahí hace retroceder prod). Verificá con `GET /api/v1/version` que el `commit` sea el esperado. Seed: 🔴 NO contra prod — borra fotos/portfolios y pisa lo cargado a mano; la guardia aborta salvo `--force`. Logs = `railway logs -s ccm-api -d --lines 60` (necesita --lines). ADMIN_TOKEN: ver con `railway variables --service ccm-api`.
 - NUNCA romper el fallback: sin VITE_API_URL la demo tiene que seguir andando (LocalDataStore).
 - Pagos: el webhook de Mercado Pago es la única fuente de verdad; idempotencia obligatoria; sandbox primero.
 - No inventes decisiones de negocio marcadas 🔶: si falta un insumo, paralo y avisame.

@@ -5,6 +5,7 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import { corsOrigins, env } from './lib/env.js'
 import { healthRouter } from './routes/health.js'
+import { versionRouter } from './routes/version.js'
 import { devicesRouter } from './routes/devices.js'
 import { meRouter } from './routes/me.js'
 import { membershipsRouter } from './routes/memberships.js'
@@ -72,6 +73,7 @@ export function createApp() {
   // Router base versionado: /api/v1/...
   const v1 = express.Router()
   v1.use(healthRouter)
+  v1.use(versionRouter)
   v1.use(writeLimiter)
   v1.use(analyticsLimiter)
   v1.use(devicesRouter) // POST /devices: alta de identidad (emite el token de device)

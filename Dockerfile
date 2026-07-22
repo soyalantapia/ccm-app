@@ -22,6 +22,15 @@ WORKDIR /app/server
 RUN npm ci --include=dev
 RUN npx prisma generate
 
+# ── Identidad del artefacto ──
+# El deploy es manual desde el directorio donde se corre `railway up`: sin esto, saber
+# qué versión sirve prod costaba un build completo + diffear el bundle. Se pasan con
+#   railway up ... (el script de deploy los completa solo con el SHA de origin/main)
+ARG BUILD_SHA=desconocido
+ARG BUILT_AT=desconocido
+ENV BUILD_SHA=$BUILD_SHA
+ENV BUILT_AT=$BUILT_AT
+
 # ── Runtime ──
 FROM node:22-slim
 WORKDIR /app/server

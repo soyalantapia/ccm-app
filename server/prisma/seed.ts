@@ -9,6 +9,39 @@
  * Correr una vez contra la DB: npm run db:seed (lee server/.env, igual que src/lib/env.ts).
  */
 import 'dotenv/config'
+
+/**
+ * 🔴 GUARDIA DE PRODUCCIÓN.
+ *
+ * Este seed NO es inofensivo aunque el README lo llame "idempotente": hace deleteMany de
+ * sponsorCreative, portfolioPiece, photo y convocatoriaField, y sus upsert reescriben TODOS
+ * los campos — o sea que pisa lo que se haya cargado a mano desde el panel y reinyecta los
+ * datos de demo (speakers ficticios, marcas inventadas, seedTaken inflados que le comen
+ * cupo real a la gente).
+ *
+ * El riesgo no es teórico: el comando literal apuntando a la base de producción está escrito
+ * en la documentación del propio repo, y ya dejó filas basura en prod una vez.
+ *
+ * No corre solo en ningún deploy (el CMD del contenedor es `prisma migrate deploy` + arrancar).
+ * Esto cubre el otro camino: que alguien lo corra a mano contra la DB equivocada.
+ */
+function abortarSiEsProduccion(): void {
+  const forzado = process.argv.includes('--force')
+  const url = process.env.DATABASE_URL ?? ''
+  const host = (() => { try { return new URL(url).host } catch { return '' } })()
+  const esLocal = /^(localhost|127\.0\.0\.1|\[::1\]|db|postgres)(:|$)/.test(host)
+  const sospechoso = process.env.NODE_ENV === 'production' || (host !== '' && !esLocal)
+  if (!sospechoso || forzado) return
+  console.error(
+    `\n🔴 seed ABORTADO: la base no parece local (host: ${host || 'desconocido'}).\n` +
+      `   Este seed BORRA fotos, obras de portfolio y campos de convocatoria, y pisa con datos\n` +
+      `   de demo todo lo que se haya cargado desde el panel.\n\n` +
+      `   Si de verdad querés sembrar ESTA base, repetí con --force:\n` +
+      `     npm run db:seed -- --force\n`,
+  )
+  process.exit(1)
+}
+abortarSiEsProduccion()
 import { PrismaClient } from '@prisma/client'
 import { seedSponsors } from '../../src/data/seed/sponsors'
 import { seedEvents } from '../../src/data/seed/events'

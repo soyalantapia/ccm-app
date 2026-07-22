@@ -10,7 +10,7 @@ import { IDS } from '../ids'
  * así que con la red mala la app mostraba contenido inventado como si fuera real —
  * y cargaba impecable, porque el service worker precachea el shell. Ver el docstring de
  * RemoteDataStore. Si necesitás la demo, corré `npm run dev`. */
-export const seedBlocks: EventBlock[] = import.meta.env.DEV ? [
+export const seedBlocks: EventBlock[] = !import.meta.env?.PROD ? [
   /* ─── CCM 2026 · 14ª Edición (19 y 20/09) ─── */
   {
     id: 'blk-p-1',

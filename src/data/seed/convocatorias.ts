@@ -5,12 +5,12 @@ import { IDS } from '../ids'
  * Plantilla seed = formulario REAL "Camino a CCM 2026" (PRD §10.3).
  * Los campos son exactos al form vigente; no agregar ni quitar.
  */
-/* ⚠️ Gateado a DEV a propósito: en un build de producción este literal NO se compila.
+/* ⚠️ Gateado a propósito: fuera del build de producción. en un build de producción este literal NO se compila.
  * Antes viajaba adentro del bundle y RemoteDataStore caía acá al fallar la hidratación,
  * así que con la red mala la app mostraba contenido inventado como si fuera real —
  * y cargaba impecable, porque el service worker precachea el shell. Ver el docstring de
  * RemoteDataStore. Si necesitás la demo, corré `npm run dev`. */
-export const seedConvocatorias: Convocatoria[] = import.meta.env.DEV ? [
+export const seedConvocatorias: Convocatoria[] = !import.meta.env?.PROD ? [
   {
     id: IDS.convocatoria.camino,
     slug: IDS.convocatoriaSlugs.camino,

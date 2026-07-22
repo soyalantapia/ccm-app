@@ -5,12 +5,12 @@ import type { Benefit } from '../types'
  * los reales que negocia con el hotel / spa / etc. (editable desde el panel). El código
  * se revela solo a quien está inscripto (decisión low-stakes: sin límite de usos).
  */
-/* ⚠️ Gateado a DEV a propósito: en un build de producción este literal NO se compila.
+/* ⚠️ Gateado a propósito: fuera del build de producción. en un build de producción este literal NO se compila.
  * Antes viajaba adentro del bundle y RemoteDataStore caía acá al fallar la hidratación,
  * así que con la red mala la app mostraba contenido inventado como si fuera real —
  * y cargaba impecable, porque el service worker precachea el shell. Ver el docstring de
  * RemoteDataStore. Si necesitás la demo, corré `npm run dev`. */
-export const seedBenefits: Benefit[] = import.meta.env.DEV ? [
+export const seedBenefits: Benefit[] = !import.meta.env?.PROD ? [
   {
     id: 'ben-hotel',
     partner: 'Hotel Quinto Centenario',
