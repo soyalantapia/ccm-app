@@ -24,6 +24,7 @@ export const PERMISSIONS = [
   'analytics:read', // dashboard y métricas
   'orders:read', // entradas y órdenes
   'grants:write', // regalar entradas de cortesía desde el CRM
+  'automations:write', // editar el HTML de los emails automáticos (solo OWNER — acción de marca)
   'team:manage', // invitar, cambiar rol, desactivar
   'upload', // subir imágenes
 ] as const

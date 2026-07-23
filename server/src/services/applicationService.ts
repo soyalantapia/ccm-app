@@ -6,7 +6,7 @@ import type { Application } from '@domain/types'
 import { keysFromApplicationData } from '../domain/personIdentity.js'
 import { linkPerson } from './personService.js'
 import { getMailer } from '../mail/mailer.js'
-import { applicationAcceptedEmail, applicationRejectedEmail } from '../mail/templates.js'
+import { renderMail } from './emailTemplateService.js'
 
 /** Postulación pública (preinscripta). El equipo CCM decide después (admin). */
 export async function submitApplication(
@@ -152,10 +152,10 @@ export async function decideApplication(
 
   const nombre = typeof data.nombre === 'string' && data.nombre.trim() ? data.nombre.trim() : 'Hola'
   const convocatoria = app.convocatoria?.title ?? 'la convocatoria'
-  const msg =
-    status === 'aceptada'
-      ? applicationAcceptedEmail({ name: nombre, convocatoria })
-      : applicationRejectedEmail({ name: nombre, convocatoria })
+  const msg = await renderMail(
+    status === 'aceptada' ? 'application_accepted' : 'application_rejected',
+    { name: nombre, convocatoria },
+  )
 
   // Best-effort y DESPUÉS de persistir: que el correo falle no puede desarmar una decisión
   // que el organizador ya tomó y que el postulante ya ve en su app.

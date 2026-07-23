@@ -1,7 +1,7 @@
 import { prisma } from '../lib/prisma.js'
 import { notFound } from '../lib/errors.js'
 import { getMailer } from '../mail/mailer.js'
-import { ticketGrantEmail } from '../mail/templates.js'
+import { renderMail } from './emailTemplateService.js'
 import { qrPng } from '../lib/qrPng.js'
 import { linkDeGrant } from './grantService.js'
 
@@ -52,15 +52,18 @@ export async function enviarMailDeGrant(grantId: string): Promise<EnvioGrant> {
   const donde = [grant.event.venue, grant.event.address].filter(Boolean).join(' · ')
   const qrCid = `qr-${grant.id}@ccm`
 
-  const msg = ticketGrantEmail({
-    name: nombreDePersona(grant.person.devices) ?? undefined,
-    eventTitle: grant.event.title,
-    eventWhen: cuando,
-    eventVenue: donde,
-    qty: grant.qty,
-    claimUrl,
-    qrCid,
-  })
+  const msg = await renderMail(
+    'ticket_grant',
+    {
+      name: nombreDePersona(grant.person.devices) ?? undefined,
+      eventTitle: grant.event.title,
+      eventWhen: cuando,
+      eventVenue: donde,
+      qty: grant.qty,
+      claimUrl,
+    },
+    { qrCid },
+  )
   msg.attachments = [
     { filename: 'entrada-ccm.png', content: await qrPng(claimUrl), contentType: 'image/png', cid: qrCid },
   ]
