@@ -12,7 +12,7 @@
  */
 import { prisma } from '../lib/prisma.js'
 import { toTicketOrder, toAdCampaign } from '../lib/serialize.js'
-import { notFound, badRequest } from '../lib/errors.js'
+import { notFound, badRequest, conflict } from '../lib/errors.js'
 import type { TicketOrder, AdCampaign, OrderStatus } from '@domain/types'
 import { priceForCampaign } from '../../../src/lib/pricing.js'
 
@@ -47,6 +47,12 @@ interface NuevaOrden {
 export async function createOrder(input: NuevaOrden, deviceId?: string): Promise<TicketOrder> {
   const plan = await prisma.ticketPlan.findUnique({ where: { id: input.planId } })
   if (!plan) throw badRequest('PLAN_NOT_FOUND', 'El plan de entrada no existe')
+  // Una entrada RETIRADA de la venta no toma órdenes nuevas. El selector ya la esconde, pero
+  // apagar el botón es cosmético: el POST /orders sigue abierto y con el id del plan —que no es
+  // secreto— se crearía una orden igual, y después un cobro. Es el mismo agujero que el precio y
+  // el candado de Socios venían a tapar en la inscripción. Las órdenes creadas ANTES de retirar
+  // siguen siendo pagables (el comprador ya estaba en el flujo): el corte es sobre las nuevas.
+  if (plan.archived) throw conflict('PLAN_ARCHIVED', 'Esta entrada ya no está a la venta.')
   const qty = Math.max(1, Math.floor(input.qty || 1))
   const unit = (plan.price ?? 0) + (plan.serviceCharge ?? 0)
 
