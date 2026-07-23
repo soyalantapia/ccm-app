@@ -4,7 +4,7 @@ import { LocalDataStore } from './LocalDataStore'
 import { RemoteDataStore } from './RemoteDataStore'
 import type { DataStore } from './DataStore'
 
-export type { DataStore, BlockAvailability, PhotoDownload } from './DataStore'
+export type { DataStore, BlockAvailability, PhotoDownload, GrantPreview, GrantClaim } from './DataStore'
 
 /**
  * Singleton: la UI consume SOLO esto. Con VITE_API_URL seteada usa el backend real

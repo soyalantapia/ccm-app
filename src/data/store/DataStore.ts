@@ -76,6 +76,22 @@ export interface CheckoutItem {
 export type HydratableResource = 'events' | 'catalog' | 'galleries' | 'notas' | 'convocatoria'
 
 /**
+ * Entrada regalada, vista desde el lado del INVITADO (la pantalla /i/:token del mail).
+ *
+ * `previewGrant` es de solo lectura: dice qué es el regalo sin activarlo, para poder mostrarle
+ * al invitado "te regalaron N entradas para X" antes de que toque nada. `claimGrant` lo activa:
+ * enlaza su dispositivo y materializa la inscripción. Los `motivo` vienen tal cual del backend
+ * (grantService), así la UI decide el copy sin re-interpretar códigos.
+ */
+export type GrantPreview =
+  | { ok: true; estado: 'pendiente' | 'reclamado'; eventTitle: string; eventWhen: string; qty: number }
+  | { ok: false; motivo: 'no_existe' | 'link_invalido' | 'revocado' }
+
+export type GrantClaim =
+  | { ok: true; eventTitle: string; eventWhen: string; nuevo: boolean }
+  | { ok: false; motivo: 'no_existe' | 'link_invalido' | 'revocado' | 'de_otra_persona' }
+
+/**
  * DataStore — única puerta de acceso a datos de TODA la UI (patrón repositorio).
  * Fase 0: seed estático + localStorage. Fase 1: se enchufa un backend real
  * implementando esta misma interfaz, sin tocar pantallas.
@@ -320,4 +336,18 @@ export interface DataStore {
    * casi siempre una lista vacía que se lee como "no se anotó nadie".
    */
   fetchInscriptos(eventId: string): Promise<InscriptoAdmin[]>
+
+  /**
+   * Entrada regalada — lado del invitado (pantalla /i/:token del mail).
+   *
+   * `previewGrant` NO activa nada: es la lectura que arma la pantalla ("te regalaron…"). Va contra
+   * el server pero no exige identidad de device. `claimGrant` SÍ activa: asegura primero el token
+   * del dispositivo (lo emite si el invitado nunca abrió la app) y recién ahí materializa la
+   * inscripción. Ambos son idempotentes del lado del server; reabrir el link no duplica nada.
+   *
+   * En la demo sin backend (LocalDataStore) devuelven `{ ok:false, motivo:'no_existe' }`: no hay
+   * regalos reales que resolver, y así la pantalla degrada a "link inválido" en vez de romperse.
+   */
+  previewGrant(grantId: string, token: string): Promise<GrantPreview>
+  claimGrant(grantId: string, token: string): Promise<GrantClaim>
 }
