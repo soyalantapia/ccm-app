@@ -1,8 +1,8 @@
-import { Badge, Button, Card, EmptyState, Eyebrow, SectionTitle, toast } from '../../components/ui'
+import { useState } from 'react'
+import { Badge, Button, Card, EmptyState, Eyebrow, SectionTitle, Select, toast } from '../../components/ui'
 import type { BadgeTone } from '../../components/ui/Badge'
 import { store, useStore } from '../../data/store'
 import type { OrderStatus } from '../../data/types'
-import { OpsPlanEditor } from '../../features/admin/OpsPlanEditor'
 import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
 import { formatDateTime, formatMoney } from '../../features/admin/opsFormat'
 import { AVISO_CONFIRMACION_MANUAL, LEAD_ORDENES } from '../../features/admin/copyDestructivo'
@@ -30,8 +30,16 @@ export default function AdminOrdenes() {
   // TODAS las órdenes, no solo las del navegador del organizador.
   const orders = useStore((s) => s.getAdminOrders())
   const analytics = useStore((s) => s.getAnalytics())
+  const eventos = useStore((s) => s.getAdminEvents())
+  const [filtroEvento, setFiltroEvento] = useState('')
 
   const planName = (id: string) => plans.find((p) => p.id === id)?.name ?? id
+  /** De qué evento es una orden: se resuelve por su plan, que ahora sí lo sabe. */
+  const eventoDeOrden = (planId: string) => plans.find((p) => p.id === planId)?.eventId
+
+  // Sólo los eventos que efectivamente tienen entradas: filtrar por uno que no vende nada no
+  // aporta, y llenaría el desplegable de opciones vacías.
+  const eventosConEntradas = eventos.filter((e) => plans.some((p) => p.eventId === e.id))
 
   /* Órdenes reales del dispositivo + históricas del seed de analytics (informativas). */
   const seedCreated = analytics.filter((e) => e.seed && e.event === 'ticket_order_created')
@@ -61,7 +69,12 @@ export default function AdminOrdenes() {
         : 'iniciada') as OrderStatus,
       historic: true,
     })),
-  ].sort((a, b) => b.ts.localeCompare(a.ts))
+  ]
+    // Filtro por evento: recién se puede desde que el plan sabe de cuál es. Las filas históricas
+    // del seed de analytics no tienen plan resoluble, así que al filtrar quedan fuera — es
+    // correcto: no se sabe a qué evento pertenecen y mostrarlas dentro de uno sería inventar.
+    .filter((r) => !filtroEvento || eventoDeOrden(r.planId) === filtroEvento)
+    .sort((a, b) => b.ts.localeCompare(a.ts))
 
   const confirm = (id: string) => {
     store.setOrderStatus(id, 'confirmada')
@@ -91,24 +104,30 @@ export default function AdminOrdenes() {
   return (
     <div className="px-5 py-8 md:px-10">
       <SectionTitle
-        eyebrow="Admin · Entradas"
-        title="Entradas y órdenes"
+        eyebrow="Admin · Ventas"
+        title="Órdenes de compra"
         lead={LEAD_ORDENES}
       />
 
-      {/* ─── Planes (PRD §10.15) ─── */}
-      <section className="mt-10">
-        <Eyebrow>Planes de entrada</Eyebrow>
-        <div className="mt-5 grid items-stretch gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {plans.map((plan) => (
-            <OpsPlanEditor key={plan.id} plan={plan} />
-          ))}
-        </div>
-      </section>
-
       {/* ─── Órdenes ─── */}
-      <section className="mt-14 border-t border-line pt-10">
-        <Eyebrow>Órdenes</Eyebrow>
+      <section className="mt-10">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <Eyebrow>Ventas</Eyebrow>
+          {eventosConEntradas.length > 1 && (
+            <label className="flex items-center gap-2.5 text-[12px] text-ink-soft">
+              Evento
+              <Select
+                className="min-w-52"
+                options={[
+                  { value: '', label: 'Todos' },
+                  ...eventosConEntradas.map((e) => ({ value: e.id, label: e.title })),
+                ]}
+                value={filtroEvento}
+                onChange={(e) => setFiltroEvento(e.target.value)}
+              />
+            </label>
+          )}
+        </div>
 
         {rows.length === 0 ? (
           <EmptyState title="Todavía no hay órdenes" className="mt-2">

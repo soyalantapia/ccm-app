@@ -29,7 +29,6 @@ export default function Eventos() {
   const registrations = useRegistrations()
   const isSocio = useStore((s) => s.isSocio())
   // El más barato de los VIP, no el primero de la lista (ver features/tickets/vipDesde).
-  const vipFrom = useStore((s) => vipDesde(s.getPlans()))
   const [filter, setFilter] = useState('todos')
 
   const sponsors = useStore((s) => s.getSponsors())
@@ -37,6 +36,11 @@ export default function Eventos() {
   const notas = useStore((s) => s.getNotas())
 
   const principal = events.find((e) => e.type === 'principal')
+  // Va DESPUÉS de `principal`: el selector del store corre en el render, así que leerlo antes de
+  // su declaración tira ReferenceError. TypeScript no lo marca porque está adentro del closure.
+  // Acotado al principal: es su banner. Sin filtrar, un tier barato de una capacitación le
+  // bajaría el "VIP desde", porque el helper devuelve el MÍNIMO.
+  const vipFrom = useStore((s) => vipDesde(s.getPlans(principal?.id)))
   // Un evento especial (capacitación destacada) se muestra como lanzamiento-card
   // y se excluye de la lista de Caminos para no duplicarlo.
   const especial = events.find((e) => e.type === 'capacitacion' && estaPorVenir(e))

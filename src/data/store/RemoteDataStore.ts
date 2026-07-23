@@ -5,6 +5,7 @@ import type {
   PhotoDownload,
   NewEvent,
   NewBlock,
+  NewPlan,
   NewContent,
   NewSponsor,
   NewGallery,
@@ -826,8 +827,12 @@ export class RemoteDataStore extends LocalDataStore {
   // getSponsor NO se sobreescribe: el de LocalDataStore ya busca sobre this.getSponsors() (o sea,
   // el de acá arriba, sin seed) y, si no está, resuelve el sponsor sintético de una campaña
   // autogestionada — que no es demo, la compró alguien. Sobreescribirlo perdía ese segundo camino.
-  override getPlans(): TicketPlan[] {
-    return this.plans ?? []
+  override getPlans(eventId?: string): TicketPlan[] {
+    // El filtro es en memoria a propósito: los planes ya vienen hidratados en bloque y son
+    // pocos. Pedir /plans?eventId= por cada pantalla sería un request por evento para filtrar
+    // una lista que ya está en el cliente.
+    const todos = this.plans ?? []
+    return eventId ? todos.filter((p) => p.eventId === eventId) : todos
   }
   override getPlan(id: PlanId): TicketPlan | undefined {
     return this.plans?.find((p) => p.id === id)
@@ -1272,7 +1277,30 @@ export class RemoteDataStore extends LocalDataStore {
     )
   }
 
-  override updatePlan(id: PlanId, patch: { price?: number | null; mpLink?: string }): void {
+  override createPlan(eventId: string, input: NewPlan): void {
+    // Sin optimista: el id lo genera el SERVER a partir del nombre, así que no se puede pintar
+    // una fila creíble antes de la respuesta —tendría un id inventado que después no coincide—.
+    // Se refetchea y listo: es un alta puntual del panel, no un gesto de alta frecuencia.
+    this.adminWrite(
+      this.api.post(`/admin/events/${eventId}/plans`, input),
+      () => this.refetchPlans(),
+      () => this.refetchPlans(),
+    )
+  }
+
+  override deletePlan(id: PlanId): void {
+    const prev = this.plans
+    if (this.plans) this.plans = this.plans.filter((p) => p.id !== id)
+    bus.emit('plans')
+    this.adminWrite(
+      this.api.del(`/admin/plans/${id}`),
+      () => this.refetchPlans(),
+      // El server rechaza con 409 si ya tiene compras: se devuelve la fila a la lista.
+      () => { if (prev) this.plans = prev; bus.emit('plans'); this.refetchPlans() },
+    )
+  }
+
+  override updatePlan(id: PlanId, patch: Partial<Omit<TicketPlan, 'id' | 'eventId'>>): void {
     const prev = this.plans
     if (this.plans) this.plans = this.plans.map((p) => (p.id === id ? { ...p, ...patch } : p))
     bus.emit('plans')

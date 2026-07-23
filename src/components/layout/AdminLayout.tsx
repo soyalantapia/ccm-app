@@ -50,7 +50,7 @@ const SECTIONS: NavItem[] = [
   { to: '/admin/novedades', label: 'Novedades', icon: Newspaper, needs: 'content:write' },
   { to: '/admin/beneficios', label: 'Beneficios', icon: Gift, needs: 'content:write' },
   { to: '/admin/banners', label: 'Banners', icon: Megaphone, needs: 'content:write' },
-  { to: '/admin/ordenes', label: 'Entradas y órdenes', icon: Ticket, needs: 'orders:read' },
+  { to: '/admin/ordenes', label: 'Ventas', icon: Ticket, needs: 'orders:read' },
   { to: '/admin/equipo', label: 'Equipo y permisos', icon: ShieldCheck, needs: 'team:manage' },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]
@@ -77,7 +77,7 @@ const MORE: NavItem[] = [
   { to: '/admin/novedades', label: 'Novedades', icon: Newspaper, needs: 'content:write' },
   { to: '/admin/beneficios', label: 'Beneficios', icon: Gift, needs: 'content:write' },
   { to: '/admin/banners', label: 'Banners', icon: Megaphone, needs: 'content:write' },
-  { to: '/admin/ordenes', label: 'Entradas y órdenes', icon: Ticket, needs: 'orders:read' },
+  { to: '/admin/ordenes', label: 'Ventas', icon: Ticket, needs: 'orders:read' },
   { to: '/admin/equipo', label: 'Equipo y permisos', icon: ShieldCheck, needs: 'team:manage' },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]

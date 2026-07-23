@@ -26,9 +26,11 @@ export const AVISO_BORRADO = IS_REMOTE
  * y confirmarlas es dar una entrada por pagada. Llamarlo demo invita a tocar el botón para
  * probar.
  */
+// Los precios y los links de pago YA NO se editan acá: viven adentro de cada evento, que es de
+// donde son. Esta pantalla quedó sólo con las ventas, que sí son transversales.
 export const LEAD_ORDENES = IS_REMOTE
-  ? 'Editá precios y links de pago de Mercado Pago por plan, y gestioná las órdenes de compra.'
-  : 'Editá precios y links de pago de Mercado Pago por plan, y gestioná las órdenes de la demo.'
+  ? 'Todas las compras, de todos los eventos. Los precios y los links de pago se cargan adentro de cada evento.'
+  : 'Las compras de la demo. Los precios y los links de pago se cargan adentro de cada evento.'
 
 // El webhook de Mercado Pago ya concilia solo: verifica la firma (mpWebhookService.ts:52) y marca
 // la orden confirmada dentro de la misma transacción que sella el pago (:159). La confirmación a

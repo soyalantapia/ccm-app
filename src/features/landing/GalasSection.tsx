@@ -24,7 +24,9 @@ const GALAS = [
 /** Experiencias de gala (PRD §6.1.5) — dark block azul noche. */
 export function GalasSection() {
   // El más barato de los VIP, no el primero de la lista (ver features/tickets/vipDesde).
-  const vipFrom = useStore((s) => vipDesde(s.getPlans()))
+  // Acotado al evento principal: es SU landing. Sin filtrar, un tier barato de una capacitación
+  // le bajaría el "VIP desde" a la portada, porque el helper saca el mínimo.
+  const vipFrom = useStore((s) => vipDesde(s.getPlans(IDS.events.principal)))
   return (
     <section className="bg-night text-night-ink">
       <div className="mx-auto max-w-6xl px-5 py-16 md:py-24">

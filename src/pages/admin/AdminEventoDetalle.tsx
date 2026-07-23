@@ -3,13 +3,15 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, MapPin, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Badge, Button, ButtonLink, EmptyState, Img, Sheet, Stat } from '../../components/ui'
 import { store, useStore } from '../../data/store'
-import type { EventBlock, InscriptoAdmin } from '../../data/types'
+import type { EventBlock, InscriptoAdmin, TicketPlan } from '../../data/types'
 import { CorePageHeader } from '../../features/admin/CorePageHeader'
 import { CorePanel } from '../../features/admin/CorePanel'
 import { CoreOccupancyBar } from '../../features/admin/CoreOccupancyBar'
 import { OpsDangerButton } from '../../features/admin/OpsDangerButton'
 import { OpsEventForm } from '../../features/admin/OpsEventForm'
 import { OpsBlockForm } from '../../features/admin/OpsBlockForm'
+import { OpsPlanForm } from '../../features/admin/OpsPlanForm'
+import { OpsPlanEditor } from '../../features/admin/OpsPlanEditor'
 import { formatMoney } from '../../features/tickets/format'
 import { EVENT_TYPE_META, formatDateTime, percent } from '../../features/admin/coreFormat'
 import { AVISO_BORRADO } from '../../features/admin/copyDestructivo'
@@ -21,6 +23,8 @@ export default function AdminEventoDetalle() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [blockForm, setBlockForm] = useState<{ open: boolean; block?: EventBlock }>({ open: false })
   const [iniciativaOpen, setIniciativaOpen] = useState(false)
+  const [planOpen, setPlanOpen] = useState(false)
+  const [borrarPlan, setBorrarPlan] = useState<TicketPlan | null>(null)
   const [deleteBlock, setDeleteBlock] = useState<EventBlock | null>(null)
 
   const event = useStore((s) => s.getEventById(id))
@@ -36,6 +40,9 @@ export default function AdminEventoDetalle() {
   // Las INICIATIVAS que cuelgan de este evento. Se leen de la lista del panel (que incluye
   // borradores): una iniciativa a medio armar tiene que verse acá, que es donde se la termina.
   const iniciativas = useStore((s) => s.getAdminEvents().filter((e) => e.parentId === id))
+  // Los tipos de entrada de ESTE evento. Antes vivían en una pantalla suelta que los mostraba
+  // todos juntos, sin decir de quién eran — que era justo el problema.
+  const planes = useStore((s) => s.getPlans(id))
   // Los inscriptos REALES, de todos los dispositivos. Antes esto salía de getRegistrations(),
   // que es device-scoped (lo dice el docstring de DataStore): la lista mostraba únicamente las
   // inscripciones del teléfono desde el que se estaba mirando, o sea casi siempre ninguna. Para
@@ -119,6 +126,29 @@ export default function AdminEventoDetalle() {
       <div className="mt-10 grid gap-x-10 gap-y-10 lg:grid-cols-3">
         <div className="space-y-10 lg:col-span-2">
           {/* Bloques con ocupación en vivo */}
+          {/* Entradas: los tipos que se venden de ESTE evento. Antes se editaban en una
+              pantalla aparte con los 5 del principal mezclados; ahora cada evento tiene los
+              suyos y se pueden crear, editar y borrar desde acá. */}
+          <CorePanel title="Entradas" note="Los tipos de entrada que se venden de este evento">
+            <div className="mb-5">
+              <Button variant="outline" size="sm" onClick={() => setPlanOpen(true)}>
+                <Plus size={13} strokeWidth={2} /> Agregar tipo de entrada
+              </Button>
+            </div>
+            {planes.length === 0 ? (
+              <p className="py-2 text-sm leading-relaxed text-ink-soft">
+                Este evento todavía no vende entradas. Agregá un tipo —«Sábado · Night VIP»,
+                «Combo», lo que sea— con su precio, y después pegale el link de pago.
+              </p>
+            ) : (
+              <div className="grid items-stretch gap-5 md:grid-cols-2">
+                {planes.map((plan) => (
+                  <OpsPlanEditor key={plan.id} plan={plan} onBorrar={() => setBorrarPlan(plan)} />
+                ))}
+              </div>
+            )}
+          </CorePanel>
+
           {/* Iniciativas: workshops, capacitaciones o lo que sea, adentro de este evento.
               Cada una es un evento con su ficha, su portada, su link propio y su precio — por eso
               se cargan con el MISMO formulario de evento, sólo que ya saben de quién cuelgan. */}
@@ -290,6 +320,31 @@ export default function AdminEventoDetalle() {
         parentId={event.id}
         onClose={() => setIniciativaOpen(false)}
       />
+      <OpsPlanForm open={planOpen} eventId={event.id} onClose={() => setPlanOpen(false)} />
+      <Sheet
+        open={!!borrarPlan}
+        onClose={() => setBorrarPlan(null)}
+        title="¿Eliminar este tipo de entrada?"
+      >
+        <p className="text-[15px] leading-relaxed text-ink-soft">
+          Se elimina <em className="text-accent">{borrarPlan?.name}</em> y deja de ofrecerse.
+          Si ya tiene compras hechas, el sistema no lo va a dejar borrar.
+        </p>
+        <div className="mt-6 flex flex-col gap-2.5">
+          <OpsDangerButton
+            className="w-full justify-center"
+            onClick={() => {
+              if (borrarPlan) store.deletePlan(borrarPlan.id)
+              setBorrarPlan(null)
+            }}
+          >
+            Eliminar
+          </OpsDangerButton>
+          <Button variant="outline" className="w-full justify-center" onClick={() => setBorrarPlan(null)}>
+            Cancelar
+          </Button>
+        </div>
+      </Sheet>
       <OpsBlockForm
         open={blockForm.open}
         eventId={event.id}

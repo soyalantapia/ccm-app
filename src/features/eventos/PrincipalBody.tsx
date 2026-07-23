@@ -39,7 +39,7 @@ const EXPERIENCIAS = [
  */
 export function PrincipalBody({ event }: { event: EventItem }) {
   // El más barato de los VIP, no el primero de la lista (ver features/tickets/vipDesde).
-  const vipFrom = useStore((s) => vipDesde(s.getPlans()))
+  const vipFrom = useStore((s) => vipDesde(s.getPlans(event.id)))
 
   const sortedBlocks = [...store.getBlocks(event.id)].sort((a, b) =>
     blockSortKey(a).localeCompare(blockSortKey(b)),
@@ -69,7 +69,7 @@ export function PrincipalBody({ event }: { event: EventItem }) {
             />
           </div>
           <div className="mt-8 md:col-span-8 md:mt-0">
-            <TicketSelector />
+            <TicketSelector eventId={event.id} />
           </div>
         </div>
       </section>

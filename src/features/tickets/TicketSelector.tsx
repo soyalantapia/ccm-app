@@ -45,10 +45,22 @@ function fallbackManual(selected: TicketPlan[], totalQty: number): string {
  * tiers con stepper de cantidad, cargo por servicio visible y barra sticky
  * con el total. Las gratuitas inscriben directo (flujo D22 → QR).
  */
-export function TicketSelector({ className }: { className?: string }) {
+/**
+ * Selector de entradas de UN evento. `eventId` por defecto es el principal porque los dos lugares
+ * donde se usa hoy son suyos (/entradas y el cuerpo del evento principal), pero el parámetro
+ * existe para que la ficha de cualquier otro evento pueda mostrar sus propios tiers.
+ */
+export function TicketSelector({
+  className,
+  eventId = IDS.events.principal,
+}: {
+  className?: string
+  eventId?: string
+}) {
   const navigate = useNavigate()
-  const plans = useStore((s) => s.getPlans())
-  const registered = useStore((s) => s.isRegistered(IDS.events.principal))
+  // Acotado al evento: sin esto, un tier de una capacitación aparecería acá para comprar.
+  const plans = useStore((s) => s.getPlans(eventId))
+  const registered = useStore((s) => s.isRegistered(eventId))
 
   const [qty, setQty] = useState<Partial<Record<string, number>>>({})
   const [pending, setPending] = useState<PendingCheckout | null>(null)

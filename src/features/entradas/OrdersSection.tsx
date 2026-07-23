@@ -13,6 +13,8 @@ const STATUS: Record<OrderStatus, { label: string; tone: 'neutral' | 'accent' | 
 /** "Tus órdenes": seguimiento local de las compras VIP. Solo se muestra si hay órdenes. */
 export function OrdersSection() {
   const orders = useStore((s) => s.getOrders())
+  // TODOS los planes a propósito, sin filtrar por evento: acá se resuelve el nombre de cualquier
+  // entrada que la persona haya comprado, y sus compras pueden ser de eventos distintos.
   const plans = useStore((s) => s.getPlans())
   if (orders.length === 0) return null
 

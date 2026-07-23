@@ -59,6 +59,9 @@ export type NewCatalogProfile = Omit<CatalogProfile, 'id' | 'slug'> & { slug?: s
 export type NewContent = Omit<ContentItem, 'id'>
 /** Compra de espacio publicitario autogestionado (el store genera id + ts). */
 export type NewCampaign = Omit<AdCampaign, 'id' | 'ts'>
+/** Alta de un tipo de entrada (el server genera el id a partir del nombre). */
+export type NewPlan = Omit<TicketPlan, 'id' | 'eventId'>
+
 /** Alta de convocatoria desde el admin (el store genera id + slug). */
 export type NewConvocatoria = Omit<Convocatoria, 'id' | 'slug'> & { slug?: string }
 
@@ -125,9 +128,23 @@ export interface DataStore {
    * El TOTAL lo calcula el server con el precio vigente (no se confía en el cliente). La
    * confirmación del pago es MANUAL desde el panel; la conciliación automática por webhook de
    * Mercado Pago es una fase aparte y no cambia este modelo. */
-  getPlans(): TicketPlan[]
+  /**
+   * Tipos de entrada. Con `eventId` devuelve sólo los de ESE evento.
+   *
+   * El parámetro no es un lujo: desde que cada evento arma sus propios tiers, una pantalla que
+   * lea todos los planes mezcla las entradas de una capacitación con las del evento principal —
+   * y como el "VIP desde $X" saca el MÍNIMO, un tier barato de otro evento le baja el precio
+   * anunciado al principal. La única que sigue leyendo todos a propósito es "Tus órdenes", que
+   * resuelve el nombre de cualquier plan que la persona haya comprado, sea de donde sea.
+   */
+  getPlans(eventId?: string): TicketPlan[]
   getPlan(id: PlanId): TicketPlan | undefined
-  updatePlan(id: PlanId, patch: { price?: number | null; mpLink?: string }): void
+  /** Alta de un tipo de entrada DENTRO de un evento. El server genera el id a partir del nombre. */
+  createPlan(eventId: string, input: NewPlan): void
+  /** Edición completa: antes sólo dejaba tocar precio y link, ni siquiera renombrar. */
+  updatePlan(id: PlanId, patch: Partial<Omit<TicketPlan, 'id' | 'eventId'>>): void
+  /** Baja. El server responde 409 si ya tiene compras: una entrada vendida no se borra. */
+  deletePlan(id: PlanId): void
   createOrder(planId: PlanId, qty?: number): TicketOrder
   /**
    * Igual que `createOrder` para N planes, pero ESPERA a que el backend las haya creado de verdad.

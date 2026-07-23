@@ -36,6 +36,7 @@ import type {
   DataStore,
   HydratableResource,
   NewBlock,
+  NewPlan,
   NewCampaign,
   NewCatalogProfile,
   NewContent,
@@ -74,6 +75,7 @@ export const K = {
   applications: 'applications',
   applicationOverrides: 'applicationOverrides',
   planOverrides: 'planOverrides',
+  planExtra: 'planExtra', // tipos de entrada creados en demo (el seed es de sólo lectura)
   eventsOverlay: 'eventsOverlay',
   blocksOverlay: 'blocksOverlay',
   galleriesOverlay: 'galleriesOverlay',
@@ -101,7 +103,9 @@ function campaignSponsor(c: AdCampaign): Sponsor {
   }
 }
 
-type PlanOverride = { price?: number | null; mpLink?: string }
+/** Campos editados de un plan en la demo. Ya no es sólo {price, mpLink}: desde que el panel
+ *  edita nombre, bajada y tipo, el override tiene que poder reflejar cualquiera de ellos. */
+type PlanOverride = Partial<Omit<TicketPlan, 'id' | 'eventId'>>
 type AppOverride = { status: ApplicationStatus; decidedAt: string }
 
 /** Implementación Fase 0: seed estático + localStorage (cero backend). */
@@ -275,19 +279,35 @@ export class LocalDataStore implements DataStore {
 
   /* ─── Planes y órdenes ─── */
 
-  getPlans(): TicketPlan[] {
+  getPlans(eventId?: string): TicketPlan[] {
     const overrides = readJSON<Partial<Record<PlanId, PlanOverride>>>(K.planOverrides, {})
-    return seedPlans.map((plan) => {
-      const o = overrides[plan.id]
-      return o ? { ...plan, ...(o.price !== undefined ? { price: o.price } : {}), ...(o.mpLink ? { mpLink: o.mpLink } : {}) } : plan
-    })
+    const extra = readJSON<TicketPlan[]>(K.planExtra, [])
+    return [...seedPlans, ...extra]
+      .filter((plan) => !eventId || plan.eventId === eventId)
+      .map((plan) => {
+        const o = overrides[plan.id]
+        return o ? { ...plan, ...(o.price !== undefined ? { price: o.price } : {}), ...(o.mpLink ? { mpLink: o.mpLink } : {}) } : plan
+      })
   }
 
   getPlan(id: PlanId): TicketPlan | undefined {
     return this.getPlans().find((p) => p.id === id)
   }
 
-  updatePlan(id: PlanId, patch: { price?: number | null; mpLink?: string }): void {
+  /** En demo los planes salen del seed, que es de sólo lectura: el alta y la baja viven en un
+   *  override local, igual que los precios editados. */
+  createPlan(eventId: string, input: NewPlan): void {
+    const extra = readJSON<TicketPlan[]>(K.planExtra, [])
+    const id = `${input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'entrada'}-${Math.random().toString(36).slice(2, 8)}`
+    writeJSON(K.planExtra, [...extra, { ...input, id, eventId }])
+  }
+
+  deletePlan(id: PlanId): void {
+    const extra = readJSON<TicketPlan[]>(K.planExtra, [])
+    writeJSON(K.planExtra, extra.filter((p) => p.id !== id))
+  }
+
+  updatePlan(id: PlanId, patch: Partial<Omit<TicketPlan, 'id' | 'eventId'>>): void {
     const overrides = readJSON<Partial<Record<PlanId, PlanOverride>>>(K.planOverrides, {})
     overrides[id] = { ...overrides[id], ...patch }
     writeJSON(K.planOverrides, overrides)

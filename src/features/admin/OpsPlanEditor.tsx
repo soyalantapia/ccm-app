@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Trash2 } from 'lucide-react'
 import { Badge, Button, Card, Field, Input, toast } from '../../components/ui'
 import { store } from '../../data/store'
 import { esLinkDePagoReal } from '../../config/plans'
@@ -9,7 +10,7 @@ import { formatMoney } from './opsFormat'
  * Editor de un plan de entrada: precio y link de pago de Mercado Pago
  * editables en vivo (PRD §10.15). La General es gratuita y sin link.
  */
-export function OpsPlanEditor({ plan }: { plan: TicketPlan }) {
+export function OpsPlanEditor({ plan, onBorrar }: { plan: TicketPlan; onBorrar?: () => void }) {
   const isFree = plan.kind === 'general'
   const [price, setPrice] = useState(plan.price === null || plan.price === 0 ? '' : String(plan.price))
   // Los planes guardados en la base todavía traen el placeholder (la portada de MP) de un seed
@@ -45,7 +46,19 @@ export function OpsPlanEditor({ plan }: { plan: TicketPlan }) {
           <h3 className="type-serif text-xl text-ink">{plan.name}</h3>
           <p className="mt-1 text-xs leading-relaxed text-ink-soft">{plan.tagline}</p>
         </div>
-        {plan.featured && <Badge tone="accent">Destacada</Badge>}
+        <div className="flex shrink-0 items-center gap-2">
+          {plan.featured && <Badge tone="accent">Destacada</Badge>}
+          {onBorrar && (
+            <button
+              type="button"
+              onClick={onBorrar}
+              aria-label={`Eliminar ${plan.name}`}
+              className="rounded-sm p-1.5 text-ink-soft transition-colors hover:bg-danger/10 hover:text-danger"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mt-4 border-t border-line pt-4">
@@ -67,13 +80,18 @@ export function OpsPlanEditor({ plan }: { plan: TicketPlan }) {
       ) : (
         <div className="mt-5 space-y-4 border-t border-line pt-4">
           <Field label="Precio (ARS)">
-            <div className="flex gap-2">
+            {/* flex-wrap + ancho mínimo: dentro del panel del evento la columna es angosta y,
+                con el botón `shrink-0` al lado, el input quedaba en 63px — mostraba "45" cuando
+                el valor era 45000. Ahora el botón baja de línea antes que el campo se vuelva
+                ilegible. */}
+            <div className="flex flex-wrap gap-2">
               <Input
                 type="number"
                 min={0}
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 placeholder="A confirmar"
+                className="min-w-32 flex-1"
               />
               <Button size="sm" variant="ink" onClick={savePrice} className="shrink-0">
                 Guardar
@@ -81,12 +99,13 @@ export function OpsPlanEditor({ plan }: { plan: TicketPlan }) {
             </div>
           </Field>
           <Field label="Link de pago Mercado Pago" hint="El comprador sale de la app solo acá.">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Input
                 type="url"
                 value={mpLink}
                 onChange={(e) => setMpLink(e.target.value)}
                 placeholder="https://mpago.la/..."
+                className="min-w-40 flex-1"
               />
               <Button size="sm" variant="ink" onClick={saveLink} className="shrink-0">
                 Guardar
