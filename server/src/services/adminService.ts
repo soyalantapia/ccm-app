@@ -344,13 +344,20 @@ async function readCatalog(id: string): Promise<CatalogProfile> {
   return toCatalogProfile(c)
 }
 export async function createCatalogProfile(c: CatalogProfile): Promise<CatalogProfile> {
-  await prisma.catalogProfile.create({ data: { id: c.id, slug: c.slug, name: c.name, role: c.role, kind: c.kind ?? 'participante', platform: c.platform, city: c.city, bio: c.bio, projects: c.projects ?? null, photo: c.photo, instagram: c.instagram ?? null, whatsapp: c.whatsapp ?? null, verified: c.verified, participatesIn: c.participatesIn } })
+  await prisma.catalogProfile.create({ data: { id: c.id, slug: c.slug, name: c.name, role: c.role, kind: c.kind ?? 'participante', platform: c.platform, city: c.city, bio: c.bio, projects: c.projects ?? null, photo: c.photo, instagram: c.instagram ?? null, whatsapp: c.whatsapp ?? null, verified: c.verified, participatesIn: c.participatesIn, quote: c.quote ?? null } })
   if (c.portfolio?.length) await prisma.portfolioPiece.createMany({ data: c.portfolio.map((p, i) => ({ id: p.id, profileId: c.id, image: p.image, title: p.title, caption: p.caption ?? null, price: precioValido(p.price, 'precio de la obra'), order: i })) })
+  // Alta: no hay filas previas de EventSpeaker que reemplazar, sólo crearlas si vinieron.
+  if ('speakerAppearances' in c && Array.isArray((c as { speakerAppearances?: unknown }).speakerAppearances)) {
+    const apps = (c as { speakerAppearances: { eventId: string; blockId: string | null }[] }).speakerAppearances
+    if (apps.length) await prisma.eventSpeaker.createMany({
+      data: apps.map((a, i) => ({ eventId: a.eventId, profileId: c.id, blockId: a.blockId, order: i })),
+    })
+  }
   return readCatalog(c.id)
 }
 export async function updateCatalogProfile(id: string, patch: Partial<CatalogProfile>): Promise<CatalogProfile> {
   const data: Record<string, unknown> = {}
-  for (const k of ['slug', 'name', 'role', 'kind', 'platform', 'city', 'bio', 'projects', 'photo', 'instagram', 'whatsapp', 'verified', 'participatesIn'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
+  for (const k of ['slug', 'name', 'role', 'kind', 'platform', 'city', 'bio', 'projects', 'photo', 'instagram', 'whatsapp', 'verified', 'participatesIn', 'quote'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
   await prisma.$transaction(async (tx) => {
     // Lock del padre antes de reemplazar sus hijos: dos organizadores guardando la misma
     // entidad a la vez borran y recrean las mismas filas hijas, y el segundo choca contra la
@@ -388,6 +395,16 @@ export async function updateCatalogProfile(id: string, patch: Partial<CatalogPro
           }),
         })
       }
+    }
+
+    // Reemplazo total del set de apariciones, igual criterio que portfolio: si el payload
+    // trae speakerAppearances (aunque sea []), es la verdad completa para este perfil.
+    const apps = (patch as { speakerAppearances?: { eventId: string; blockId: string | null }[] }).speakerAppearances
+    if (apps !== undefined) {
+      await tx.eventSpeaker.deleteMany({ where: { profileId: id } })
+      if (apps.length) await tx.eventSpeaker.createMany({
+        data: apps.map((a, i) => ({ eventId: a.eventId, profileId: id, blockId: a.blockId, order: i })),
+      })
     }
   })
   return readCatalog(id)

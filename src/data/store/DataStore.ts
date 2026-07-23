@@ -19,6 +19,7 @@ import type {
   Registration,
   Sponsor,
   AdSlot,
+  SpeakerAppearanceInput,
   SponsorCreative,
   MpStatus,
   TicketOrder,
@@ -55,6 +56,9 @@ export type NewGallery = Omit<Gallery, 'id' | 'slug'> & { slug?: string }
 export type NewSponsor = Omit<Sponsor, 'id'>
 /** Alta de expositor (catálogo) desde el admin (el store genera id + slug). */
 export type NewCatalogProfile = Omit<CatalogProfile, 'id' | 'slug'> & { slug?: string }
+/** Apariciones de speaker a adjuntar al crear/editar un perfil — no es parte del tipo de
+ *  dominio `CatalogProfile` (esas filas viven en `EventSpeaker`, no en la tabla del perfil). */
+export type CatalogSpeakerAppearances = { speakerAppearances?: SpeakerAppearanceInput[] }
 /** Alta de contenido (video) desde el admin (el store genera id). */
 export type NewContent = Omit<ContentItem, 'id'>
 /** Compra de espacio publicitario autogestionado (el store genera id + ts). */

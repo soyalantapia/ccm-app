@@ -196,6 +196,12 @@ export interface CatalogProfile {
   portfolio: PortfolioPiece[]
 }
 
+/** Una aparición de un speaker: en qué evento (y opcionalmente qué bloque) habla. */
+export interface SpeakerAppearanceInput {
+  eventId: string
+  blockId: string | null
+}
+
 /** Una persona del catálogo que habla en un evento, tal como la ve /speakers. */
 export interface SpeakersByEvent {
   eventId: string
