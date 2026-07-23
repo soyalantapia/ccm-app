@@ -12,7 +12,7 @@
 
 - **Rama y worktree:** `feat/speakers` en `/Users/alannaimtapia/dev/ccm-speakers`, sale de `origin/main` (`cc7bcac`). NO trabajar en `~/dev/ccm-seed` ni en otros worktrees.
 - **Tipos compartidos:** front y back comparten `src/data/types.ts`. El server lo importa como `@domain/types` (`server/tsconfig.json:12` → `../src/data/types.ts`). Cambiar el tipo `CatalogProfile` ahí afecta a los dos lados: es correcto y es un solo lugar.
-- **Migración:** nombrar con prefijo que ordene al final. El repo usa `9z…` (`9z_payment_kind_event`, `9z2_event_capacity`, `9z3_event_parent`) porque Prisma ordena las migraciones lexicográficamente y este proyecto ya se mordió con eso. Usar `9z4_event_speaker`.
+- **Migración:** nombrar con prefijo que ordene al final. El repo usa `9z…` (`9za_ticketplan_event`, `9zb_ticketplan_archived`) porque Prisma ordena las migraciones lexicográficamente y este proyecto ya se mordió con eso. Usar `9zc_event_speaker`.
 - **Base local para probar:** API `http://localhost:4030`, base `ccm_local` (sembrada). El `.env` del server ya existe con `DATABASE_URL="postgresql://alannaimtapia@localhost:5432/ccm_local"`. Prohibido tocar producción salvo GET.
 - **Typecheck:** front `npx tsc -b` desde la raíz; server `cd server && npx tsc --noEmit -p tsconfig.json`.
 - **Tests:** `cd server && npx vitest run` (server), `npx vitest run` desde la raíz (front).
@@ -24,7 +24,7 @@
 **Se modifican:**
 - `src/data/types.ts` — `CatalogProfile.kind` suma `'speaker'`; nuevo campo opcional `quote?: string`; nuevo tipo `SpeakerAppearance` y el shape de "speakers por evento".
 - `server/prisma/schema.prisma` — modelo `EventSpeaker`; campo `quote` en `CatalogProfile`; relaciones inversas en `Event`, `EventBlock`, `CatalogProfile`.
-- `server/prisma/migrations/9z4_event_speaker/migration.sql` — **crear**.
+- `server/prisma/migrations/9zc_event_speaker/migration.sql` — **crear**.
 - `server/src/lib/serialize.ts` — arreglar la ternaria de `kind` (whitelist de 3) + serializar `quote`; nuevo `toSpeakersByEvent`.
 - `server/src/services/adminService.ts` — `createCatalogProfile` y `updateCatalogProfile` aceptan `quote` y las apariciones de speaker.
 - `server/src/services/catalogService.ts` — `getSpeakersByEvent()`.
@@ -37,7 +37,7 @@
 
 **Se crean:**
 - `src/pages/Speakers.tsx` — la pestaña pública.
-- `server/prisma/migrations/9z4_event_speaker/migration.sql`.
+- `server/prisma/migrations/9zc_event_speaker/migration.sql`.
 
 ---
 
@@ -137,7 +137,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `server/prisma/schema.prisma` (model `CatalogProfile`, `Event`, `EventBlock`; nuevo model `EventSpeaker`)
-- Create: `server/prisma/migrations/9z4_event_speaker/migration.sql`
+- Create: `server/prisma/migrations/9zc_event_speaker/migration.sql`
 
 **Interfaces:**
 - Produces: modelo Prisma `EventSpeaker { eventId, profileId, blockId?, order }`; campo `CatalogProfile.quote String?`. Relaciones inversas `Event.speakers`, `EventBlock.speakerLinks`, `CatalogProfile.speakerAppearances`.
@@ -198,7 +198,7 @@ Expected: `✔ Generated Prisma Client`. Si tira error de relación, revisar que
 
 - [ ] **Step 5: Crear la migración a mano**
 
-Crear `server/prisma/migrations/9z4_event_speaker/migration.sql`:
+Crear `server/prisma/migrations/9zc_event_speaker/migration.sql`:
 
 ```sql
 -- Frase del speaker ("Corazón que inspira")
@@ -229,7 +229,7 @@ ALTER TABLE "EventSpeaker" ADD CONSTRAINT "EventSpeaker_blockId_fkey"
 - [ ] **Step 6: Aplicar la migración a la base local**
 
 Run: `cd server && npx prisma migrate deploy`
-Expected: `Applying migration 9z4_event_speaker` y `All migrations have been successfully applied.`
+Expected: `Applying migration 9zc_event_speaker` y `All migrations have been successfully applied.`
 
 - [ ] **Step 7: Verificar la tabla en la base**
 
@@ -239,7 +239,7 @@ Expected: la tabla con las 4 columnas, la PK compuesta y los 2 índices.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add server/prisma/schema.prisma server/prisma/migrations/9z4_event_speaker/
+git add server/prisma/schema.prisma server/prisma/migrations/9zc_event_speaker/
 git commit -m "feat(schema): tabla EventSpeaker + campo quote en CatalogProfile
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
