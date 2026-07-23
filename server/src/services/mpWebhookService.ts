@@ -13,12 +13,13 @@
  * líneas y se entregan de a una, marcando `PaymentItem.deliveredAt`, así una entrega parcial es
  * reanudable y el reintento no re-activa lo ya entregado.
  */
-import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import { prisma } from '../lib/prisma.js'
 import { env } from '../lib/env.js'
 import * as mpApi from '../lib/mpApi.js'
 import { getValidToken } from './mpOAuthService.js'
 import { becomeSocio } from './membershipService.js'
+import { confirmarLugar } from './eventSeats.js'
 import { cerrarPago, cerrarPagoSiSigueEn } from './mpPaymentState.js'
 import { ESTADOS_MP_CON_PLATA_VIVA } from './mpEstados.js'
 // Type-only: se borra en la compilación (verbatimModuleSyntax), así que NO crea dependencia de
@@ -184,53 +185,16 @@ async function activar(
     //    NO protege este caso porque blockId es null y en Postgres dos NULL se consideran
     //    distintos dentro de un índice único. Dos avisos = dos inscripciones = dos QR.
     //
-    // Por eso se replica el lock que ya usa register() para el camino sin bloque: se bloquea la
-    // fila del Event, se busca una inscripción previa del device y recién ahí se crea o reactiva.
+    // Entregar el lugar = confirmarLugar() (eventSeats.ts), compartido con register(). Acá el
+    // cupo SOBREVENDE y avisa: la plata ya se cobró, rechazar dejaría al comprador pago y sin
+    // lugar, y MP reintentaría para siempre contra un evento que nunca se va a vaciar. El lock,
+    // la idempotencia ante el reintento de MP y el aviso de sobreventa viven adentro.
     if (!deviceId) {
       throw new Error(`event sin deviceId para resourceId=${resourceId}: no se puede inscribir (¿Device borrado?)`)
     }
-    await tx.$queryRaw`SELECT id FROM "Event" WHERE id = ${resourceId} FOR UPDATE`
-    const previa = await tx.registration.findFirst({
-      where: { deviceId, eventId: resourceId, blockId: null },
-    })
-    if (previa?.status === 'confirmada') return // ya entregado: el reintento de MP no duplica
-
-    // Cupo: si el evento se llenó entre el checkout y el aviso, se entrega IGUAL y se avisa
-    // fuerte. Es una decisión deliberada, no un olvido. El checkout no reserva el asiento (no hay
-    // scheduler que lo libere si el comprador abandona), así que la ventana existe. Y si acá se
-    // rechazara, MP reintentaría para siempre contra un evento que nunca se va a vaciar: quedaría
-    // plata cobrada y sin lugar, que es peor que sobrevender por uno. El organizador se entera
-    // por el log y resuelve a mano — devolver o agrandar el cupo es una decisión suya.
-    const ev = await tx.event.findUnique({
-      where: { id: resourceId },
-      select: { capacity: true, seedTaken: true },
-    })
-    if (ev?.capacity != null) {
-      const confirmadas = await tx.registration.count({
-        where: { eventId: resourceId, blockId: null, status: 'confirmada' },
-      })
-      if (ev.seedTaken + confirmadas >= ev.capacity) {
-        console.error(
-          '[mpWebhookService] SOBREVENTA: entró un pago para un evento que ya está completo. Se entrega igual (la plata ya está cobrada) y hay que resolverlo a mano.',
-          { eventId: resourceId, deviceId, capacity: ev.capacity, ocupados: ev.seedTaken + confirmadas },
-        )
-      }
-    }
-    if (previa) {
-      await tx.registration.update({
-        where: { id: previa.id },
-        data: { status: 'confirmada', ts: new Date() },
-      })
-      return
-    }
-    await tx.registration.create({
-      data: {
-        id: `reg_${randomUUID()}`,
-        deviceId,
-        eventId: resourceId,
-        blockId: null,
-        status: 'confirmada',
-      },
+    await confirmarLugar(tx, deviceId, resourceId, {
+      alLlenar: 'sobrevender',
+      motivoLog: { origen: 'mp.webhook' },
     })
     return
   }

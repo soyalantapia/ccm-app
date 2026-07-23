@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { prisma } from '../lib/prisma.js'
 import { toRegistration } from '../lib/serialize.js'
 import { conflict, forbidden, notFound } from '../lib/errors.js'
+import { ocupacionDeEvento } from './eventSeats.js'
 import type { Registration } from '@domain/types'
 
 const regId = () => `reg_${randomUUID()}`
@@ -102,25 +103,20 @@ export async function register(
       })
     }
 
-    // Inscripción a nivel evento (sin bloque, sin cupo). Lock de la fila del Event para
-    // serializar dos POST concurrentes del mismo device: el @@unique(deviceId,eventId,blockId)
-    // NO protege acá porque en Postgres dos NULL son distintos en un índice único → sin lock,
-    // dos requests en carrera crean DOS inscripciones (y dos QR) para el mismo evento.
+    // Inscripción a nivel evento (sin bloque). El lock, el cupo y el buscar-reactivar-o-crear
+    // viven en confirmarLugar() (eventSeats.ts), compartido con el webhook de MP. Acá el cupo
+    // REBOTA con EVENT_FULL: es gratis, el lugar simplemente no está.
+    // Diferencia con confirmarLugar: register() distingue "ya inscripto" (ALREADY_REGISTERED, un
+    // 409 informativo hacia el usuario) de reactivar una cancelada. confirmarLugar trata la fila
+    // confirmada como idempotente (no re-crea) porque a un reintento de MP no hay que gritarle.
     await tx.$queryRaw`SELECT id FROM "Event" WHERE id = ${eventId} FOR UPDATE`
     const existing = await tx.registration.findFirst({ where: { deviceId, eventId, blockId: null } })
     if (existing?.status === 'confirmada') {
       throw conflict('ALREADY_REGISTERED', 'Ya estás inscripto a este evento')
     }
 
-    // Cupo del evento. El lock de arriba ya existía pero no se comparaba contra nada: el
-    // comentario original decía "sin bloque, sin cupo". Mientras todo era gratis no dolía; con
-    // un evento que se cobra, sobrevender obliga a devolver plata. Sólo aplica si el organizador
-    // cargó un tope: capacity null = como siempre, sin límite.
-    // Reactivar una inscripción cancelada también consume lugar, por eso el chequeo va antes.
     if (event.capacity != null) {
-      const confirmadas = await tx.registration.count({
-        where: { eventId, blockId: null, status: 'confirmada' },
-      })
+      const confirmadas = await ocupacionDeEvento(tx, eventId)
       if (event.seedTaken + confirmadas >= event.capacity) {
         throw conflict('EVENT_FULL', 'Este evento está completo')
       }
