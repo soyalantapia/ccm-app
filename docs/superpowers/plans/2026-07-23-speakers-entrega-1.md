@@ -797,14 +797,27 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 **Files:**
 - Create: `src/pages/Speakers.tsx`
 - Modify: `src/App.tsx` (ruta)
-- Modify: `src/components/layout/SiteLayout.tsx` (ítem de nav — confirmar el archivo real del nav público con `grep -rl "to=\"/catalogo\"" src/components src/features`)
+- Modify: `src/components/layout/SiteLayout.tsx` (ítem de nav público — confirmado)
 - Modify: `src/pages/Catalogo.tsx` (excluir `kind === 'speaker'`)
+- Modify: `src/features/catalogo/ParticipanteCard.tsx` (mostrar la frase cuando exista)
 - Test: `src/pages/Speakers.test.tsx` (crear)
 
 **Interfaces:**
-- Consumes: `store.getSpeakersByEvent()` (Task 5), las tarjetas del catálogo existentes.
+- Consumes: `store.getSpeakersByEvent()` (Task 5), `ParticipanteCard` (recibe `profile: CatalogProfile`).
 
-- [ ] **Step 1: Excluir speakers del catálogo de participantes**
+- [ ] **Step 1: Que ParticipanteCard muestre la frase cuando exista**
+
+`ParticipanteCard` hoy muestra `role · platform`, nombre y `bio` (`ParticipanteCard.tsx:32-36`), pero no la frase — que es lo que Mica quiere destacar de un speaker. Es aditivo: los participantes no tienen `quote`, así que no cambia nada para ellos. Después de la línea de la `bio` (`:36`), agregar:
+
+```tsx
+        {profile.quote && (
+          <p className="mt-2 text-[11px] italic leading-snug text-accent-strong lg:text-[13px]">
+            "{profile.quote}"
+          </p>
+        )}
+```
+
+- [ ] **Step 2: Excluir speakers del catálogo de participantes**
 
 En `src/pages/Catalogo.tsx:62`, cambiar la fuente:
 
@@ -814,7 +827,7 @@ En `src/pages/Catalogo.tsx:62`, cambiar la fuente:
 
 > Un expositor que además es speaker tiene `kind: 'expositor'` → sigue apareciendo. Sólo se van los speakers puros. Correcto.
 
-- [ ] **Step 2: Write the failing test**
+- [ ] **Step 3: Write the failing test**
 
 Crear `src/pages/Speakers.test.tsx` (patrón de test de página con render + store mockeado; mirar cómo lo hace `AdminConvocatorias.test.tsx` para el mock del store):
 
@@ -847,14 +860,14 @@ describe('Speakers', () => {
 })
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [ ] **Step 4: Run test to verify it fails**
 
 Run: `npx vitest run src/pages/Speakers.test.tsx`
 Expected: FAIL — no existe `./Speakers`.
 
-- [ ] **Step 4: Crear la página**
+- [ ] **Step 5: Crear la página**
 
-Crear `src/pages/Speakers.tsx`. Reusar la tarjeta del catálogo (importar `ParticipanteCard` o el componente que use `Catalogo.tsx`; confirmarlo abriendo el archivo). Estructura: título editorial "Corazones que inspiran", y por cada grupo de `getSpeakersByEvent()` una sección con el título del evento y la grilla de tarjetas.
+Crear `src/pages/Speakers.tsx`. Reusar `ParticipanteCard` (confirmado: `Catalogo.tsx:6` la importa de `'../features/catalogo/ParticipanteCard'` y la usa como `<ParticipanteCard profile={p} />`, `Catalogo.tsx:145`). Estructura: título editorial "Corazones que inspiran", y por cada grupo de `getSpeakersByEvent()` una sección con el título del evento y la grilla de tarjetas.
 
 ```tsx
 import { useStore } from '../data/store'
@@ -875,12 +888,7 @@ export default function Speakers() {
           <h2 className="mb-4 text-[13px] font-semibold uppercase tracking-wider text-accent-strong">{g.eventTitle}</h2>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-5">
             {g.speakers.map((p) => (
-              /* <ParticipanteCard profile={p} /> — usar la card real del catálogo */
-              <article key={p.id} className="rounded-sm border border-line p-3">
-                <img src={p.photo} alt={p.name} className="aspect-square w-full rounded-sm object-cover" />
-                <h3 className="mt-2 text-[15px] font-medium text-ink">{p.name}</h3>
-                {p.quote && <p className="mt-1 text-[13px] italic text-ink-soft">"{p.quote}"</p>}
-              </article>
+              <ParticipanteCard key={p.id} profile={p} />
             ))}
           </div>
         </div>
@@ -892,12 +900,12 @@ export default function Speakers() {
 
 > El bloque `<article>` inline es un fallback. Preferir la card real del catálogo si su interfaz lo permite (recibe un `CatalogProfile`). Abrir `Catalogo.tsx` para copiar el uso exacto.
 
-- [ ] **Step 5: Run test to verify it passes**
+- [ ] **Step 6: Run test to verify it passes**
 
 Run: `npx vitest run src/pages/Speakers.test.tsx`
 Expected: PASS.
 
-- [ ] **Step 6: Agregar la ruta**
+- [ ] **Step 7: Agregar la ruta**
 
 En `src/App.tsx`, junto a `{ path: '/catalogo', element: <S><Catalogo /></S> }`, importar `Speakers` (lazy, siguiendo el patrón de las otras páginas) y agregar:
 
@@ -905,18 +913,18 @@ En `src/App.tsx`, junto a `{ path: '/catalogo', element: <S><Catalogo /></S> }`,
             { path: '/speakers', element: <S><Speakers /></S> },
 ```
 
-- [ ] **Step 7: Agregar el ítem al nav público**
+- [ ] **Step 8: Agregar el ítem al nav público**
 
 Confirmar el archivo del nav: `grep -rln "/catalogo" src/components src/features src/pages`. En el nav público (donde estén "Participantes", "Eventos", etc.), agregar el ítem `Speakers → /speakers`. Respetar el patrón de nav de celular vs escritorio del sitio (dual toggle si hace falta).
 
-- [ ] **Step 8: Typecheck + suite completa + prueba en vivo**
+- [ ] **Step 9: Typecheck + suite completa + prueba en vivo**
 
 Run: `npx tsc -b && npx vitest run`
 Expected: limpio, todo verde.
 
 En vivo (front `:5195`): abrir `/speakers` → ver a Carolina bajo "Masterclass…". Abrir `/catalogo` → confirmar que Carolina NO aparece ahí.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add src/pages/Speakers.tsx src/pages/Speakers.test.tsx src/App.tsx src/pages/Catalogo.tsx src/components/layout/SiteLayout.tsx
@@ -967,4 +975,5 @@ gh pr create --base main --head feat/speakers --title "feat: sección de Speaker
 - **Cobertura de la spec:** los 6 puntos de la Entrega 1 de la spec tienen tarea — serializer (T1), migración+quote+tabla (T2), backend read (T3), backend write (T4), store (T5), panel (T6), pestaña+filtro (T7). ✔
 - **Placeholders:** cada step de código trae el código. Los dos "opcionales" (segundo nivel de bloque en T6, card real en T7) están marcados como decisiones explícitas con su fallback, no como huecos. ✔
 - **Consistencia de tipos:** `SpeakersByEvent`, `SpeakerAppearanceInput`, `getSpeakersByEvent`, `speakerAppearances` se usan con el mismo nombre y forma en T3→T4→T5→T6→T7. ✔
-- **Riesgo abierto:** el nombre exacto del componente de card del catálogo y del archivo del nav público se confirman al abrir los archivos (T7 Step 4 y 7 lo indican). No bloquea el plan.
+- **Datos confirmados:** la card es `ParticipanteCard` (`profile: CatalogProfile`), el nav público es `SiteLayout.tsx`, y `Event.title`/`startDate`/`published` existen — todos verificados contra `origin/main` durante la escritura del plan.
+- **Corrección de la self-review:** `ParticipanteCard` no mostraba `quote`; se agregó un step (T7 Step 1) para que lo muestre, aditivo y sin afectar a los participantes. Sin eso, el test de T7 habría fallado y la frase de Mica no se vería.
