@@ -1,17 +1,15 @@
-import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { CalendarDays, Heart, Home, Menu, Play, QrCode, Store, Ticket, X } from 'lucide-react'
+import { CalendarDays, Heart, Home, Play, QrCode, Store } from 'lucide-react'
 import { Button } from '../ui'
 import { registerFree } from '../../lib/actions'
 import { useStore } from '../../data/store'
 import { IDS } from '../../data/ids'
 import { config } from '../../config'
-import { bloquearScroll } from '../../lib/useFocusTrap'
 
 // Foco (tesis Gastón: simple, de nicho): la app SON las 5 pestañas. PRIMARY =
 // las que compiten por atención (top-nav en desktop; bottom-nav en mobile). El
-// resto no infla el nav: las secundarias viven en el drawer, y el B2B (sponsors/
-// publicidad/stand) en el footer.
+// resto no infla el nav: las secundarias viven en el footer y en el hub Mi QR,
+// y el B2B (sponsors/publicidad/stand) en el footer.
 const PRIMARY = [
   { to: '/app', label: 'Noticias' },
   { to: '/eventos', label: 'Eventos' },
@@ -19,16 +17,9 @@ const PRIMARY = [
   { to: '/contenido', label: 'Elukamo' },
 ]
 
-const SECONDARY = [
-  { to: '/entradas', label: 'Entradas' },
-  { to: '/membresia', label: 'Membresías' },
-  { to: '/beneficios', label: 'Beneficios' },
-  { to: '/fotos', label: 'Fotos' },
-]
-
 // Nav superior de desktop: las 4 pestañas core + Fotos y Entradas. En pantalla
 // grande hay lugar de sobra y una barra más completa se lee más "web" y menos
-// vacía (en mobile sigue mandando el bottom-nav + el drawer).
+// vacía (en mobile sigue mandando el bottom-nav).
 const TOPNAV = [
   { to: '/', label: 'Inicio' },
   ...PRIMARY,
@@ -36,19 +27,8 @@ const TOPNAV = [
   { to: '/entradas', label: 'Entradas' },
 ]
 
-// Menú completo del drawer: inicio + 5 pestañas + secundarias (sin duplicar B2B/legal).
-const DRAWER = [
-  { to: '/', label: 'Inicio' },
-  { to: '/app', label: 'Noticias' },
-  { to: '/eventos', label: 'Eventos' },
-  { to: '/mi-qr', label: 'Mi QR' },
-  { to: '/catalogo', label: 'Participantes' },
-  { to: '/contenido', label: 'Elukamo' },
-  ...SECONDARY,
-]
-
 // Bottom-nav mobile de 5 slots (mockups): Noticias · Eventos · Mi QR (centro
-// elevado) · Participantes · Elukamo. Perfil y demás secundarias → drawer (SECONDARY).
+// elevado) · Participantes · Elukamo. Perfil y demás secundarias → hub Mi QR.
 const BOTTOM_NAV = [
   { to: '/app', label: 'Noticias', icon: Home },
   { to: '/eventos', label: 'Eventos', icon: CalendarDays },
@@ -83,20 +63,10 @@ function Wordmark({ tone = 'ink' }: { tone?: 'ink' | 'night' }) {
 
 function Header() {
   const navigate = useNavigate()
-  const [menuOpen, setMenuOpen] = useState(false)
   const registered = useStore((s) => s.isRegistered(IDS.events.principal))
-  const location = useLocation()
-
-  useEffect(() => setMenuOpen(false), [location.pathname])
-
-  useEffect(() => {
-    if (!menuOpen) return
-    return bloquearScroll() // conteo compartido: un diálogo encima no desbloquea a este
-  }, [menuOpen])
 
   return (
-    <>
-      <header className="sticky top-0 z-40 border-b border-line bg-bg/90 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-line bg-bg/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5 lg:h-[72px] lg:px-8">
           <div className="lg:flex-1">
             <Wordmark />
@@ -128,58 +98,9 @@ function Header() {
                 {registered ? 'Mi QR' : 'Registrate'}
               </Button>
             </span>
-            {/* Menú solo en desktop: en el celular la app entera vive en los
-                5 tabs (el hub Mi QR absorbe Fotos, Perfil, Membresía y Beneficios). */}
-            <button
-              onClick={() => setMenuOpen(true)}
-              aria-label="Abrir menú"
-              className="hidden rounded-sm p-2 text-ink transition-colors hover:bg-ink/5 lg:block"
-            >
-              <Menu size={20} strokeWidth={1.75} />
-            </button>
           </div>
         </div>
       </header>
-
-      {menuOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-night text-night-ink animate-fade">
-          <div className="flex h-16 items-center justify-between px-5">
-            <Wordmark tone="night" />
-            <button
-              onClick={() => setMenuOpen(false)}
-              aria-label="Cerrar menú"
-              className="rounded-sm p-2 text-night-ink transition-colors hover:bg-night-ink/10"
-            >
-              <X size={22} strokeWidth={1.5} />
-            </button>
-          </div>
-          <nav className="flex flex-1 flex-col justify-center gap-1 px-8">
-            {DRAWER.map((item, i) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === '/'}
-                className="group flex items-baseline gap-4 py-2.5"
-                style={{ animationDelay: `${i * 40}ms` }}
-              >
-                <span className="eyebrow w-7 text-[10px] text-accent">{String(i + 1).padStart(2, '0')}</span>
-                <span className="type-display text-4xl text-night-ink transition-colors group-hover:text-accent">
-                  {item.label}
-                </span>
-              </NavLink>
-            ))}
-          </nav>
-          <div className="px-8 pb-[calc(2.5rem+env(safe-area-inset-bottom))]">
-            <Button size="lg" className="w-full" onClick={() => { setMenuOpen(false); void registerFree(navigate) }}>
-              <Ticket size={15} /> {registered ? 'Ver mi QR' : 'Registrate gratis'}
-            </Button>
-            <p className="eyebrow mt-6 text-center text-[9px] text-night-ink/40">
-              {config.mainDatesLabel} · {config.venue.name}
-            </p>
-          </div>
-        </div>
-      )}
-    </>
   )
 }
 
