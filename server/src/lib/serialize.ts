@@ -149,7 +149,9 @@ export function toCatalogProfile(
     slug: c.slug,
     name: c.name,
     role: c.role,
-    kind: c.kind === 'expositor' ? 'expositor' : 'participante',
+    // Whitelist de 3. La ternaria vieja (=== 'expositor' ? … : 'participante') colapsaba
+    // 'speaker' a 'participante' en silencio y rompía la sección entera.
+    kind: c.kind === 'expositor' || c.kind === 'speaker' ? c.kind : 'participante',
     platform: c.platform,
     city: c.city,
     bio: c.bio,
