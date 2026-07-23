@@ -258,6 +258,7 @@ model Event {
   plans         TicketPlan[]
   registrations Registration[]
   sponsors      EventSponsor[]
+  speakers      EventSpeaker[]
   convocatorias Convocatoria[]
 
   createdAt DateTime @default(now())
@@ -297,6 +298,7 @@ model EventBlock {
 
   event         Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
   registrations Registration[]
+  speakerLinks  EventSpeaker[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -406,7 +408,7 @@ model CatalogProfile {
   slug           String   @unique
   name           String
   role           String
-  kind           String   @default("participante") // participante | expositor (feedback Gastón: distinto cupo de imágenes + "cuenta proyectos")
+  kind           String   @default("participante") // participante | expositor | speaker (feedback Gastón: distinto cupo de imágenes + "cuenta proyectos")
   platform       String
   city           String
   bio            String   @db.Text
@@ -416,8 +418,10 @@ model CatalogProfile {
   whatsapp       String? // contacto directo (wa.me/… o número) — "si quiere se contacta" (Gastón)
   verified       Boolean  @default(false)
   participatesIn String[]
+  quote          String?  @db.Text // "Corazón que inspira": frase propia del speaker
 
-  portfolio PortfolioPiece[]
+  portfolio          PortfolioPiece[]
+  speakerAppearances EventSpeaker[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -929,4 +933,28 @@ model MpConnection {
   scope        String?
   connectedAt  DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model EventSpeaker {
+  // Nota de implementación (Task 2): el brief pedía `@@id([eventId, profileId, blockId])`,
+  // pero Prisma rechaza un id compuesto sobre un campo opcional (blockId), y aunque se
+  // bypaseara esa validación, Postgres fuerza NOT NULL en toda columna que integre una
+  // PRIMARY KEY — con lo cual "blockId null" (evento sin grilla) habría quedado imposible
+  // pese a que el propio comentario original de este modelo pedía justo lo contrario.
+  // Se resuelve con un id sintético como PK real + @@unique en la tupla, que sí preserva
+  // la semántica que el brief describía ("dos NULL son distintos" es comportamiento de
+  // UNIQUE, no de PRIMARY KEY en Postgres).
+  id        String   @id @default(cuid())
+  eventId   String
+  profileId String
+  blockId   String?  // presente si el evento tiene grilla; null si el evento ES la actividad
+  order     Int      @default(0)
+
+  event   Event          @relation(fields: [eventId],   references: [id], onDelete: Cascade)
+  profile CatalogProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  block   EventBlock?    @relation(fields: [blockId],   references: [id], onDelete: Cascade)
+
+  @@unique([eventId, profileId, blockId])
+  @@index([eventId])
+  @@index([profileId])
 }
