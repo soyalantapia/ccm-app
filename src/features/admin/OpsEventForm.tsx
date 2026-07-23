@@ -188,6 +188,12 @@ export function OpsEventForm({ open, event, parentId, onClose }: Props) {
       // Explícito como los booleanos: borrar el precio tiene que llegar como null, no
       // desaparecer del patch y quedar congelado en el valor anterior.
       price,
+      // Ídem cupo. Estos DOS faltaban acá: los campos se renderizaban, se guardaban en el
+      // estado y se prellenaban al editar, pero nunca entraban al payload — así que el
+      // organizador cargaba "50 lugares", veía el toast de guardado, y el número se tiraba
+      // en silencio. El backend siempre los aceptó (adminService: create y update).
+      capacity: f.capacity.trim() === '' ? null : Number(f.capacity),
+      seedTaken: f.seedTaken.trim() === '' ? 0 : Number(f.seedTaken),
       // Booleanos SIEMPRE explícitos (no `|| undefined`): destildar un flag tiene que llegar
       // al backend como false, no desaparecer del patch.
       past: f.past,

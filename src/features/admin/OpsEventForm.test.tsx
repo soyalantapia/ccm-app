@@ -225,3 +225,53 @@ describe('borrador y publicar', () => {
     expect(screen.getByText(/no lo ve|sólo para el equipo|Publicar lo pone a la vista/i)).toBeTruthy()
   })
 })
+
+/**
+ * Los campos que se ven pero no se guardan son la peor clase de bug de este panel: el toast dice
+ * "guardado", nada falla, y el dato se tira. Ya pasó con el texto de la fecha (ver arriba) y
+ * volvió a pasar con el cupo: `capacity` y `seedTaken` se renderizaban, se guardaban en el estado
+ * y se prellenaban al editar, pero no entraban al objeto que se manda al backend.
+ *
+ * Por eso estos tests miran EXCLUSIVAMENTE lo que sale por `guardar()`, nunca lo que muestra la
+ * pantalla. Si alguien vuelve a tocar el payload, esto se cae.
+ */
+describe('el cupo del evento se GUARDA, no sólo se muestra', () => {
+  const porCupo = () => porPlaceholder('30')
+  const porPrevios = () => porPlaceholder('0')
+
+  it('manda capacity y seedTaken al backend', async () => {
+    montar()
+    fireEvent.change(fecha(), { target: { value: '2026-08-21' } })
+    fireEvent.change(porCupo(), { target: { value: '50' } })
+    fireEvent.change(porPrevios(), { target: { value: '4' } })
+    expect(await guardar()).toMatchObject({ capacity: 50, seedTaken: 4 })
+  })
+
+  it('cupo vacío = sin tope: viaja como null, no se omite', async () => {
+    // Omitirlo dejaría el valor anterior congelado en la base: vaciar el campo no borraría nada.
+    montar()
+    fireEvent.change(fecha(), { target: { value: '2026-08-21' } })
+    const guardado = await guardar()
+    expect(guardado).toHaveProperty('capacity', null)
+    expect(guardado).toMatchObject({ seedTaken: 0 })
+  })
+
+  it('al editar un evento con cupo, lo conserva si no se lo toca', async () => {
+    montar({
+      id: 'ev_1',
+      slug: 'taller',
+      type: 'capacitacion',
+      title: 'Taller',
+      dateLabel: 'Viernes 21 de agosto',
+      startDate: '2026-08-21',
+      venue: 'Hotel',
+      address: 'Calle 1',
+      mapsUrl: 'https://maps.example',
+      description: 'x',
+      cover: 'img/x.jpg',
+      capacity: 30,
+      seedTaken: 4,
+    } as EventItem)
+    expect(await guardar()).toMatchObject({ capacity: 30, seedTaken: 4 })
+  })
+})
