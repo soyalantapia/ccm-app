@@ -20,6 +20,7 @@ export type Permission =
   | 'sponsors:write'
   | 'analytics:read'
   | 'orders:read'
+  | 'grants:write'
   | 'team:manage'
   | 'upload'
 
