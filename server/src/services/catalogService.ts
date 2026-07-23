@@ -1,7 +1,7 @@
 import { prisma } from '../lib/prisma.js'
 import { toCatalogProfile, toGallery, toContentItem, toSponsor, toConvocatoria, gateSocioContents } from '../lib/serialize.js'
 import { notFound } from '../lib/errors.js'
-import type { CatalogProfile, Gallery, ContentItem, Sponsor, TicketPlan, Convocatoria } from '@domain/types'
+import type { CatalogProfile, Gallery, ContentItem, Sponsor, TicketPlan, Convocatoria, SpeakersByEvent } from '@domain/types'
 
 /* ─── Catálogo de expositores ─── */
 export async function getCatalog(): Promise<CatalogProfile[]> {
@@ -19,6 +19,35 @@ export async function getCatalogProfile(slug: string): Promise<CatalogProfile> {
   })
   if (!row) throw notFound('CATALOG_NOT_FOUND', 'Perfil no encontrado')
   return toCatalogProfile(row)
+}
+
+/**
+ * Speakers agrupados por evento, para la pestaña pública /speakers.
+ * Un speaker es cualquier CatalogProfile con ≥1 fila EventSpeaker. Sólo eventos publicados.
+ * Orden: eventos por fecha descendente (la edición vigente arriba); speakers por su `order`.
+ */
+export async function getSpeakersByEvent(): Promise<SpeakersByEvent[]> {
+  const rows = await prisma.event.findMany({
+    where: { published: true, speakers: { some: {} } },
+    orderBy: { startDate: 'desc' },
+    include: {
+      speakers: {
+        orderBy: { order: 'asc' },
+        include: { profile: { include: { portfolio: { orderBy: { order: 'asc' } } } } },
+      },
+    },
+  })
+  // Un perfil puede tener varias filas en el mismo evento (uno por bloque): se deduplica por id.
+  return rows
+    .map((ev) => {
+      const vistos = new Set<string>()
+      const speakers = ev.speakers
+        .map((s) => s.profile)
+        .filter((p) => (vistos.has(p.id) ? false : (vistos.add(p.id), true)))
+        .map(toCatalogProfile)
+      return { eventId: ev.id, eventTitle: ev.title, eventDate: String(ev.startDate), speakers }
+    })
+    .filter((ev) => ev.speakers.length > 0)
 }
 
 /* ─── Galerías de fotos ─── */

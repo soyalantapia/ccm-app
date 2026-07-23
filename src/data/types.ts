@@ -191,7 +191,17 @@ export interface CatalogProfile {
   whatsapp?: string
   verified: boolean
   participatesIn: string[]
+  /** "Corazón que inspira": frase propia del speaker. */
+  quote?: string
   portfolio: PortfolioPiece[]
+}
+
+/** Una persona del catálogo que habla en un evento, tal como la ve /speakers. */
+export interface SpeakersByEvent {
+  eventId: string
+  eventTitle: string
+  eventDate: string // startDate ISO, para ordenar
+  speakers: CatalogProfile[]
 }
 
 /* ─── Fotos ─── */

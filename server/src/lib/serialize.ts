@@ -161,6 +161,7 @@ export function toCatalogProfile(
     ...(c.whatsapp ? { whatsapp: c.whatsapp } : {}),
     verified: c.verified,
     participatesIn: c.participatesIn,
+    ...(c.quote ? { quote: c.quote } : {}),
     portfolio: (c.portfolio ?? []).map((p) => ({
       id: p.id,
       image: p.image,

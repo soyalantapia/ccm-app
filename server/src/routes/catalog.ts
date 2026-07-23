@@ -23,6 +23,15 @@ catalogRouter.get('/catalog/:slug', async (req, res, next) => {
   }
 })
 
+/** GET /api/v1/speakers — speakers agrupados por evento. Público. */
+catalogRouter.get('/speakers', async (_req, res, next) => {
+  try {
+    res.json(await catalogService.getSpeakersByEvent())
+  } catch (err) {
+    next(err)
+  }
+})
+
 /** GET /api/v1/galleries — galerías (con fotos). Público. */
 catalogRouter.get('/galleries', async (_req, res, next) => {
   try {
