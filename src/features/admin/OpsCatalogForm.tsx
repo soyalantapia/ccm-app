@@ -47,6 +47,17 @@ type Kind = 'participante' | 'expositor' | 'speaker'
 /** Cupo de imágenes de portfolio por tipo (feedback Gastón: participante 4, expositor 2). */
 const IMG_CAP: Record<Kind, number> = { participante: 4, expositor: 2, speaker: 4 }
 
+/**
+ * Quién puede cargar en qué eventos habla: un speaker puro y un expositor que además da una
+ * charla (caso explícito de la reunión con Mica). Un participante no da charlas.
+ * Gobierna dos cosas a la vez, y por eso es un solo predicado: (1) si se muestra el bloque
+ * "¿En qué eventos habla?", (2) si el submit manda las apariciones o manda `[]`. Mandar SIEMPRE
+ * la clave `speakerAppearances` (con `[]` cuando no es orador) es lo que hace que reclasificar
+ * un speaker/expositor a participante borre sus filas EventSpeaker; si la omitiéramos, el
+ * backend lo leería como "no tocar" y quedarían huérfanas saliendo en /speakers.
+ */
+export const esOrador = (kind: Kind): boolean => kind === 'speaker' || kind === 'expositor'
+
 type Form = {
   name: string
   role: string
@@ -199,9 +210,9 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
       participatesIn,
       portfolio,
       quote: f.quote.trim() || undefined,
-      // Un speaker puro y un expositor-que-además-da-charla cargan apariciones; un
-      // participante no. deriveApps() reconstruye f.apps para los dos casos por igual.
-      ...(f.kind === 'speaker' || f.kind === 'expositor' ? { speakerAppearances: f.apps } : {}),
+      // Verdad completa del set de apariciones (ver esOrador): las suyas si es orador, `[]` si
+      // no. deriveApps() reconstruye f.apps por igual para speaker y expositor al editar.
+      speakerAppearances: esOrador(f.kind) ? f.apps : [],
     }
     if (profile) {
       store.updateCatalogProfile(profile.id, data)
@@ -279,7 +290,7 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
           </Field>
         )}
 
-        {(f.kind === 'speaker' || f.kind === 'expositor') && (
+        {esOrador(f.kind) && (
           <fieldset className="rounded-sm border border-line p-3">
             <legend className="px-1 text-[13px] font-medium text-ink-soft">¿En qué eventos habla?</legend>
             {eventos.map((ev) => {
