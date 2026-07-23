@@ -16,6 +16,7 @@ const PRIMARY = [
   { to: '/app', label: 'Noticias' },
   { to: '/eventos', label: 'Eventos' },
   { to: '/catalogo', label: 'Participantes' },
+  { to: '/speakers', label: 'Speakers' },
   { to: '/contenido', label: 'Elukamo' },
 ]
 
@@ -43,6 +44,7 @@ const DRAWER = [
   { to: '/eventos', label: 'Eventos' },
   { to: '/mi-qr', label: 'Mi QR' },
   { to: '/catalogo', label: 'Participantes' },
+  { to: '/speakers', label: 'Speakers' },
   { to: '/contenido', label: 'Elukamo' },
   ...SECONDARY,
 ]

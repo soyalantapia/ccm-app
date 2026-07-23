@@ -59,7 +59,7 @@ function Chip({ active, onClick, icon: Icon, children }: { active: boolean; onCl
  *  - "Todas": banner global → secciones por plataforma (participante-cards).
  *  - Plataforma seleccionada: catálogo por plataforma (designer-grid) + "Sponsors de la Plataforma". */
 export default function Catalogo() {
-  const catalog = useStore((s) => s.getCatalog())
+  const catalog = useStore((s) => s.getCatalog().filter((p) => p.kind !== 'speaker'))
   const sponsors = useStore((s) => s.getSponsors())
   const [platform, setPlatform] = useState<string | null>(null)
 
