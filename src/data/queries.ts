@@ -137,3 +137,44 @@ export function usePerson(id: string | null) {
     enabled: id !== null,
   })
 }
+
+/* ─── Entradas regaladas (cortesías) — lado del organizador ─── */
+
+export interface GrantFicha {
+  id: string
+  eventId: string
+  eventTitle: string
+  qty: number
+  status: 'pendiente' | 'reclamado' | 'revocado'
+  createdAt: string
+  /** null cuando está revocada: el link ya no sirve, no se muestra. */
+  link: string | null
+}
+
+/** Resultado del envío del mail. `enviado:false` es honesto: el grant SÍ se creó, pero el mail no
+ *  salió (la persona no tiene email, o el mailer no confirmó). El link queda igual en la ficha. */
+export interface GrantEnvio { enviado: boolean; motivo?: string; detalle?: string }
+
+/** Las cortesías de una persona, para pintarlas en su ficha. */
+export function usePersonGrants(personId: string | null) {
+  return useQuery<GrantFicha[]>({
+    queryKey: ['grants', personId],
+    queryFn: () => api.get<GrantFicha[]>(`/admin/people/${personId}/grants`),
+    enabled: personId !== null,
+  })
+}
+
+/** Regala N entradas de un evento a una persona. Devuelve el link y el resultado del envío del mail. */
+export function regalarEntradas(input: { personId: string; eventId: string; qty: number; note?: string }) {
+  return api.post<GrantFicha & { envio: GrantEnvio }>('/admin/grants', input)
+}
+
+/** Reenvía el mail de una cortesía (mismo link). */
+export function reenviarRegalo(grantId: string) {
+  return api.post<GrantEnvio>(`/admin/grants/${grantId}/resend`, {})
+}
+
+/** Revoca una cortesía (si estaba reclamada, cancela también la inscripción que creó). */
+export function revocarRegalo(grantId: string) {
+  return api.del(`/admin/grants/${grantId}`)
+}
