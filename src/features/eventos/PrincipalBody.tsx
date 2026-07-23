@@ -4,9 +4,16 @@ import { store, useStore } from '../../data/store'
 import type { EventBlock, EventItem } from '../../data/types'
 import { TicketSelector } from '../tickets/TicketSelector'
 import { formatMoney } from '../tickets/format'
-import { vipDesde } from '../tickets/vipDesde'
 import { BlockRow } from './BlockRow'
 import { blockSortKey, dayLabel } from './eventMeta'
+
+/** Etiqueta del día de un tipo de entrada VIP. `dayLabel` NO sirve acá: mapea fechas de bloques
+ *  ('18/06'→…), no el enum PlanDay, así que 'combo' caía al fallback "Día combo". */
+const PLAN_DAY_LABEL: Record<string, string> = {
+  sabado: 'Sábado',
+  domingo: 'Domingo',
+  combo: 'Sábado + Domingo',
+}
 
 /** Contenido real de la página oficial del evento (Tikealo, 06/2026). */
 const VIVIR = [
@@ -27,19 +34,18 @@ const POR_QUE = [
   'Ser parte de un evento con impacto cultural, turístico y económico',
 ]
 
-const EXPERIENCIAS = [
-  { name: 'Night VIP', show: 'Desfile de las Estrellas', when: 'Sábado 19 · 19 a 21 hs' },
-  { name: 'Sunset VIP', show: 'Desfile Internacional', when: 'Domingo 20 · 18 a 20 hs' },
-]
-
 /**
  * Cuerpo de la ficha del evento principal: la compra vive ADENTRO del evento
  * (selector arriba de todo), seguida de la información real de la expo,
  * la agenda por bloques y el director general.
  */
 export function PrincipalBody({ event }: { event: EventItem }) {
-  // El más barato de los VIP, no el primero de la lista (ver features/tickets/vipDesde).
-  const vipFrom = useStore((s) => vipDesde(s.getPlans(event.id)))
+  // Las "experiencias especiales" son los tipos de entrada VIP de ESTE evento, no una lista fija.
+  // Antes eran un array hardcodeado (Night VIP / Sunset VIP) con sólo el precio en vivo: si el
+  // organizador renombraba, agregaba o retiraba un VIP en el panel, este bloque no se enteraba —y
+  // desde que se puede retirar una entrada de la venta, mostraba una que ya no existe. getPlans
+  // acota al evento y excluye las retiradas, así que esto refleja exactamente lo que hay a la venta.
+  const vipExperiencias = useStore((s) => s.getPlans(event.id).filter((p) => p.kind === 'vip'))
 
   const sortedBlocks = [...store.getBlocks(event.id)].sort((a, b) =>
     blockSortKey(a).localeCompare(blockSortKey(b)),
@@ -98,45 +104,51 @@ export function PrincipalBody({ event }: { event: EventItem }) {
         </div>
       </section>
 
-      {/* ─── Experiencias especiales (acceso independiente) ─── */}
-      <section className="bg-night text-night-ink">
-        <div className="mx-auto max-w-6xl px-5 py-12 md:py-16">
-          <SectionTitle
-            tone="night"
-            eyebrow="Experiencias especiales"
-            title={
-              <>
-                Con acceso <em className="text-accent">independiente</em>
-              </>
-            }
-            lead="Desfiles exclusivos, música en vivo, shows y experiencias premium dentro del evento."
-          />
-          {/* <a> nativo al hash: React Router no scrollea a #entradas por defecto — el CTA quedaba muerto */}
-          <div className="mt-8 grid gap-4 md:mt-10 md:grid-cols-2">
-            {EXPERIENCIAS.map((x) => (
-              <a
-                key={x.name}
-                href="#entradas"
-                className="group flex items-center justify-between gap-4 rounded-md border border-night-soft bg-night-soft/40 p-5 transition-colors hover:border-accent/60"
-              >
-                <div>
-                  <div className="eyebrow text-[9px] text-accent">{x.when}</div>
-                  <div className="type-display mt-1.5 text-2xl md:text-3xl">{x.name}</div>
-                  <div className="type-serif mt-0.5 text-base text-night-ink/75">{x.show}</div>
-                </div>
-                <div className="shrink-0 text-right">
-                  {vipFrom !== null && (
-                    <div className="type-serif text-lg">{formatMoney(vipFrom)}</div>
-                  )}
-                  <div className="eyebrow mt-1 text-[9px] text-night-ink/50 transition-colors group-hover:text-accent">
-                    Comprar ↑
+      {/* ─── Experiencias especiales (acceso independiente) = los VIP del evento ─── */}
+      {vipExperiencias.length > 0 && (
+        <section className="bg-night text-night-ink">
+          <div className="mx-auto max-w-6xl px-5 py-12 md:py-16">
+            <SectionTitle
+              tone="night"
+              eyebrow="Experiencias especiales"
+              title={
+                <>
+                  Con acceso <em className="text-accent">independiente</em>
+                </>
+              }
+              lead="Desfiles exclusivos, música en vivo, shows y experiencias premium dentro del evento."
+            />
+            {/* <a> nativo al hash: React Router no scrollea a #entradas por defecto — el CTA quedaba muerto */}
+            <div className="mt-8 grid gap-4 md:mt-10 md:grid-cols-2">
+              {vipExperiencias.map((plan) => (
+                <a
+                  key={plan.id}
+                  href="#entradas"
+                  className="group flex items-center justify-between gap-4 rounded-md border border-night-soft bg-night-soft/40 p-5 transition-colors hover:border-accent/60"
+                >
+                  <div className="min-w-0">
+                    {plan.day && PLAN_DAY_LABEL[plan.day] && (
+                      <div className="eyebrow text-[9px] text-accent">{PLAN_DAY_LABEL[plan.day]}</div>
+                    )}
+                    <div className="type-display mt-1.5 text-2xl md:text-3xl">{plan.name}</div>
+                    {plan.tagline && (
+                      <div className="type-serif mt-0.5 text-base text-night-ink/75">{plan.tagline}</div>
+                    )}
                   </div>
-                </div>
-              </a>
-            ))}
+                  <div className="shrink-0 text-right">
+                    {plan.price != null && (
+                      <div className="type-serif text-lg">{formatMoney(plan.price)}</div>
+                    )}
+                    <div className="eyebrow mt-1 text-[9px] text-night-ink/50 transition-colors group-hover:text-accent">
+                      Comprar ↑
+                    </div>
+                  </div>
+                </a>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* ─── Por qué asistir ─── */}
       <section className="mx-auto max-w-6xl px-5 py-12 md:py-16">
