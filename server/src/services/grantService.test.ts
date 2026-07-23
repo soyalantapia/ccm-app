@@ -16,6 +16,8 @@ const tx = {
   event: { findUnique: vi.fn() },
   ticketGrant: { findFirst: vi.fn(), aggregate: vi.fn(), create: vi.fn(), findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() },
   registration: { count: vi.fn(), updateMany: vi.fn() },
+  device: { update: vi.fn() },
+  $queryRaw: vi.fn(),
 }
 const mockPrisma = {
   ...tx,
@@ -23,8 +25,13 @@ const mockPrisma = {
 }
 
 vi.mock('../lib/prisma.js', () => ({ prisma: mockPrisma }))
+// El reclamo materializa la inscripción vía confirmarLugar (probado aparte en eventSeats). Acá se
+// mockea para ejercitar SOLO la lógica del grant: enlace de device, idempotencia, de_otra_persona.
+const confirmarLugar = vi.fn()
+vi.mock('./eventSeats.js', () => ({ confirmarLugar: (...a: unknown[]) => confirmarLugar(...a) }))
 
-const { crearGrant, linkDeGrant } = await import('./grantService.js')
+const { crearGrant, linkDeGrant, previewGrant, reclamarGrant } = await import('./grantService.js')
+const { derivarTokenGrant } = await import('../lib/grantToken.js')
 
 const EVENTO_OK = { id: 'ev_1', published: true, past: false, capacity: null, seedTaken: 0 }
 const PERSONA_OK = { id: 'per_1', email: 'a@b.com' }
@@ -109,5 +116,96 @@ describe('linkDeGrant', () => {
   })
   it('subir la versión cambia el link', () => {
     expect(linkDeGrant('g1', 2)).not.toBe(linkDeGrant('g1', 1))
+  })
+})
+
+// El invitado abre el link del mail: preview (solo lectura) + claim (materializa). El token válido
+// se DERIVA del secreto de test, igual que en producción; un token cualquiera no valida.
+const EVENT_GRANT = { title: 'Workshop X', dateLabel: 'Sábado 19 de septiembre', timeLabel: '17 a 20 hs' }
+const tokenOk = derivarTokenGrant('grant_1', 1)
+function grant(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'grant_1',
+    tokenVersion: 1,
+    status: 'pendiente',
+    qty: 2,
+    personId: 'per_1',
+    eventId: 'ev_1',
+    claimedByDeviceId: null,
+    event: EVENT_GRANT,
+    ...overrides,
+  }
+}
+
+describe('previewGrant — lo que ve el invitado sin activar', () => {
+  it('grant inexistente → no_existe', async () => {
+    tx.ticketGrant.findUnique.mockResolvedValue(null)
+    expect(await previewGrant('grant_1', tokenOk)).toEqual({ ok: false, motivo: 'no_existe' })
+  })
+
+  it('token que no valida → link_invalido (sin revelar el resto)', async () => {
+    tx.ticketGrant.findUnique.mockResolvedValue(grant())
+    expect(await previewGrant('grant_1', 'token-falso')).toEqual({ ok: false, motivo: 'link_invalido' })
+  })
+
+  it('grant revocado → revocado', async () => {
+    tx.ticketGrant.findUnique.mockResolvedValue(grant({ status: 'revocado' }))
+    expect(await previewGrant('grant_1', tokenOk)).toEqual({ ok: false, motivo: 'revocado' })
+  })
+
+  it('pendiente y válido → arma la pantalla del regalo, sin tocar la base', async () => {
+    tx.ticketGrant.findUnique.mockResolvedValue(grant())
+    expect(await previewGrant('grant_1', tokenOk)).toEqual({
+      ok: true,
+      estado: 'pendiente',
+      eventTitle: 'Workshop X',
+      eventWhen: 'Sábado 19 de septiembre · 17 a 20 hs',
+      qty: 2,
+    })
+    expect(confirmarLugar).not.toHaveBeenCalled()
+    expect(tx.ticketGrant.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('reclamarGrant — el invitado activa su entrada', () => {
+  it('pendiente + válido: enlaza el device, materializa la inscripción y marca reclamado', async () => {
+    tx.ticketGrant.findUnique.mockResolvedValue(grant())
+    const res = await reclamarGrant('grant_1', tokenOk, 'dev_1')
+    expect(res).toMatchObject({ ok: true, nuevo: true, eventTitle: 'Workshop X' })
+    // el dispositivo pasa a ser la persona del regalo
+    expect(tx.device.update).toHaveBeenCalledWith({ where: { id: 'dev_1' }, data: { personId: 'per_1' } })
+    // el cupo ya se reservó al otorgar: se materializa con 'sobrevender', no se re-chequea
+    expect(confirmarLugar).toHaveBeenCalledWith(tx, 'dev_1', 'ev_1', expect.objectContaining({ alLlenar: 'sobrevender' }))
+    expect(tx.ticketGrant.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'reclamado', claimedByDeviceId: 'dev_1' }) }),
+    )
+  })
+
+  it('reabrir desde el MISMO device es idempotente (nuevo:false), no vuelve a inscribir', async () => {
+    tx.ticketGrant.findUnique.mockResolvedValue(grant({ status: 'reclamado', claimedByDeviceId: 'dev_1' }))
+    const res = await reclamarGrant('grant_1', tokenOk, 'dev_1')
+    expect(res).toMatchObject({ ok: true, nuevo: false })
+    expect(confirmarLugar).not.toHaveBeenCalled()
+    expect(tx.ticketGrant.update).not.toHaveBeenCalled()
+  })
+
+  it('OTRO device no se queda el regalo ya usado → de_otra_persona', async () => {
+    tx.ticketGrant.findUnique.mockResolvedValue(grant({ status: 'reclamado', claimedByDeviceId: 'dev_1' }))
+    const res = await reclamarGrant('grant_1', tokenOk, 'dev_2')
+    expect(res).toEqual({ ok: false, motivo: 'de_otra_persona' })
+    expect(confirmarLugar).not.toHaveBeenCalled()
+  })
+
+  it('grant revocado no se puede reclamar', async () => {
+    tx.ticketGrant.findUnique.mockResolvedValue(grant({ status: 'revocado' }))
+    expect(await reclamarGrant('grant_1', tokenOk, 'dev_1')).toEqual({ ok: false, motivo: 'revocado' })
+    expect(confirmarLugar).not.toHaveBeenCalled()
+  })
+
+  it('token que no valida no activa nada', async () => {
+    tx.ticketGrant.findUnique.mockResolvedValue(grant())
+    expect(await reclamarGrant('grant_1', 'token-falso', 'dev_1')).toEqual({ ok: false, motivo: 'link_invalido' })
+    expect(tx.device.update).not.toHaveBeenCalled()
+    expect(confirmarLugar).not.toHaveBeenCalled()
   })
 })

@@ -1,7 +1,8 @@
 import { prisma } from '../lib/prisma.js'
 import { conflict, notFound, badRequest } from '../lib/errors.js'
-import { derivarTokenGrant } from '../lib/grantToken.js'
+import { derivarTokenGrant, verificarTokenGrant } from '../lib/grantToken.js'
 import { publicBase } from '../lib/publicUrl.js'
+import { confirmarLugar } from './eventSeats.js'
 
 /**
  * Regalar entradas desde el CRM.
@@ -175,4 +176,81 @@ export async function grantsDePersona(personId: string): Promise<
     // El link sólo tiene sentido mientras se pueda usar; una revocada no lo muestra.
     link: g.status === 'revocado' ? null : linkDeGrant(g.id, g.tokenVersion),
   }))
+}
+
+/**
+ * Preview del regalo, SIN materializar nada. Es lo que ve el invitado al abrir el link, antes de
+ * activar. Público y de sólo lectura: valida el token pero no toca la base.
+ */
+export type PreviewGrant =
+  | { ok: true; estado: 'pendiente' | 'reclamado'; eventTitle: string; eventWhen: string; qty: number }
+  | { ok: false; motivo: 'no_existe' | 'link_invalido' | 'revocado' }
+
+export async function previewGrant(grantId: string, token: string): Promise<PreviewGrant> {
+  const grant = await prisma.ticketGrant.findUnique({
+    where: { id: grantId },
+    include: { event: { select: { title: true, dateLabel: true, timeLabel: true } } },
+  })
+  if (!grant) return { ok: false, motivo: 'no_existe' }
+  if (!verificarTokenGrant(grant.id, grant.tokenVersion, token)) return { ok: false, motivo: 'link_invalido' }
+  if (grant.status === 'revocado') return { ok: false, motivo: 'revocado' }
+  return {
+    ok: true,
+    estado: grant.status,
+    eventTitle: grant.event.title,
+    eventWhen: [grant.event.dateLabel, grant.event.timeLabel].filter(Boolean).join(' · '),
+    qty: grant.qty,
+  }
+}
+
+/**
+ * El invitado ACTIVA su entrada: se enlaza su dispositivo a la persona del regalo y se materializa
+ * la inscripción (por el mismo confirmarLugar que una compra). Idempotente: reabrir el link desde
+ * el mismo teléfono no duplica nada.
+ *
+ * El cupo NO se re-chequea acá (alLlenar: 'sobrevender'): el lugar YA se reservó al otorgar. Al
+ * pasar el grant de pendiente a reclamado deja de contar como reserva y lo reemplaza la
+ * Registration, así el cupo no se descuenta dos veces. Todo en una transacción para que el reintento
+ * y la carrera de dos aperturas simultáneas no rompan la contabilidad.
+ */
+export type ReclamoGrant =
+  | { ok: true; eventTitle: string; eventWhen: string; nuevo: boolean }
+  | { ok: false; motivo: 'no_existe' | 'link_invalido' | 'revocado' | 'de_otra_persona' }
+
+export async function reclamarGrant(grantId: string, token: string, deviceId: string): Promise<ReclamoGrant> {
+  return prisma.$transaction(async (tx) => {
+    // Lock de la fila del grant: serializa dos aperturas simultáneas del mismo link.
+    await tx.$queryRaw`SELECT id FROM "TicketGrant" WHERE id = ${grantId} FOR UPDATE`
+    const grant = await tx.ticketGrant.findUnique({
+      where: { id: grantId },
+      include: { event: { select: { title: true, dateLabel: true, timeLabel: true } } },
+    })
+    if (!grant) return { ok: false, motivo: 'no_existe' as const }
+    if (!verificarTokenGrant(grant.id, grant.tokenVersion, token)) return { ok: false, motivo: 'link_invalido' as const }
+    if (grant.status === 'revocado') return { ok: false, motivo: 'revocado' as const }
+
+    const cuando = [grant.event.dateLabel, grant.event.timeLabel].filter(Boolean).join(' · ')
+
+    if (grant.status === 'reclamado') {
+      // Ya activado: si es el MISMO teléfono, reabrir es inofensivo (idempotente). Si es otro, el
+      // regalo ya fue usado — no se lo queda un segundo dispositivo.
+      if (grant.claimedByDeviceId === deviceId) {
+        return { ok: true as const, eventTitle: grant.event.title, eventWhen: cuando, nuevo: false }
+      }
+      return { ok: false, motivo: 'de_otra_persona' as const }
+    }
+
+    // pendiente → activar. El dispositivo pasa a ser la persona del regalo (así la entrada queda
+    // asociada a quien corresponde, aunque nunca hubiera abierto la app).
+    await tx.device.update({ where: { id: deviceId }, data: { personId: grant.personId } })
+    await confirmarLugar(tx, deviceId, grant.eventId, {
+      alLlenar: 'sobrevender', // el lugar ya estaba reservado al otorgar
+      motivoLog: { origen: 'grant.claim', grantId: grant.id },
+    })
+    await tx.ticketGrant.update({
+      where: { id: grant.id },
+      data: { status: 'reclamado', claimedByDeviceId: deviceId, claimedAt: new Date() },
+    })
+    return { ok: true as const, eventTitle: grant.event.title, eventWhen: cuando, nuevo: true }
+  })
 }
