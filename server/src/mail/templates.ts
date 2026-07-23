@@ -13,10 +13,24 @@ import { ROLE_LABEL, ROLE_CAPS } from '../domain/adminRoles.js'
  * Paleta tomada de la identidad de CCM (bordó y crema del panel), no la de Speed.
  */
 
+/**
+ * Un adjunto embebido en el cuerpo. `cid` es el identificador con el que el HTML lo referencia
+ * (`<img src="cid:...">`) para que la imagen se vea SIN que el cliente de correo tenga que "mostrar
+ * imágenes" — es el caso del QR de una entrada regalada. Opcional: las plantillas que no lo usan
+ * no cambian.
+ */
+export interface EmailAttachment {
+  filename: string
+  content: Buffer
+  contentType: string
+  cid: string
+}
+
 export interface EmailMsg {
   subject: string
   html: string
   text: string
+  attachments?: EmailAttachment[]
 }
 
 /** Escapa lo que venga de la base antes de meterlo en el HTML del mail. */
@@ -28,8 +42,12 @@ const ACCENT = '#a8442a' // terracota
 const PAPER = '#f5f0e8' // crema del fondo
 const MUTED = '#7a6a5d'
 
-/** Envoltorio común: fondo, tarjeta central, pie. `preview` es la línea que se ve en la bandeja. */
-function shell({ preview, inner }: { preview: string; inner: string }): string {
+const FOOTER_ACCESO =
+  'Te llega este mail porque alguien del equipo de CCM pidió acceso para esta dirección.<br>Si no fuiste vos, podés ignorarlo.'
+
+/** Envoltorio común: fondo, tarjeta central, pie. `preview` es la línea que se ve en la bandeja.
+ *  `footer` cambia según el mail (acceso al panel vs. una invitación al evento). */
+function shell({ preview, inner, footer = FOOTER_ACCESO }: { preview: string; inner: string; footer?: string }): string {
   return `<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CCM</title></head>
@@ -46,7 +64,7 @@ function shell({ preview, inner }: { preview: string; inner: string }): string {
       </td></tr>
     </table>
     <div style="max-width:520px;margin-top:18px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:11px;line-height:1.6;color:${MUTED};text-align:center;">
-      Te llega este mail porque alguien del equipo de CCM pidió acceso para esta dirección.<br>Si no fuiste vos, podés ignorarlo.
+      ${footer}
     </div>
   </td></tr>
 </table>
@@ -194,6 +212,71 @@ Nos gustaría verte en las próximas convocatorias. Seguí atento, que van a sal
   return {
     subject: `Sobre tu postulación a ${opts.convocatoria}`,
     html: shell({ preview: 'Gracias por postularte a CCM.', inner }),
+    text,
+  }
+}
+
+/**
+ * El mail de una entrada REGALADA. Lo que pidió el cliente, textual: "Córdoba Corazón de Moda te
+ * ha regalado unas entradas... le mandamos el código QR... y que para usarlo tiene que descargar
+ * la aplicación tocando un link".
+ *
+ * El QR va INCRUSTADO (adjunto inline con cid), no como <img src="http…">, para que se vea sin
+ * que el cliente de correo pida "mostrar imágenes". El `cid` que referencia el HTML lo pone quien
+ * llama, junto con el buffer PNG del QR (ver grantMailService).
+ */
+export function ticketGrantEmail(opts: {
+  name?: string
+  eventTitle: string
+  eventWhen: string
+  eventVenue: string
+  qty: number
+  claimUrl: string
+  qrCid: string
+}): EmailMsg {
+  const saludo = opts.name ? `Hola ${esc(opts.name)}. ` : ''
+  const entradas = opts.qty === 1 ? 'una entrada' : `${opts.qty} entradas`
+  const evento = esc(opts.eventTitle)
+  const cuando = esc(opts.eventWhen)
+  const donde = esc(opts.eventVenue)
+
+  const inner = `
+    ${h1('Te regalaron una entrada 🎟️')}
+    ${p(`${saludo}<strong style="color:${INK};">Córdoba Corazón de Moda</strong> te regaló ${entradas} para que puedas participar de:`)}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;background-color:${PAPER};border-radius:12px;">
+      <tr><td style="padding:18px 20px;">
+        <div style="color:${INK};font-size:17px;font-weight:700;line-height:1.3;margin:0 0 6px;">${evento}</div>
+        <div style="color:${MUTED};font-size:14px;line-height:1.6;">${cuando}<br>${donde}</div>
+      </td></tr>
+    </table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px;">
+      <tr><td align="center" style="padding:6px 0 14px;">
+        <img src="cid:${esc(opts.qrCid)}" width="220" height="220" alt="Tu código QR de acceso" style="display:block;width:220px;height:220px;border-radius:10px;border:1px solid #e6ddd1;">
+        <div style="color:${MUTED};font-size:12px;line-height:1.5;margin-top:10px;">Este es tu código de acceso.</div>
+      </td></tr>
+    </table>
+    ${p('Para usarlo, abrí tu entrada en la app de CCM desde este botón:')}
+    ${button(opts.claimUrl, 'Abrir mi entrada en la app')}
+    ${p(`<span style="font-size:13px;color:${MUTED};">Si el botón no funciona, copiá y pegá este link:<br><span style="color:${INK};word-break:break-all;">${esc(opts.claimUrl)}</span></span>`)}`
+
+  const text = `${opts.name ? `Hola ${opts.name}. ` : ''}Córdoba Corazón de Moda te regaló ${entradas} para participar de:
+
+${opts.eventTitle}
+${opts.eventWhen}
+${opts.eventVenue}
+
+Para usar tu entrada, abrila en la app de CCM desde este link:
+${opts.claimUrl}
+
+(El código QR de acceso va adjunto en la versión con imágenes de este mail.)`
+
+  return {
+    subject: `Te regalaron una entrada para ${opts.eventTitle}`,
+    html: shell({
+      preview: `Córdoba Corazón de Moda te regaló ${entradas}.`,
+      inner,
+      footer: 'Te llega este mail porque el equipo de CCM te regaló una entrada para su evento.<br>Si creés que fue un error, podés ignorarlo.',
+    }),
     text,
   }
 }

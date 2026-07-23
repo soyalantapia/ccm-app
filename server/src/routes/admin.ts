@@ -6,6 +6,7 @@ import * as admin from '../services/adminService.js'
 import * as applicationService from '../services/applicationService.js'
 import * as personService from '../services/personService.js'
 import * as grantService from '../services/grantService.js'
+import * as grantMailService from '../services/grantMailService.js'
 import * as catalogService from '../services/catalogService.js'
 import { handleUpload } from '../services/uploadService.js'
 import * as orderService from '../services/orderService.js'
@@ -283,7 +284,10 @@ adminRouter.post('/admin/grants', requirePermission('grants:write'), async (req,
       note: typeof b.note === 'string' ? b.note : undefined,
       grantedById: req.admin!.userId,
     })
-    res.status(201).json(grant)
+    // El mail sale acá, best-effort: si falla, el grant YA está creado (el link se puede copiar
+    // de la ficha) y la respuesta lleva el resultado del envío para que el panel lo muestre.
+    const envio = await grantMailService.enviarMailDeGrant(grant.id)
+    res.status(201).json({ ...grant, envio })
   } catch (err) {
     next(err)
   }
@@ -293,6 +297,15 @@ adminRouter.post('/admin/grants', requirePermission('grants:write'), async (req,
 adminRouter.get('/admin/people/:id/grants', requirePermission('grants:write'), async (req, res, next) => {
   try {
     res.json(await grantService.grantsDePersona(req.params.id))
+  } catch (err) {
+    next(err)
+  }
+})
+
+// Reenviar el mail de una cortesía (mismo link, sale de nuevo).
+adminRouter.post('/admin/grants/:id/resend', requirePermission('grants:write'), async (req, res, next) => {
+  try {
+    res.json(await grantMailService.enviarMailDeGrant(req.params.id))
   } catch (err) {
     next(err)
   }
