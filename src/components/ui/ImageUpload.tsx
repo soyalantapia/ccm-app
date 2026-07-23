@@ -4,7 +4,7 @@
  * Uso:
  *   <ImageUpload onUrl={(url) => setF(p => ({ ...p, banner: url }))} />
  *
- * Al seleccionar un archivo local (jpeg/png/webp/gif, ≤5 MB), hace POST
+ * Al seleccionar un archivo local (jpeg/png/webp/gif, ≤20 MB), hace POST
  * /admin/upload con FormData y, al recibir { url }, llama onUrl(url).
  * Si UPLOAD_DIR no está configurado en el server, muestra un aviso claro.
  */
@@ -92,7 +92,7 @@ export function ImageUpload({ onUrl, className = '', label = 'Subir imagen', mul
 
   async function handleFile(file: File): Promise<boolean> {
     if (file.size > MAX_BYTES) {
-      toast('La imagen supera los 5 MB. Comprimila antes de subirla.', 'info')
+      toast('La imagen supera los 20 MB. Comprimila antes de subirla.', 'info')
       return false
     }
     setUploading(true)
