@@ -7,7 +7,7 @@
 -- El token del link NO se guarda: se DERIVA por HMAC de (id + tokenVersion) con GRANT_TOKEN_SECRET
 -- (lib/grantToken.ts). Una filtración de la base no regala entradas.
 --
--- Prefijo 9zza_ por el orden lexicográfico real: ordena después de 9z3_event_parent, la última.
+-- Prefijo 9zza_ por el orden lexicográfico real: ordena última, después de 9zb_ticketplan_archived
 -- (ver src/lib/migrationsOrder.test.ts). Aditiva: tabla nueva, no toca ninguna fila existente.
 
 -- CreateEnum
