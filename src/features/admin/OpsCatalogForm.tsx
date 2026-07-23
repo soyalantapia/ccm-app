@@ -43,9 +43,9 @@ function precioValido(raw: string): number | undefined {
  */
 type PieceForm = { id?: string; image: string; title: string; caption?: string; price: string }
 
-type Kind = 'participante' | 'expositor'
+type Kind = 'participante' | 'expositor' | 'speaker'
 /** Cupo de imágenes de portfolio por tipo (feedback Gastón: participante 4, expositor 2). */
-const IMG_CAP: Record<Kind, number> = { participante: 4, expositor: 2 }
+const IMG_CAP: Record<Kind, number> = { participante: 4, expositor: 2, speaker: 4 }
 
 type Form = {
   name: string
