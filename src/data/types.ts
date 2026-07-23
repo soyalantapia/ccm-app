@@ -150,6 +150,15 @@ export interface TicketOrder {
   qty: number
   /** (precio + cargo por servicio) × qty al momento de crear la orden. */
   total: number
+  /**
+   * Nombre y tipo de la entrada, resueltos por el SERVER al leer la orden. La orden guarda sólo
+   * el planId; el nombre/kind se resuelven contra TicketPlan, que del lado del comprador NO se ve
+   * si la entrada fue retirada de la venta (/plans la excluye). Sin esto, "Tus órdenes" mostraba
+   * el id crudo y la credencial de un comprador VIP bajaba a "Entrada general" cuando el
+   * organizador retiraba ese tipo. El server sí ve las retiradas, así que las adjunta acá.
+   */
+  planName?: string
+  planKind?: 'general' | 'vip'
 }
 
 /* ─── Catálogo ─── */

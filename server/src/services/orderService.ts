@@ -18,16 +18,25 @@ import { priceForCampaign } from '../../../src/lib/pricing.js'
 
 /* ─── Órdenes de entradas ─── */
 
+// El nombre y el tipo de la entrada viajan con la orden: del lado del comprador una entrada
+// retirada de la venta no se resuelve contra /plans (que la excluye), y sin esto vería el id
+// crudo y su credencial VIP bajaría a "Entrada general". El server sí ve las retiradas.
+const CON_PLAN = { plan: { select: { name: true, kind: true } } } as const
+
 /** Órdenes del device (lo que el usuario ve en "Mis entradas"). */
 export async function getOrders(deviceId?: string): Promise<TicketOrder[]> {
   if (!deviceId) return []
-  const rows = await prisma.ticketOrder.findMany({ where: { deviceId }, orderBy: { ts: 'desc' } })
+  const rows = await prisma.ticketOrder.findMany({
+    where: { deviceId },
+    orderBy: { ts: 'desc' },
+    include: CON_PLAN,
+  })
   return rows.map(toTicketOrder)
 }
 
 /** TODAS las órdenes: es la vista del organizador. */
 export async function getAllOrders(): Promise<TicketOrder[]> {
-  const rows = await prisma.ticketOrder.findMany({ orderBy: { ts: 'desc' } })
+  const rows = await prisma.ticketOrder.findMany({ orderBy: { ts: 'desc' }, include: CON_PLAN })
   return rows.map(toTicketOrder)
 }
 
@@ -68,7 +77,9 @@ export async function createOrder(input: NuevaOrden, deviceId?: string): Promise
       buyerEmail: input.buyerEmail ?? null,
     },
   })
-  return toTicketOrder(row)
+  // Ya tenemos el plan cargado: la orden vuelve con su nombre y tipo, para que la vista optimista
+  // del comprador no dependa de re-resolverlo (y no rompa si después se retira).
+  return toTicketOrder({ ...row, plan: { name: plan.name, kind: plan.kind } })
 }
 
 /** Cambia el estado. `soloPropia` restringe al device dueño (el usuario solo marca "redirigida"). */
@@ -82,7 +93,11 @@ export async function setOrderStatus(
   if (soloPropia && actual.deviceId !== soloPropia.deviceId) {
     throw notFound('ORDER_NOT_FOUND', 'Orden no encontrada')
   }
-  const row = await prisma.ticketOrder.update({ where: { id: orderId }, data: { status } })
+  const row = await prisma.ticketOrder.update({
+    where: { id: orderId },
+    data: { status },
+    include: CON_PLAN,
+  })
   return toTicketOrder(row)
 }
 

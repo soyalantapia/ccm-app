@@ -428,9 +428,10 @@ function datosDePlan(patch: Record<string, unknown>): Record<string, unknown> {
     data.serviceCharge = precioValido(patch.serviceCharge, 'cargo por servicio') ?? 0
   }
   if ('mpLink' in patch) data.mpLink = cleanStoredUrl(patch.mpLink as string | null | undefined, 'link de pago')
-  // Retirar/reactivar una entrada. Coacciona a booleano en vez de copiar el crudo: el patch viene
-  // del body sin castear, y `archived: "false"` (string) es truthy y dejaría la entrada retirada
-  // "sin querer". Es el mismo tipo de descuido que este archivo ya evita con el precio.
+  // Retirar/reactivar una entrada. Se coacciona a booleano para que a Prisma llegue SIEMPRE un
+  // booleano y no lo que venga crudo del body. El front manda true/false reales; esto es higiene
+  // de tipo, no un parser: un string "false" seguiría siendo truthy (→ true), pero el front nunca
+  // manda strings acá, así que el único efecto real es normalizar el tipo.
   if ('archived' in patch) data.archived = Boolean(patch.archived)
   return data
 }
@@ -497,7 +498,7 @@ export async function updatePlan(id: PlanId, patch: Record<string, unknown>): Pr
  *  organizador ve un 500 sin explicación en vez de "esta entrada ya tiene ventas". */
 export async function deletePlan(id: PlanId): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "TicketPlan" WHERE id = ${id} FOR UPDATE`
+    const [fila] = await tx.$queryRaw<{ archived: boolean }[]>`SELECT archived FROM "TicketPlan" WHERE id = ${id} FOR UPDATE`
     // Sólo cuentan las órdenes que dejan RASTRO: una compra confirmada (hubo plata), una que
     // está adentro de un pago en curso (puede confirmarse en cualquier momento por el webhook) y
     // una cancelada (es la decisión de alguien, y borrarla borra el registro de esa decisión).
@@ -507,10 +508,16 @@ export async function deletePlan(id: PlanId): Promise<void> {
     if (conRastro > 0) {
       // El mensaje anterior mandaba a "bajale el precio o sacalo de la venta": el segundo control
       // no existe en ningún lado —TicketPlan no tiene forma de retirarse de la venta— así que el
-      // organizador quedaba dando vueltas buscando un botón inventado. Se dice lo que es.
+      // organizador quedaba dando vueltas buscando un botón inventado. Se dice lo que es. Y si ya
+      // está retirada, no se le manda a retirarla otra vez (consejo circular): sólo se explica que
+      // sus ventas impiden el borrado.
+      const yaRetirada = fila?.archived
+      const consejo = yaRetirada
+        ? ' Ya está retirada de la venta, así que no aparece; sólo no se puede borrar.'
+        : ' Si ya no la vendés, retirala de la venta: deja de aparecer sin perder las ventas.'
       throw conflict(
         'HAS_ORDERS',
-        `No se puede borrar: este tipo de entrada tiene ${conRastro} compra(s) registrada(s) y borrarlo se llevaría el respaldo de esas ventas. Si ya no la vendés, retirala de la venta: deja de aparecer sin perder las ventas.`,
+        `No se puede borrar: este tipo de entrada tiene ${conRastro} compra(s) registrada(s) y borrarlo se llevaría el respaldo de esas ventas.${consejo}`,
       )
     }
     // Carritos abandonados: alguien apretó "Continuar" y cerró la pestaña antes de llegar a

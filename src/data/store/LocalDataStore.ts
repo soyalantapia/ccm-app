@@ -288,7 +288,16 @@ export class LocalDataStore implements DataStore {
       .filter((plan) => !eventId || plan.eventId === eventId)
       .map((plan) => {
         const o = overrides[plan.id]
-        return o ? { ...plan, ...(o.price !== undefined ? { price: o.price } : {}), ...(o.mpLink ? { mpLink: o.mpLink } : {}) } : plan
+        return o
+          ? {
+              ...plan,
+              ...(o.price !== undefined ? { price: o.price } : {}),
+              ...(o.mpLink ? { mpLink: o.mpLink } : {}),
+              // Sin esto, retirar/reactivar en demo era un no-op: el override guardaba `archived`
+              // pero la lectura nunca lo aplicaba, así que la entrada seguía a la venta.
+              ...(o.archived !== undefined ? { archived: o.archived } : {}),
+            }
+          : plan
       })
   }
 

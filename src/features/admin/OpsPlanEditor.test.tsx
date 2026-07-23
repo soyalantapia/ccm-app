@@ -68,4 +68,27 @@ describe('retirar una entrada de la venta', () => {
     render(<OpsPlanEditor plan={plan({ archived: true })} />)
     expect(screen.getByText(/ventas anteriores siguen válidas/i)).toBeTruthy()
   })
+
+  it('NO crashea al togglear una tarjeta MONTADA (activa→retirada→activa)', () => {
+    // El bug bloqueante: había un `if (archived) return` antes de dos useState, así que retirar
+    // una tarjeta ya montada bajaba el conteo de hooks de 2 a 0 y React crasheaba. Renderizar
+    // instancias frescas (como los tests de arriba) no lo agarraba: sólo se dispara al cambiar el
+    // prop de una instancia viva, que es exactamente lo que hace "Retirar de la venta".
+    const errores: unknown[] = []
+    const spy = vi.spyOn(console, 'error').mockImplementation((...a) => errores.push(a))
+    try {
+      const { rerender } = render(<OpsPlanEditor plan={plan({ archived: false })} />)
+      expect(screen.getByText(/Retirar de la venta/i)).toBeTruthy()
+      // Simula el efecto de retirar: el mismo plan vuelve con archived=true.
+      rerender(<OpsPlanEditor plan={plan({ archived: true })} />)
+      expect(screen.getByText(/Volver a la venta/i)).toBeTruthy()
+      // Y de vuelta a la venta.
+      rerender(<OpsPlanEditor plan={plan({ archived: false })} />)
+      expect(screen.getByText(/Retirar de la venta/i)).toBeTruthy()
+    } finally {
+      spy.mockRestore()
+    }
+    const hookError = errores.find((e) => /hook/i.test(JSON.stringify(e)))
+    expect(hookError, `React tiró un error de hooks: ${JSON.stringify(hookError)}`).toBeUndefined()
+  })
 })

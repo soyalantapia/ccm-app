@@ -36,7 +36,9 @@ export function OrdersSection() {
               >
                 <div>
                   <p className="type-serif text-lg text-ink">
-                    {planName.get(order.planId) ?? order.planId}
+                    {/* El nombre viaja en la orden (resuelto por el server): si la entrada fue
+                        retirada de la venta, getPlans no la trae y sin esto se veía el id crudo. */}
+                    {order.planName ?? planName.get(order.planId) ?? order.planId}
                   </p>
                   <p className="mt-0.5 text-xs text-ink-soft">
                     #{shortOrderId(order.id)} · {formatOrderDate(order.ts)}

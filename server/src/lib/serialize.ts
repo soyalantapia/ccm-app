@@ -378,8 +378,16 @@ export function toAnalyticsEvent(
   }
 }
 
-/** Fila TicketOrder → orden del dominio. El total viene congelado de la compra. */
-export function toTicketOrder(o: TicketOrder): DomainTicketOrder {
+/** Fila TicketOrder → orden del dominio. El total viene congelado de la compra.
+ *
+ *  Si la consulta hizo `include: { plan: { select: { name, kind } } }`, se adjunta el nombre y el
+ *  tipo de la entrada. Hace falta porque la orden guarda sólo el planId, y del lado del comprador
+ *  una entrada RETIRADA de la venta no se puede resolver (/plans la excluye): sin esto, "Tus
+ *  órdenes" mostraba el id crudo y una credencial VIP bajaba a "Entrada general". El server sí ve
+ *  las retiradas, así que las resuelve acá. */
+export function toTicketOrder(
+  o: TicketOrder & { plan?: { name: string; kind: string } | null },
+): DomainTicketOrder {
   return {
     id: o.id,
     planId: o.planId as DomainTicketOrder['planId'],
@@ -389,6 +397,7 @@ export function toTicketOrder(o: TicketOrder): DomainTicketOrder {
     total: o.total,
     ...(o.buyerName ? { buyerName: o.buyerName } : {}),
     ...(o.buyerEmail ? { buyerEmail: o.buyerEmail } : {}),
+    ...(o.plan ? { planName: o.plan.name, planKind: o.plan.kind as DomainTicketOrder['planKind'] } : {}),
   }
 }
 

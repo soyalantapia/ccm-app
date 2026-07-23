@@ -7,60 +7,76 @@ import type { TicketPlan } from '../../data/types'
 import { formatMoney } from './opsFormat'
 
 /**
- * Editor de un plan de entrada: precio y link de pago de Mercado Pago
- * editables en vivo (PRD §10.15). La General es gratuita y sin link.
+ * Editor de un plan de entrada: precio y link de pago de Mercado Pago editables en vivo
+ * (PRD §10.15). La General es gratuita y sin link.
  *
  * Una entrada RETIRADA de la venta se muestra en gris, sin los campos de edición y con un botón
  * para volver a ponerla a la venta. Retirar es la salida cuando una entrada ya tiene compras (no
  * se puede borrar sin llevarse el registro) o cuando terminó la preventa.
+ *
+ * OpsPlanEditor es un DESPACHADOR sin hooks: elige entre dos componentes según `archived`. La
+ * versión anterior tenía un `if (archived) return …` ANTES de dos `useState`, así que al retirar
+ * una entrada montada —justo la acción central— el conteo de hooks bajaba de 2 a 0 y React
+ * crasheaba ("Rendered fewer hooks than expected"). Separado en dos componentes, cada uno tiene
+ * sus hooks estables y el toggle sólo cambia qué componente se monta.
  */
 export function OpsPlanEditor({ plan, onBorrar }: { plan: TicketPlan; onBorrar?: () => void }) {
-  const isFree = plan.kind === 'general'
-  const archived = plan.archived ?? false
+  return plan.archived ? (
+    <PlanRetirado plan={plan} onBorrar={onBorrar} />
+  ) : (
+    <PlanALaVenta plan={plan} onBorrar={onBorrar} />
+  )
+}
 
-  const retirar = () => {
-    store.updatePlan(plan.id, { archived: true })
-    toast('Entrada retirada de la venta · ya no aparece en la app')
-  }
+/** Botón de borrar (papelera) compartido por los dos estados. */
+function BotonBorrar({ plan, onBorrar }: { plan: TicketPlan; onBorrar?: () => void }) {
+  if (!onBorrar) return null
+  return (
+    <button
+      type="button"
+      onClick={onBorrar}
+      aria-label={`Eliminar ${plan.name}`}
+      className="rounded-sm p-1.5 text-ink-soft transition-colors hover:bg-danger/10 hover:text-danger"
+    >
+      <Trash2 size={14} />
+    </button>
+  )
+}
+
+/** Entrada retirada de la venta: gris, sin campos de edición, con opción de reactivar. */
+function PlanRetirado({ plan, onBorrar }: { plan: TicketPlan; onBorrar?: () => void }) {
   const volverALaVenta = () => {
     store.updatePlan(plan.id, { archived: false })
     toast('✓ Entrada de vuelta a la venta')
   }
+  return (
+    <Card className="flex h-full flex-col p-5 opacity-70 md:p-6">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="type-serif text-xl text-ink">{plan.name}</h3>
+          <p className="mt-1 text-xs leading-relaxed text-ink-soft">{plan.tagline}</p>
+        </div>
+        <Badge tone="neutral" className="shrink-0">
+          <EyeOff size={11} /> Retirada
+        </Badge>
+      </div>
+      <p className="mt-4 border-t border-line pt-4 text-xs leading-relaxed text-ink-soft">
+        No aparece en la app y no se puede comprar. Las ventas anteriores siguen válidas y sus
+        compradores conservan su entrada.
+      </p>
+      <div className="mt-auto flex flex-wrap items-center gap-2 pt-5">
+        <Button size="sm" variant="ink" onClick={volverALaVenta}>
+          <RotateCcw size={13} /> Volver a la venta
+        </Button>
+        <BotonBorrar plan={plan} onBorrar={onBorrar} />
+      </div>
+    </Card>
+  )
+}
 
-  if (archived) {
-    return (
-      <Card className="flex h-full flex-col p-5 opacity-70 md:p-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="type-serif text-xl text-ink">{plan.name}</h3>
-            <p className="mt-1 text-xs leading-relaxed text-ink-soft">{plan.tagline}</p>
-          </div>
-          <Badge tone="neutral" className="shrink-0">
-            <EyeOff size={11} /> Retirada
-          </Badge>
-        </div>
-        <p className="mt-4 border-t border-line pt-4 text-xs leading-relaxed text-ink-soft">
-          No aparece en la app y no se puede comprar. Las ventas anteriores siguen válidas y sus
-          compradores conservan su entrada.
-        </p>
-        <div className="mt-auto flex flex-wrap items-center gap-2 pt-5">
-          <Button size="sm" variant="ink" onClick={volverALaVenta}>
-            <RotateCcw size={13} /> Volver a la venta
-          </Button>
-          {onBorrar && (
-            <button
-              type="button"
-              onClick={onBorrar}
-              aria-label={`Eliminar ${plan.name}`}
-              className="rounded-sm p-1.5 text-ink-soft transition-colors hover:bg-danger/10 hover:text-danger"
-            >
-              <Trash2 size={14} />
-            </button>
-          )}
-        </div>
-      </Card>
-    )
-  }
+/** Entrada a la venta: precio y link editables, con opción de retirarla. */
+function PlanALaVenta({ plan, onBorrar }: { plan: TicketPlan; onBorrar?: () => void }) {
+  const isFree = plan.kind === 'general'
   const [price, setPrice] = useState(plan.price === null || plan.price === 0 ? '' : String(plan.price))
   // Los planes guardados en la base todavía traen el placeholder (la portada de MP) de un seed
   // viejo. Si se precargara el campo con eso, el organizador vería un "link cargado" que no cobra
@@ -88,6 +104,11 @@ export function OpsPlanEditor({ plan, onBorrar }: { plan: TicketPlan; onBorrar?:
     toast('✓ Link de pago actualizado')
   }
 
+  const retirar = () => {
+    store.updatePlan(plan.id, { archived: true })
+    toast('Entrada retirada de la venta · ya no aparece en la app')
+  }
+
   return (
     <Card className="flex h-full flex-col p-5 md:p-6">
       <div className="flex items-start justify-between gap-3">
@@ -97,16 +118,7 @@ export function OpsPlanEditor({ plan, onBorrar }: { plan: TicketPlan; onBorrar?:
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {plan.featured && <Badge tone="accent">Destacada</Badge>}
-          {onBorrar && (
-            <button
-              type="button"
-              onClick={onBorrar}
-              aria-label={`Eliminar ${plan.name}`}
-              className="rounded-sm p-1.5 text-ink-soft transition-colors hover:bg-danger/10 hover:text-danger"
-            >
-              <Trash2 size={14} />
-            </button>
-          )}
+          <BotonBorrar plan={plan} onBorrar={onBorrar} />
         </div>
       </div>
 

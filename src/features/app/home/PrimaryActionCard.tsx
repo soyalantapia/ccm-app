@@ -46,9 +46,15 @@ function RegisterCard({ onRegister }: { onRegister: () => void }) {
 
 function WalletCard() {
   const profile = useStore((s) => s.getProfile())
-  // Tipo de entrada más alto: una VIP confirmada manda; si no, entrada general.
+  // Tipo de entrada más alto: una VIP confirmada manda; si no, entrada general. El kind viaja en
+  // la orden (o.planKind, resuelto por el server): si sólo mirara getPlan(o.planId), una VIP cuyo
+  // tipo de entrada fue retirado de la venta desaparece de /plans → getPlan undefined → la
+  // credencial de un comprador VIP legítimo bajaba a "Entrada general". Fallback a getPlan para
+  // órdenes viejas/demo sin el snapshot.
   const hasVip = useStore((s) =>
-    s.getOrders().some((o) => o.status === 'confirmada' && s.getPlan(o.planId)?.kind === 'vip'),
+    s.getOrders().some(
+      (o) => o.status === 'confirmada' && (o.planKind ?? s.getPlan(o.planId)?.kind) === 'vip',
+    ),
   )
   const first = profile.fields.firstName?.value
   const last = profile.fields.lastName?.value

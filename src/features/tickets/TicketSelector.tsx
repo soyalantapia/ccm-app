@@ -340,7 +340,7 @@ export function TicketSelector({
                 return (
                   <li key={o.id} className="flex items-baseline justify-between gap-4 text-sm">
                     <span className="text-ink">
-                      {plan?.name ?? o.planId}
+                      {o.planName ?? plan?.name ?? o.planId}
                       {o.qty > 1 && <span className="text-ink-soft"> ×{o.qty}</span>}
                     </span>
                     <span className="type-serif text-ink">{formatMoney(o.total)}</span>

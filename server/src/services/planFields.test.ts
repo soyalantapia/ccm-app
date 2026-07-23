@@ -114,13 +114,14 @@ describe('edición de un tipo de entrada', () => {
     expect(mockPrisma.ticketPlan.update.mock.calls[0][0].data.archived).toBe(false)
   })
 
-  it('archived se coacciona a booleano: "false" (string, del body sin castear) no deja la entrada retirada', async () => {
-    // El patch viene del body crudo. `archived: "false"` es un string truthy: copiado tal cual,
-    // Prisma lo guarda como retirada "sin querer". Es el mismo descuido que el precio ya evita.
-    await updatePlan('p1', { archived: 'false' as unknown as boolean })
-    expect(mockPrisma.ticketPlan.update.mock.calls[0][0].data.archived).toBe(true)
-    // (truthy → true; lo que importa es que sea booleano, no el string)
-    expect(typeof mockPrisma.ticketPlan.update.mock.calls[0][0].data.archived).toBe('boolean')
+  it('archived llega a la base SIEMPRE como booleano, no como lo que venga crudo', async () => {
+    // El front manda true/false reales; esto es higiene de tipo. Lo que importa es que Prisma
+    // reciba un booleano y no otro tipo. (No es un parser de strings: "false" es truthy en JS,
+    // pero el front nunca manda strings acá.)
+    await updatePlan('p1', { archived: 1 as unknown as boolean })
+    const { data } = mockPrisma.ticketPlan.update.mock.calls[0][0]
+    expect(typeof data.archived).toBe('boolean')
+    expect(data.archived).toBe(true)
   })
 })
 
