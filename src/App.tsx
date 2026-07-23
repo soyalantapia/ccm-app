@@ -57,6 +57,7 @@ const AdminBanners = lazyWithReload(() => import('./pages/admin/AdminBanners'))
 const AdminNotas = lazyWithReload(() => import('./pages/admin/AdminNotas'))
 const AdminOrdenes = lazyWithReload(() => import('./pages/admin/AdminOrdenes'))
 const AdminConfiguracion = lazyWithReload(() => import('./pages/admin/AdminConfiguracion'))
+const AdminAutomatizaciones = lazyWithReload(() => import('./pages/admin/AdminAutomatizaciones'))
 const AdminEquipo = lazyWithReload(() => import('./pages/admin/AdminEquipo'))
 
 /** Suspense de página pública/app: skeleton con forma de página. */
@@ -151,6 +152,7 @@ const router = createBrowserRouter(
             { path: 'novedades', element: <SA><AdminNotas /></SA> },
             { path: 'ordenes', element: <SA><AdminOrdenes /></SA> },
             { path: 'equipo', element: <SA><AdminEquipo /></SA> },
+            { path: 'automatizaciones', element: <SA><AdminAutomatizaciones /></SA> },
             { path: 'configuracion', element: <SA><AdminConfiguracion /></SA> },
           ],
         },

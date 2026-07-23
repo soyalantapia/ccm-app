@@ -178,3 +178,46 @@ export function reenviarRegalo(grantId: string) {
 export function revocarRegalo(grantId: string) {
   return api.del(`/admin/grants/${grantId}`)
 }
+
+/* ─── Automatizaciones: plantillas de email editables ─── */
+
+export interface TemplateVar { token: string; descripcion: string; ejemplo: string }
+
+export interface EmailTemplateAdmin {
+  key: string
+  nombre: string
+  descripcion: string
+  variables: TemplateVar[]
+  hasQr: boolean
+  /** Efectivos (override si hay, si no el default): lo que se edita. */
+  subject: string
+  html: string
+  /** El original del código, para "restaurar". */
+  defaultSubject: string
+  defaultHtml: string
+  isOverridden: boolean
+  updatedAt: string | null
+}
+
+/** Las plantillas de email automáticas con su estado (override o default). */
+export function useEmailTemplates() {
+  return useQuery<EmailTemplateAdmin[]>({
+    queryKey: ['email-templates'],
+    queryFn: () => api.get<EmailTemplateAdmin[]>('/admin/email-templates'),
+  })
+}
+
+/** Guarda el override (asunto + cuerpo HTML) de una plantilla. El server sanea el HTML. */
+export function guardarPlantillaEmail(key: string, input: { subject: string; html: string }) {
+  return api.patch<EmailTemplateAdmin>(`/admin/email-templates/${key}`, input)
+}
+
+/** Restaura la plantilla a su original (borra el override). */
+export function restaurarPlantillaEmail(key: string) {
+  return api.del(`/admin/email-templates/${key}`)
+}
+
+/** Renderiza un borrador (sin guardar) con valores de ejemplo, para el preview en iframe. */
+export function previewPlantillaEmail(key: string, input: { subject: string; html: string }) {
+  return api.post<{ subject: string; html: string }>(`/admin/email-templates/${key}/preview`, input)
+}
