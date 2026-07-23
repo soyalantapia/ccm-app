@@ -106,14 +106,20 @@ export default function Catalogo() {
               </span>
             </SectionLabel>
             {selected.length > 0 ? (
-              <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-4">
+              <div
+                className={`grid grid-cols-2 gap-2.5 lg:gap-4 ${
+                  // Las columnas se ajustan a la cantidad: una plataforma con 1-2 fichas ya no
+                  // deja 3 columnas vacías al costado (Tecnología/Turismo suelen ser chicas).
+                  selected.length >= 4 ? 'lg:grid-cols-4' : selected.length === 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-2'
+                }`}
+              >
                 {selected.map((p) => (
                   <DesignerCard key={p.id} profile={p} />
                 ))}
               </div>
             ) : (
               <SectionEmpty
-                icon="✨"
+                icon={<Sparkles className="mx-auto text-accent/60" size={44} strokeWidth={1.25} aria-hidden />}
                 title={`${platform} en camino`}
                 sub="Pronto vas a ver a los participantes de esta plataforma."
               />

@@ -16,7 +16,7 @@ export function AccreditationCard() {
   const token = qrToken()
 
   return (
-    <div className="mx-auto w-full max-w-sm rounded-[14px] border-2 border-accent bg-white p-5 text-center shadow-[0_4px_16px_rgba(0,0,0,0.1)] lg:max-w-md lg:p-8">
+    <div className="mx-auto w-full max-w-sm rounded-lg border-2 border-accent bg-surface p-5 text-center shadow-[0_4px_16px_rgba(0,0,0,0.1)] lg:max-w-md lg:p-8">
       <div className="eyebrow text-[9px] text-accent lg:text-[11px]">Acreditación · Entrada General</div>
       <h2 className="type-display mt-3 text-balance text-[24px] leading-[1.15] text-ink lg:text-[32px]">{name}</h2>
       <p className="mt-1.5 text-[10px] font-medium uppercase tracking-[0.05em] text-text-2 lg:text-[12px]">
