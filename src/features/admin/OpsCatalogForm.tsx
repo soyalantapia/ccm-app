@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Check, X } from 'lucide-react'
 import { Button, Field, Img, Input, Select, Sheet, Textarea, toast, ImageUpload } from '../../components/ui'
-import { store } from '../../data/store'
+import { store, useStore } from '../../data/store'
 import { newId } from '../../lib/storage'
-import type { CatalogProfile, PortfolioPiece } from '../../data/types'
+import type { CatalogProfile, PortfolioPiece, SpeakerAppearanceInput } from '../../data/types'
 
 /** Plataformas del ecosistema CCM (PRD §6.4). */
 const PLATFORM_OPTIONS: { value: string; label: string }[] = [
@@ -61,6 +61,10 @@ type Form = {
   verified: boolean
   participatesIn: string
   portfolio: PieceForm[]
+  /** "Corazón que inspira" — visible siempre, sólo se manda al store para speakers. */
+  quote: string
+  /** En qué eventos habla (Entrega 1: sin bloque, `blockId` siempre null). */
+  apps: SpeakerAppearanceInput[]
 }
 
 const empty: Form = {
@@ -77,6 +81,20 @@ const empty: Form = {
   verified: false,
   participatesIn: 'CCM 2026',
   portfolio: [],
+  quote: '',
+  apps: [],
+}
+
+/**
+ * Apariciones del speaker derivadas de `getSpeakersByEvent()`: `CatalogProfile` no trae sus
+ * propias apariciones, así que al editar hay que reconstruirlas mirando en qué grupos de
+ * evento aparece este perfil. Entrega 1: siempre `blockId: null` (elegir bloque es Entrega 2).
+ */
+function deriveApps(profileId: string): SpeakerAppearanceInput[] {
+  return store
+    .getSpeakersByEvent()
+    .filter((grupo) => grupo.speakers.some((sp) => sp.id === profileId))
+    .map((grupo) => ({ eventId: grupo.eventId, blockId: null }))
 }
 
 function fromProfile(p: CatalogProfile): Form {
@@ -94,6 +112,8 @@ function fromProfile(p: CatalogProfile): Form {
     verified: p.verified,
     participatesIn: p.participatesIn.join(', '),
     portfolio: p.portfolio.map((pf) => ({ id: pf.id, image: pf.image, title: pf.title, caption: pf.caption, price: pf.price != null ? String(pf.price) : '' })),
+    quote: p.quote ?? '',
+    apps: deriveApps(p.id),
   }
 }
 
@@ -110,6 +130,7 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
   const [error, setError] = useState('')
   const [verPool, setVerPool] = useState(false)
   const [subiendo, setSubiendo] = useState(false)
+  const eventos = useStore((s) => s.getEvents())
 
   useEffect(() => {
     if (open) {
@@ -177,6 +198,8 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
       verified: f.verified,
       participatesIn,
       portfolio,
+      quote: f.quote.trim() || undefined,
+      ...(f.kind === 'speaker' ? { speakerAppearances: f.apps } : {}),
     }
     if (profile) {
       store.updateCatalogProfile(profile.id, data)
@@ -204,6 +227,7 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
             options={[
               { value: 'participante', label: 'Participante' },
               { value: 'expositor', label: 'Expositor' },
+              { value: 'speaker', label: 'Speaker · Corazón que inspira' },
             ]}
             value={f.kind}
             onChange={(e) =>
@@ -243,10 +267,41 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
           />
         </Field>
 
+        <Field label='Frase · "Corazón que inspira"' hint="Opcional">
+          <Input value={f.quote} onChange={set('quote')} placeholder="Ej: La moda del interior también es negocio." />
+        </Field>
+
         {f.kind === 'expositor' && (
           <Field label="Cuenta proyectos" hint="Opcional — narrativa del expositor: qué proyectos presenta">
             <Textarea value={f.projects} onChange={set('projects')} rows={3} placeholder="Los proyectos que trae el expositor…" />
           </Field>
+        )}
+
+        {f.kind === 'speaker' && (
+          <fieldset className="rounded-sm border border-line p-3">
+            <legend className="px-1 text-[13px] font-medium text-ink-soft">¿En qué eventos habla?</legend>
+            {eventos.map((ev) => {
+              const marcado = f.apps.some((a) => a.eventId === ev.id)
+              return (
+                <label key={ev.id} className="flex items-center gap-2 py-1 text-[14px]">
+                  <input
+                    type="checkbox"
+                    checked={marcado}
+                    onChange={(e) =>
+                      setF((prev) => ({
+                        ...prev,
+                        apps: e.target.checked
+                          ? [...prev.apps, { eventId: ev.id, blockId: null }]
+                          : prev.apps.filter((a) => a.eventId !== ev.id),
+                      }))
+                    }
+                    className="size-4 accent-accent"
+                  />
+                  {ev.title}
+                </label>
+              )
+            })}
+          </fieldset>
         )}
 
         <Field label="Participa en" hint="Separá con comas. Ej: CCM 2026, Camino a CCM · Junio">
