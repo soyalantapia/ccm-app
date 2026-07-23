@@ -17,11 +17,22 @@ import type { ProfileFieldKey, Registration } from '../../data/types'
 
 const FIELD_ORDER = Object.keys(FIELD_META) as ProfileFieldKey[]
 
-/** Deriva hora/título/rubro del bloque y renderiza el inscripcion-item del mockup. */
+/**
+ * Renderiza el inscripcion-item del mockup, para los DOS niveles de inscripción.
+ *
+ * Antes descartaba con `return null` toda inscripción sin bloque, o sea las que son al evento
+ * entero: anotarse a un Camino o a una capacitación no aparecía en ningún lado. La clienta pidió
+ * un "sub-registro por evento" creyendo que no existía — existe hace rato, sólo que no se veía.
+ */
 function InscripcionRow({ registration }: { registration: Registration }) {
   const block = useStore((s) => (registration.blockId ? s.getBlock(registration.blockId) : undefined))
-  if (!block) return null
-  return <InscripcionItem hora={block.start} titulo={block.title} plataforma={`${block.kind} · ${block.room}`} />
+  const event = useStore((s) => s.getEventById(registration.eventId))
+  if (block) {
+    return <InscripcionItem hora={block.start} titulo={block.title} plataforma={`${block.kind} · ${block.room}`} />
+  }
+  // Inscripción al evento entero: no hay horario de actividad, se muestra la fecha del evento.
+  if (!event) return null
+  return <InscripcionItem hora={event.dateLabel} titulo={event.title} plataforma={event.venue} />
 }
 
 /**
@@ -48,9 +59,11 @@ export default function MiQR() {
   /** Compró entradas VIP (con o sin inscripción gratuita): su compra tiene que verse igual. */
   const hasOrders = orders.length > 0
 
-  const blockRegistrations = registrations
-    .filter((r) => r.blockId)
-    .sort((a, b) => registrationSortKey(a).localeCompare(registrationSortKey(b)))
+  // Todas las inscripciones confirmadas, de los dos niveles: a una actividad de la grilla y al
+  // evento entero. El filtro por blockId escondía las segundas por completo.
+  const blockRegistrations = [...registrations].sort((a, b) =>
+    registrationSortKey(a).localeCompare(registrationSortKey(b)),
+  )
 
   const camino = store.getConvocatoria(IDS.convocatoriaSlugs.camino)
 
@@ -72,7 +85,12 @@ export default function MiQR() {
         }
         lead={
           registered
-            ? 'Mostrala en el acceso y en cada sala. No hace falta imprimir nada.'
+            // Antes decía "y en cada sala. No hace falta imprimir nada". Las dos cosas son
+            // promesas que la operación no puede cumplir: no hay control por sala —la entrada
+            // se modela por jornada, no por actividad— y nadie puede garantizar hoy que el
+            // código alcance solo. Se mantiene "mostrala en el acceso" porque el escaneo en
+            // puerta sí está decidido.
+            ? 'Mostrala en el acceso al evento. Es tu entrada: tenela a mano en el teléfono.'
             : undefined
         }
       />
