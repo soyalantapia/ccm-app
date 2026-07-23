@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { env } from '../lib/env.js'
+import { publicBase } from '../lib/publicUrl.js'
 import { unauthorized, ApiError } from '../lib/errors.js'
 import {
   generateOtp,
@@ -52,7 +53,6 @@ const codigoInvalido = () =>
   unauthorized('INVALID_CODE', 'El código no es válido, ya venció o ya se usó. Pedí uno nuevo.')
 
 /** Base pública para armar el link del email. */
-const publicBase = () => (env.PUBLIC_BASE_URL ?? 'http://localhost:5173').replace(/\/$/, '')
 export const loginUrl = () => `${publicBase()}/admin/login`
 
 /** Emite y manda el código, en segundo plano. Todo el trabajo que sólo ocurre cuando el email
