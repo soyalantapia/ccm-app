@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '../lib/prisma.js'
-import { toEventItem, toEventBlock, toContentItem, toSponsor, toGallery, toCatalogProfile, toConvocatoria } from '../lib/serialize.js'
+import { toEventItem, toEventBlock, toContentItem, toSponsor, toGallery, toCatalogProfile, toConvocatoria, toTicketPlan } from '../lib/serialize.js'
 import { conflict, badRequest } from '../lib/errors.js'
 import { parseDate } from '../lib/dates.js'
 import { cleanStoredUrl } from '../lib/url.js'
 import { normalizarYoutubeId } from '../lib/youtube.js'
-import type { EventItem, EventBlock, ContentItem, Sponsor, Gallery, CatalogProfile, PlanId, Convocatoria } from '@domain/types'
+import type { EventItem, EventBlock, ContentItem, Sponsor, Gallery, CatalogProfile, PlanId, TicketPlan, Convocatoria } from '@domain/types'
 
 /**
  * Precio saneado para una columna Int? de Postgres.
@@ -396,12 +396,73 @@ export async function deleteCatalogProfile(id: string): Promise<void> {
   await prisma.catalogProfile.delete({ where: { id } })
 }
 
-/* ─── Planes (solo precio/mpLink) ─── */
-export async function updatePlan(id: PlanId, patch: { price?: number | null; mpLink?: string }): Promise<void> {
+/* ─── Tipos de entrada de un evento ─── */
+
+/** Id legible a partir del nombre. No hay slugify en el server (el del front vive en el bundle),
+ *  y para un id que aparece en la URL del checkout y en los reportes vale la pena: "vip-sabado"
+ *  se lee mucho mejor que un cuid cuando hay que conciliar una venta a mano. */
+function slugify(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'entrada'
+}
+
+/** Campos que el panel puede escribir. `id` y `eventId` NO: el primero lo genera el server, el
+ *  segundo sale de la ruta — si viniera del body, se podrían mover entradas de evento por
+ *  request y las órdenes ya emitidas quedarían apuntando a otro lado. */
+const CAMPOS_PLAN = ['name', 'tagline', 'perks', 'featured', 'day', 'kind', 'preventa'] as const
+
+function datosDePlan(patch: Record<string, unknown>): Record<string, unknown> {
   const data: Record<string, unknown> = {}
+  for (const k of CAMPOS_PLAN) if (k in patch) data[k] = patch[k]
   if ('price' in patch) data.price = precioValido(patch.price, 'precio del plan')
-  if ('mpLink' in patch) data.mpLink = cleanStoredUrl(patch.mpLink, 'link de pago')
-  await prisma.ticketPlan.update({ where: { id }, data })
+  if ('mpLink' in patch) data.mpLink = cleanStoredUrl(patch.mpLink as string | null | undefined, 'link de pago')
+  return data
+}
+
+/** Alta de un tipo de entrada DENTRO de un evento. Hasta acá no existía: los 5 planes venían del
+ *  seed y sólo se les podía editar precio y link, así que un evento nuevo no podía vender nada. */
+export async function createPlan(eventId: string, input: Record<string, unknown>): Promise<TicketPlan> {
+  const ev = await prisma.event.findUnique({ where: { id: eventId }, select: { id: true } })
+  if (!ev) throw conflict('EVENT_NOT_FOUND', 'El evento no existe')
+  const nombre = String(input.name ?? '').trim()
+  if (!nombre) throw badRequest('INVALID_PLAN', 'El tipo de entrada necesita un nombre.')
+  const row = await prisma.ticketPlan.create({
+    data: {
+      // Id legible y estable, derivado del nombre: aparece en la URL del checkout y en los
+      // reportes, así que "vip-sabado" se lee mucho mejor que un cuid.
+      id: `${slugify(nombre)}-${randomUUID().slice(0, 6)}`,
+      eventId,
+      name: nombre,
+      tagline: String(input.tagline ?? '').trim(),
+      perks: Array.isArray(input.perks) ? (input.perks as string[]) : [],
+      kind: (input.kind as 'general' | 'vip') ?? 'general',
+      ...datosDePlan(input),
+    },
+  })
+  return toTicketPlan(row)
+}
+
+export async function updatePlan(id: PlanId, patch: Record<string, unknown>): Promise<void> {
+  await prisma.ticketPlan.update({ where: { id }, data: datosDePlan(patch) })
+}
+
+/** Baja con pre-chequeo dentro de la transacción, mismo patrón que deleteEvent: TicketOrder.planId
+ *  es una relación obligatoria (Restrict), así que sin esto Prisma tira un P2003 crudo y el
+ *  organizador ve un 500 sin explicación en vez de "esta entrada ya tiene ventas". */
+export async function deletePlan(id: PlanId): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "TicketPlan" WHERE id = ${id} FOR UPDATE`
+    const ordenes = await tx.ticketOrder.count({ where: { planId: id } })
+    if (ordenes > 0) {
+      throw conflict('HAS_ORDERS', `No se puede borrar: este tipo de entrada tiene ${ordenes} compra(s). Bajale el precio o sacalo de la venta.`)
+    }
+    await tx.ticketPlan.delete({ where: { id } })
+  })
 }
 
 /* ─── Convocatorias (crear/editar desde el admin — antes solo venían del seed) ─── */

@@ -115,15 +115,6 @@ async function main() {
     })
   }
 
-  // ── Planes de entrada ──
-  for (const p of seedPlans) {
-    const data = {
-      name: p.name, tagline: p.tagline, price: p.price ?? null, serviceCharge: p.serviceCharge,
-      mpLink: p.mpLink ?? null, perks: p.perks, featured: p.featured ?? false, day: p.day, kind: p.kind, preventa: p.preventa ?? false,
-    }
-    await prisma.ticketPlan.upsert({ where: { id: p.id }, create: { id: p.id, ...data }, update: data })
-  }
-
   // ── Eventos (+ links a sponsors) ──
   for (const e of seedEvents) {
     const data = {
@@ -153,6 +144,20 @@ async function main() {
       room: b.room, capacity: b.capacity, seedTaken: b.seedTaken, speakers: b.speakers, description: b.description ?? null,
     }
     await prisma.eventBlock.upsert({ where: { id: b.id }, create: { id: b.id, ...data }, update: data })
+  }
+
+  // ── Tipos de entrada ──
+  // VA DESPUÉS DE LOS EVENTOS a propósito: desde que las entradas cuelgan de un evento, la FK
+  // exige que el evento exista primero. Antes este bloque estaba arriba y la instalación desde
+  // cero fallaba con una violación de clave foránea.
+  for (const p of seedPlans) {
+    const data = {
+      eventId: p.eventId,
+      name: p.name, tagline: p.tagline, price: p.price ?? null, serviceCharge: p.serviceCharge,
+      mpLink: p.mpLink ?? null, perks: p.perks, featured: p.featured ?? false,
+      day: p.day ?? null, kind: p.kind, preventa: p.preventa ?? false,
+    }
+    await prisma.ticketPlan.upsert({ where: { id: p.id }, create: { id: p.id, ...data }, update: data })
   }
 
   // ── Catálogo de expositores (+ portfolio) ──

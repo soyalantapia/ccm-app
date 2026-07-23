@@ -61,9 +61,12 @@ catalogRouter.get('/sponsors', async (_req, res, next) => {
 })
 
 /** GET /api/v1/plans — planes de entrada. Público. */
-catalogRouter.get('/plans', async (_req, res, next) => {
+catalogRouter.get('/plans', async (req, res, next) => {
   try {
-    res.json(await catalogService.getPlans())
+    // ?eventId= acota a los tipos de entrada de ESE evento. Sin el parámetro devuelve todos,
+    // que es lo que necesita el panel de órdenes para resolver el nombre de cada plan vendido.
+    const eventId = typeof req.query.eventId === 'string' ? req.query.eventId : undefined
+    res.json(await catalogService.getPlans(eventId))
   } catch (err) {
     next(err)
   }

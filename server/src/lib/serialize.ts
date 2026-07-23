@@ -43,6 +43,7 @@ import type {
   BannerDestination,
   Nota as DomainNota,
   TicketOrder as DomainTicketOrder,
+  TicketPlan as DomainTicketPlan,
   AdCampaign as DomainAdCampaign,
 } from '@domain/types'
 
@@ -403,5 +404,38 @@ export function toAdCampaign(c: AdCampaign): DomainAdCampaign {
     ts: c.ts.toISOString(),
     ...(c.cta ? { cta: c.cta } : {}),
     ...(c.tagline ? { tagline: c.tagline } : {}),
+  }
+}
+
+/** Un tipo de entrada como lo consume el front. Vive acá y no en catalogService para que la
+ *  lectura pública y el alta del panel devuelvan exactamente la misma forma — si divergen, el
+ *  panel muestra un plan recién creado distinto del que después sirve la API. */
+export function toTicketPlan(p: {
+  id: string
+  eventId: string
+  name: string
+  tagline: string
+  price: number | null
+  serviceCharge: number
+  mpLink: string | null
+  perks: string[]
+  featured: boolean
+  day: string | null
+  kind: string
+  preventa: boolean
+}): DomainTicketPlan {
+  return {
+    id: p.id as DomainTicketPlan['id'],
+    eventId: p.eventId,
+    name: p.name,
+    tagline: p.tagline,
+    price: p.price,
+    serviceCharge: p.serviceCharge,
+    mpLink: p.mpLink,
+    perks: p.perks,
+    featured: p.featured,
+    ...(p.day ? { day: p.day as DomainTicketPlan['day'] } : {}),
+    kind: p.kind as DomainTicketPlan['kind'],
+    preventa: p.preventa,
   }
 }

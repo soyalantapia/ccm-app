@@ -1,9 +1,13 @@
 import type { TicketPlan } from '../data/types'
+import { IDS } from '../data/ids'
 
 /**
- * Planes de entrada — precios y tiers REALES de la venta vigente en Tikealo
- * (página oficial del evento, 06/2026). El link manual de Mercado Pago se carga
- * desde Admin → Entradas y órdenes; sembrado viene vacío a propósito (ver abajo).
+ * Tipos de entrada del EVENTO PRINCIPAL — precios y tiers REALES de la venta vigente
+ * (página oficial del evento, 06/2026). El link manual de Mercado Pago se carga desde el panel,
+ * adentro de la ficha del evento; sembrado viene vacío a propósito (ver abajo).
+ *
+ * Van todos con el eventId del principal: desde que las entradas cuelgan de un evento, un plan
+ * sin dueño no existe. Los tiers de otros eventos se crean desde el panel, no acá.
  */
 
 /**
@@ -42,6 +46,7 @@ export function esLinkDePagoReal(link: string | null | undefined): boolean {
 export const seedPlans: TicketPlan[] = [
   {
     id: 'sab-general',
+    eventId: IDS.events.principal,
     name: 'Sábado · Primera Pasada',
     tagline: 'Acreditación general · sábado 19 · 9 a 21 hs',
     price: 0,
@@ -58,6 +63,7 @@ export const seedPlans: TicketPlan[] = [
   },
   {
     id: 'sab-night-vip',
+    eventId: IDS.events.principal,
     name: 'Sábado · Night VIP',
     tagline: 'Desfile de las Estrellas · 19 a 21 hs',
     price: 30000,
@@ -78,6 +84,7 @@ export const seedPlans: TicketPlan[] = [
   },
   {
     id: 'combo-vip',
+    eventId: IDS.events.principal,
     name: 'Combo VIP · Sábado + Domingo',
     tagline: 'Desfile de las Estrellas + Desfile Internacional',
     price: 50000,
@@ -96,6 +103,7 @@ export const seedPlans: TicketPlan[] = [
   },
   {
     id: 'dom-general',
+    eventId: IDS.events.principal,
     name: 'Domingo · Primera Pasada',
     tagline: 'Acreditación general · domingo 20 · 9 a 20 hs',
     price: 0,
@@ -112,6 +120,7 @@ export const seedPlans: TicketPlan[] = [
   },
   {
     id: 'dom-sunset-vip',
+    eventId: IDS.events.principal,
     name: 'Domingo · Sunset VIP',
     tagline: 'Desfile Internacional · 18 a 20 hs',
     price: 30000,

@@ -12,6 +12,7 @@ import { MP_PLACEHOLDER } from '../../config/plans'
 
 const planVip = (over: Partial<TicketPlan> = {}): TicketPlan => ({
   id: 'sab-night-vip',
+  eventId: 'ev-principal-2026',
   name: 'Sábado · Night VIP',
   tagline: 'Desfile de las Estrellas',
   price: 30000,

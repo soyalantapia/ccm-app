@@ -255,6 +255,7 @@ model Event {
   iniciativas   Event[] @relation("EventoHijo")
 
   blocks        EventBlock[]
+  plans         TicketPlan[]
   registrations Registration[]
   sponsors      EventSponsor[]
   convocatorias Convocatoria[]
@@ -326,6 +327,12 @@ model Registration {
 
 model TicketPlan {
   id            String   @id // PlanId
+  // De qué EVENTO son estas entradas. Antes los 5 planes eran un tarifario suelto —de hecho las
+  // entradas del principal, pero nada lo decía— así que no se podían crear entradas para otro
+  // evento y cualquier tier nuevo se colaba en el selector y en el "VIP desde $X" del principal.
+  // Restrict: borrar un evento no puede llevarse sus entradas, que son a lo que apuntan las órdenes.
+  eventId       String
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Restrict)
   name          String
   tagline       String
   price         Int? // null = precio pendiente 🔶
@@ -333,13 +340,17 @@ model TicketPlan {
   mpLink        String?
   perks         String[]
   featured      Boolean  @default(false)
-  day           PlanDay
+  // Opcional: es el día del evento de DOS jornadas (sábado/domingo/combo). Un taller de una
+  // tarde no tiene ninguno de los tres. Ningún componente ramifica por este campo.
+  day           PlanDay?
   kind          PlanKind
   preventa      Boolean  @default(false)
 
   orders TicketOrder[]
 
   updatedAt DateTime @updatedAt
+
+  @@index([eventId])
 }
 
 model TicketOrder {

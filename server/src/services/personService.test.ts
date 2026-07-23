@@ -546,10 +546,20 @@ describe('el buscador encuentra por lo que promete', () => {
  * La ficha ni siquiera podía mostrarlas: `getPerson` no traía las órdenes.
  */
 describe('getPerson — entradas compradas', () => {
+  /** Un tipo de entrada SIEMPRE cuelga de un evento: desde que las entradas son por evento, un
+   *  plan sin dueño no existe. El fixture crea el evento contenedor junto con el plan. */
   async function crearPlan(sufijo: string) {
+    const evento = await prisma.event.create({
+      data: {
+        id: `ev-${sufijo}`, slug: `ev-${sufijo}`, type: 'principal', title: 'Evento de prueba',
+        dateLabel: 'x', startDate: new Date('2026-09-19'), venue: 'v', address: 'a',
+        mapsUrl: 'https://maps.example', description: 'd', cover: 'c',
+      },
+    })
     return prisma.ticketPlan.create({
       data: {
-        id: `plan-${sufijo}`, name: 'Night VIP test', tagline: 'Desfile de las Estrellas',
+        id: `plan-${sufijo}`, eventId: evento.id, name: 'Night VIP test',
+        tagline: 'Desfile de las Estrellas',
         price: 30000, serviceCharge: 3000, day: 'sabado', kind: 'vip',
       },
     })

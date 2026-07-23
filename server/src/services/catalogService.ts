@@ -74,10 +74,19 @@ export async function getSponsors(): Promise<Sponsor[]> {
 }
 
 /* ─── Planes de entrada ─── */
-export async function getPlans(): Promise<TicketPlan[]> {
-  const rows = await prisma.ticketPlan.findMany()
+/** Los tipos de entrada. Con `eventId` devuelve sólo los de ESE evento; sin él, todos.
+ *  El filtro existe porque cada evento tiene sus propios tiers: sin acotar, las entradas de una
+ *  capacitación se colarían en el selector del principal y le bajarían el "VIP desde $X". */
+export async function getPlans(eventId?: string): Promise<TicketPlan[]> {
+  const rows = await prisma.ticketPlan.findMany({
+    ...(eventId ? { where: { eventId } } : {}),
+    // Orden estable: primero los destacados, después por precio. Sin orderBy, Postgres devuelve
+    // heap-order y el selector de entradas cambiaba de orden entre visitas.
+    orderBy: [{ featured: 'desc' }, { price: 'asc' }],
+  })
   return rows.map((p) => ({
     id: p.id as TicketPlan['id'],
+    eventId: p.eventId,
     name: p.name,
     tagline: p.tagline,
     price: p.price,
@@ -85,7 +94,7 @@ export async function getPlans(): Promise<TicketPlan[]> {
     mpLink: p.mpLink,
     perks: p.perks,
     featured: p.featured,
-    day: p.day,
+    ...(p.day ? { day: p.day } : {}),
     kind: p.kind,
     preventa: p.preventa,
   }))

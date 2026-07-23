@@ -131,10 +131,34 @@ adminRouter.post('/admin/convocatorias', requirePermission('convocatorias:write'
 adminRouter.patch('/admin/convocatorias/:id', requirePermission('convocatorias:write'), route<Partial<Convocatoria>>((b, id) => admin.updateConvocatoria(id, b)))
 adminRouter.delete('/admin/convocatorias/:id', requirePermission('convocatorias:write'), del((id) => admin.deleteConvocatoria(id)))
 
-/* ─── Planes (precio / mpLink) ─── */
-adminRouter.patch('/admin/plans/:id', requirePermission('sponsors:write'), async (req, res, next) => {
+/* ─── Tipos de entrada de un evento ─── */
+// Permiso `events:write`, no `sponsors:write`. Antes mutar un plan pedía el permiso de sponsors
+// —una incoherencia que no molestaba mientras el editor vivía en una pantalla suelta, pero que
+// deja sin sentido a la ficha del evento: quien arma el evento no podría ponerle precio.
+
+/** Alta de un tipo de entrada DENTRO de un evento. El eventId sale de la ruta, nunca del body:
+ *  si viniera del cuerpo se podrían mover entradas de un evento a otro por request. */
+adminRouter.post('/admin/events/:id/plans', requirePermission('events:write'), async (req, res, next) => {
+  try {
+    res.status(201).json(await admin.createPlan(req.params.id, req.body))
+  } catch (err) {
+    next(err)
+  }
+})
+
+adminRouter.patch('/admin/plans/:id', requirePermission('events:write'), async (req, res, next) => {
   try {
     await admin.updatePlan(req.params.id as PlanId, req.body)
+    res.status(204).end()
+  } catch (err) {
+    next(err)
+  }
+})
+
+/** Baja. Responde 409 si ya tiene compras, en vez del P2003 crudo de Prisma. */
+adminRouter.delete('/admin/plans/:id', requirePermission('events:write'), async (req, res, next) => {
+  try {
+    await admin.deletePlan(req.params.id as PlanId)
     res.status(204).end()
   } catch (err) {
     next(err)

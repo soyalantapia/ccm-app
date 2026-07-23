@@ -106,11 +106,20 @@ export interface Registration {
 
 /* ─── Entradas y órdenes ─── */
 
-/** Tiers reales del evento (fuente: página oficial en Tikealo). */
-export type PlanId = 'sab-general' | 'sab-night-vip' | 'combo-vip' | 'dom-general' | 'dom-sunset-vip'
+/**
+ * Id de un tipo de entrada. Era una unión cerrada de los 5 tiers del evento principal, lo que
+ * hacía imposible crear una entrada nueva: no compilaba. Ahora es texto libre porque cada evento
+ * arma los suyos desde el panel.
+ *
+ * Lo que se pierde: el compilador ya no avisa si alguien escribe mal un id de plan. Se compensa
+ * en el server, que responde PLAN_NOT_FOUND al crear la orden.
+ */
+export type PlanId = string
 
 export interface TicketPlan {
   id: PlanId
+  /** De qué evento son estas entradas. Cada evento arma sus propios tiers. */
+  eventId: string
   name: string
   tagline: string
   /** null = precio pendiente de confirmar ([PENDIENTE] PRD §18) */
@@ -120,7 +129,8 @@ export interface TicketPlan {
   mpLink: string | null
   perks: string[]
   featured?: boolean
-  day: 'sabado' | 'domingo' | 'combo'
+  /** Sólo para eventos de varias jornadas. Un taller de una tarde no tiene ninguno de los tres. */
+  day?: 'sabado' | 'domingo' | 'combo'
   kind: 'general' | 'vip'
   preventa?: boolean
 }
