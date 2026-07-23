@@ -1,12 +1,10 @@
-import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { CalendarDays, Heart, Home, Menu, Play, QrCode, Store, Ticket, X } from 'lucide-react'
+import { CalendarDays, Heart, Home, Play, QrCode, Store } from 'lucide-react'
 import { Button } from '../ui'
 import { registerFree } from '../../lib/actions'
 import { useStore } from '../../data/store'
 import { IDS } from '../../data/ids'
 import { config } from '../../config'
-import { bloquearScroll } from '../../lib/useFocusTrap'
 
 // Foco (tesis Gastón: simple, de nicho): la app SON las 5 pestañas. PRIMARY =
 // las que compiten por atención (top-nav en desktop; bottom-nav en mobile). El
@@ -19,16 +17,11 @@ const PRIMARY = [
   { to: '/contenido', label: 'Elukamo' },
 ]
 
-const SECONDARY = [
-  { to: '/entradas', label: 'Entradas' },
-  { to: '/membresia', label: 'Membresías' },
-  { to: '/beneficios', label: 'Beneficios' },
-  { to: '/fotos', label: 'Fotos' },
-]
-
 // Nav superior de desktop: las 4 pestañas core + Fotos y Entradas. En pantalla
-// grande hay lugar de sobra y una barra más completa se lee más "web" y menos
-// vacía (en mobile sigue mandando el bottom-nav + el drawer).
+// grande hay lugar de sobra y una barra más completa se lee más "web". No hay menú
+// hamburguesa: duplicaba esta misma barra para llegar a una sola página (Beneficios),
+// que ahora vive en el footer. Lo secundario (Membresías, Beneficios) → footer; el
+// hub Mi QR sigue absorbiendo Fotos/Perfil/Membresía/Beneficios desde adentro.
 const TOPNAV = [
   { to: '/', label: 'Inicio' },
   ...PRIMARY,
@@ -36,19 +29,8 @@ const TOPNAV = [
   { to: '/entradas', label: 'Entradas' },
 ]
 
-// Menú completo del drawer: inicio + 5 pestañas + secundarias (sin duplicar B2B/legal).
-const DRAWER = [
-  { to: '/', label: 'Inicio' },
-  { to: '/app', label: 'Noticias' },
-  { to: '/eventos', label: 'Eventos' },
-  { to: '/mi-qr', label: 'Mi QR' },
-  { to: '/catalogo', label: 'Participantes' },
-  { to: '/contenido', label: 'Elukamo' },
-  ...SECONDARY,
-]
-
 // Bottom-nav mobile de 5 slots (mockups): Noticias · Eventos · Mi QR (centro
-// elevado) · Participantes · Elukamo. Perfil y demás secundarias → drawer (SECONDARY).
+// elevado) · Participantes · Elukamo. Fotos/Perfil/Membresía/Beneficios → hub Mi QR.
 const BOTTOM_NAV = [
   { to: '/app', label: 'Noticias', icon: Home },
   { to: '/eventos', label: 'Eventos', icon: CalendarDays },
@@ -83,16 +65,7 @@ function Wordmark({ tone = 'ink' }: { tone?: 'ink' | 'night' }) {
 
 function Header() {
   const navigate = useNavigate()
-  const [menuOpen, setMenuOpen] = useState(false)
   const registered = useStore((s) => s.isRegistered(IDS.events.principal))
-  const location = useLocation()
-
-  useEffect(() => setMenuOpen(false), [location.pathname])
-
-  useEffect(() => {
-    if (!menuOpen) return
-    return bloquearScroll() // conteo compartido: un diálogo encima no desbloquea a este
-  }, [menuOpen])
 
   return (
     <>
@@ -128,57 +101,9 @@ function Header() {
                 {registered ? 'Mi QR' : 'Registrate'}
               </Button>
             </span>
-            {/* Menú solo en desktop: en el celular la app entera vive en los
-                5 tabs (el hub Mi QR absorbe Fotos, Perfil, Membresía y Beneficios). */}
-            <button
-              onClick={() => setMenuOpen(true)}
-              aria-label="Abrir menú"
-              className="hidden rounded-sm p-2 text-ink transition-colors hover:bg-ink/5 lg:block"
-            >
-              <Menu size={20} strokeWidth={1.75} />
-            </button>
           </div>
         </div>
       </header>
-
-      {menuOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-night text-night-ink animate-fade">
-          <div className="flex h-16 items-center justify-between px-5">
-            <Wordmark tone="night" />
-            <button
-              onClick={() => setMenuOpen(false)}
-              aria-label="Cerrar menú"
-              className="rounded-sm p-2 text-night-ink transition-colors hover:bg-night-ink/10"
-            >
-              <X size={22} strokeWidth={1.5} />
-            </button>
-          </div>
-          <nav className="flex flex-1 flex-col justify-center gap-1 px-8">
-            {DRAWER.map((item, i) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === '/'}
-                className="group flex items-baseline gap-4 py-2.5"
-                style={{ animationDelay: `${i * 40}ms` }}
-              >
-                <span className="eyebrow w-7 text-[10px] text-accent">{String(i + 1).padStart(2, '0')}</span>
-                <span className="type-display text-4xl text-night-ink transition-colors group-hover:text-accent">
-                  {item.label}
-                </span>
-              </NavLink>
-            ))}
-          </nav>
-          <div className="px-8 pb-[calc(2.5rem+env(safe-area-inset-bottom))]">
-            <Button size="lg" className="w-full" onClick={() => { setMenuOpen(false); void registerFree(navigate) }}>
-              <Ticket size={15} /> {registered ? 'Ver mi QR' : 'Registrate gratis'}
-            </Button>
-            <p className="eyebrow mt-6 text-center text-[9px] text-night-ink/40">
-              {config.mainDatesLabel} · {config.venue.name}
-            </p>
-          </div>
-        </div>
-      )}
     </>
   )
 }
@@ -199,7 +124,7 @@ function BottomNav() {
               <NavLink key={item.to} to={item.to} className="relative flex flex-col items-center justify-center">
                 {({ isActive }) => (
                   <>
-                    <span className="-mt-[18px] flex h-[52px] w-[52px] items-center justify-center rounded-full bg-accent text-accent-ink shadow-[0_4px_16px_rgba(184,134,11,0.5)] transition-transform duration-200 active:scale-95">
+                    <span className="-mt-[18px] flex h-[52px] w-[52px] items-center justify-center rounded-full bg-accent text-accent-ink shadow-[0_4px_16px_color-mix(in_srgb,var(--color-accent)_50%,transparent)] transition-transform duration-200 active:scale-95">
                       <Icon size={22} strokeWidth={1.75} />
                     </span>
                     <span
@@ -275,6 +200,9 @@ function Footer() {
               <div className="eyebrow text-[9px] text-accent">CCM</div>
               <Link to="/membresia" className="block text-night-ink/70 transition-colors hover:text-night-ink">
                 Hacete Socio
+              </Link>
+              <Link to="/beneficios" className="block text-night-ink/70 transition-colors hover:text-night-ink">
+                Beneficios
               </Link>
               <Link to="/sponsors" className="block text-night-ink/70 transition-colors hover:text-night-ink">
                 Quiero ser sponsor

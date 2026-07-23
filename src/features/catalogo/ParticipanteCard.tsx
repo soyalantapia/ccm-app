@@ -9,7 +9,7 @@ import type { CatalogProfile } from '../../data/types'
  */
 export function ParticipanteCard({ profile }: { profile: CatalogProfile }) {
   return (
-    <div className="overflow-hidden rounded-[14px] bg-white shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
+    <div className="overflow-hidden rounded-lg bg-surface shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
       <div className="relative">
         <Img
           src={profile.photo}
@@ -21,7 +21,7 @@ export function ParticipanteCard({ profile }: { profile: CatalogProfile }) {
           <span
             title="Verificado CCM"
             aria-label="Verificado CCM"
-            className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-[4px] bg-accent text-accent-ink shadow-[0_1px_6px_rgba(0,0,0,0.25)] lg:h-7 lg:w-7"
+            className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-sm bg-accent text-accent-ink shadow-[0_1px_6px_rgba(0,0,0,0.25)] lg:h-7 lg:w-7"
           >
             <Check size={13} strokeWidth={3} />
           </span>

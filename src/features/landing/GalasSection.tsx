@@ -53,7 +53,7 @@ export function GalasSection() {
                 <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-night/80 via-night/20 to-transparent" />
                 <div className="absolute inset-x-0 bottom-0 p-6 md:p-8">
                   <div className="eyebrow text-[10px] text-accent">{g.when}</div>
-                  <h3 className="type-display mt-2 text-4xl text-night-ink md:text-5xl">{g.plan}</h3>
+                  <h3 className="type-display mt-2 text-balance text-4xl text-night-ink md:text-5xl">{g.plan}</h3>
                   <p className="type-serif mt-1.5 text-lg text-night-ink/85">{g.show}</p>
                 </div>
               </div>

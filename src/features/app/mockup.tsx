@@ -43,7 +43,7 @@ export function BeneficioItem({
   trailing?: ReactNode
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-[12px] bg-white p-3.5 shadow-[0_2px_8px_rgba(0,0,0,0.07)] lg:gap-4 lg:p-5">
+    <div className="flex items-start gap-3 rounded-md bg-surface p-3.5 shadow-[0_2px_8px_rgba(0,0,0,0.07)] lg:gap-4 lg:p-5">
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-accent text-accent-ink lg:h-12 lg:w-12">
         {icon}
       </span>
@@ -59,7 +59,7 @@ export function BeneficioItem({
 /** section-empty: hero de estado vacío con tinte dorado (gradiente oscuro cálido). */
 export function SectionEmpty({ icon, title, sub }: { icon: ReactNode; title: ReactNode; sub: ReactNode }) {
   return (
-    <div className="mx-auto max-w-2xl rounded-[14px] border border-accent/20 bg-gradient-to-br from-ink to-brown-warm p-[18px] text-center lg:p-8">
+    <div className="mx-auto max-w-2xl rounded-lg border border-accent/20 bg-gradient-to-br from-ink to-brown-warm p-[18px] text-center lg:p-8">
       <div className="text-[40px] leading-none lg:text-[56px]">{icon}</div>
       <div className="type-serif mt-2.5 text-[16px] text-night-ink lg:mt-4 lg:text-[22px]">{title}</div>
       <div className="mt-1.5 text-[10px] text-text-2 lg:text-[13px]">{sub}</div>
@@ -72,8 +72,8 @@ export function SponsorCuadrado({ icon, name, label = 'Sponsor' }: { icon: React
   // Desktop: fila horizontal (ícono | textos) — la pila vertical mobile estirada
   // a media grilla 6xl dejaba 80% de vacío oscuro.
   return (
-    <div className="flex flex-col items-start gap-1.5 rounded-[12px] bg-ink p-3 lg:flex-row lg:items-center lg:gap-4 lg:p-6">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-accent text-accent-ink lg:h-12 lg:w-12">{icon}</span>
+    <div className="flex flex-col items-start gap-1.5 rounded-md bg-ink p-3 lg:flex-row lg:items-center lg:gap-4 lg:p-6">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-accent text-accent-ink lg:h-12 lg:w-12">{icon}</span>
       <div className="flex flex-col gap-1.5 lg:min-w-0 lg:gap-1">
         <span className="text-[7px] font-bold uppercase tracking-[0.1em] text-accent lg:text-[9px]">{label}</span>
         <span className="type-serif text-[12px] leading-tight text-night-ink lg:text-[15px]">{name}</span>
@@ -87,7 +87,7 @@ export function NoticiaCard({ n, featured = false }: { n: Nota; featured?: boole
   return (
     <Link
       to={`/novedades/${n.slug}`}
-      className={`overflow-hidden rounded-[12px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform duration-200 hover:-translate-y-0.5 lg:flex lg:flex-col lg:rounded-[16px] lg:shadow-[0_4px_18px_rgba(0,0,0,0.08)] ${featured ? 'col-span-2' : ''}`}
+      className={`overflow-hidden rounded-md bg-surface shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform duration-200 hover:-translate-y-0.5 lg:flex lg:flex-col lg:rounded-[16px] lg:shadow-[0_4px_18px_rgba(0,0,0,0.08)] ${featured ? 'col-span-2' : ''}`}
     >
       {/* lg:flex-1 en la no-featured: si el grid la estira (al lado del hero),
           la imagen absorbe la altura sobrante en vez de dejar blanco muerto. */}
@@ -103,7 +103,7 @@ export function NoticiaCard({ n, featured = false }: { n: Nota; featured?: boole
       <div className="px-2.5 pb-2.5 pt-2 lg:px-5 lg:pb-5 lg:pt-3.5">
         <div className="text-[8px] font-bold uppercase tracking-[0.08em] text-accent lg:text-[11px]">{n.category ?? 'CCM'}</div>
         <div className={`type-serif mt-0.5 leading-[1.3] text-ink lg:mt-1 ${featured ? 'text-[14px] lg:text-[30px]' : 'text-[12px] lg:text-[18px]'}`}>{n.title}</div>
-        <div className="mt-1 text-[8px] text-text-4 lg:mt-1.5 lg:text-[11px]">{fmtDate(n.publishedAt)}</div>
+        <div className="mt-1 text-[8px] text-ink-soft lg:mt-1.5 lg:text-[11px]">{fmtDate(n.publishedAt)}</div>
       </div>
     </Link>
   )
@@ -114,7 +114,7 @@ export function VideoThumb({ c }: { c: ContentItem }) {
   return (
     <Link
       to="/contenido"
-      className="w-[190px] shrink-0 overflow-hidden rounded-[12px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform duration-200 hover:-translate-y-0.5 lg:w-auto lg:rounded-[16px] lg:shadow-[0_4px_18px_rgba(0,0,0,0.08)]"
+      className="w-[190px] shrink-0 overflow-hidden rounded-md bg-surface shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform duration-200 hover:-translate-y-0.5 lg:w-auto lg:rounded-[16px] lg:shadow-[0_4px_18px_rgba(0,0,0,0.08)]"
     >
       <div className="relative flex h-[100px] items-center justify-center bg-ink lg:h-[170px]">
         {c.youtubeId && (
@@ -146,7 +146,7 @@ export function DesignerCard({ profile }: { profile: CatalogProfile }) {
   return (
     <Link
       to={`/p/${profile.slug}`}
-      className="overflow-hidden rounded-[14px] bg-white shadow-[0_2px_10px_rgba(0,0,0,0.08)] transition-transform duration-200 hover:-translate-y-0.5 active:scale-[0.98] lg:rounded-[18px]"
+      className="overflow-hidden rounded-lg bg-surface shadow-[0_2px_10px_rgba(0,0,0,0.08)] transition-transform duration-200 hover:-translate-y-0.5 active:scale-[0.98] lg:rounded-[18px]"
     >
       <div className="aspect-square bg-gradient-to-br from-brown-gray to-ink">
         {profile.photo && <img src={profile.photo} alt={profile.name} loading="lazy" className="h-full w-full object-cover" />}
@@ -163,7 +163,7 @@ export function DesignerCard({ profile }: { profile: CatalogProfile }) {
 export function EntrevistaRow({ c }: { c: ContentItem }) {
   const meta = [c.duration, c.platform].filter(Boolean).join(' · ')
   return (
-    <Link to="/contenido" className="flex overflow-hidden rounded-[12px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-transform duration-200 hover:-translate-y-0.5 lg:rounded-[16px]">
+    <Link to="/contenido" className="flex overflow-hidden rounded-md bg-surface shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-transform duration-200 hover:-translate-y-0.5 lg:rounded-[16px]">
       <div className="relative flex w-[90px] shrink-0 items-center justify-center bg-ink lg:w-[200px]">
         {c.youtubeId && (
           <img
@@ -181,7 +181,7 @@ export function EntrevistaRow({ c }: { c: ContentItem }) {
       <div className="min-w-0 flex-1 px-3 py-2.5 lg:px-6 lg:py-5">
         <div className="text-[9px] font-bold uppercase tracking-[0.08em] text-accent lg:text-[11px]">{c.platform ?? 'Elukamo'}</div>
         <div className="type-serif mt-0.5 line-clamp-2 text-[13px] leading-tight text-ink lg:mt-1.5 lg:text-[17px]">{c.title}</div>
-        {meta && <div className="mt-1 text-[9px] text-text-4 lg:mt-2 lg:text-[12px]">{meta}</div>}
+        {meta && <div className="mt-1 text-[9px] text-ink-soft lg:mt-2 lg:text-[12px]">{meta}</div>}
       </div>
     </Link>
   )
@@ -192,15 +192,15 @@ export function PrensaItem({ n }: { n: Nota }) {
   return (
     <Link
       to={`/novedades/${n.slug}`}
-      className="flex items-center gap-3 rounded-[12px] bg-white p-3 px-3.5 shadow-[0_1px_6px_rgba(0,0,0,0.06)] transition-transform duration-200 hover:-translate-y-0.5 lg:gap-4 lg:p-5"
+      className="flex items-center gap-3 rounded-md bg-surface p-3 px-3.5 shadow-[0_1px_6px_rgba(0,0,0,0.06)] transition-transform duration-200 hover:-translate-y-0.5 lg:gap-4 lg:p-5"
     >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-cream-muted lg:h-14 lg:w-14 lg:rounded-[10px]">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-cream-muted lg:h-14 lg:w-14 lg:rounded-[10px]">
         {n.cover ? <img src={n.cover} alt="" className="h-full w-full object-cover" /> : <Newspaper size={18} className="text-ink/40" />}
       </span>
       <div className="min-w-0 flex-1">
         <div className="text-[9px] font-bold uppercase tracking-[0.06em] text-accent lg:text-[11px]">{n.category ?? 'Prensa'}</div>
         <div className="mt-0.5 line-clamp-2 text-[12px] font-semibold leading-snug text-ink lg:text-[15px]">{n.title}</div>
-        <div className="mt-0.5 text-[9px] text-text-5 lg:text-[11px]">{fmtDate(n.publishedAt)}</div>
+        <div className="mt-0.5 text-[9px] text-ink-soft lg:text-[11px]">{fmtDate(n.publishedAt)}</div>
       </div>
       <ArrowRight size={14} className="shrink-0 text-accent lg:hidden" />
       <ArrowRight size={18} className="hidden shrink-0 text-accent lg:block" />
@@ -213,9 +213,9 @@ export function CorazonesCta({ to }: { to: string }) {
   return (
     <Link
       to={to}
-      className="flex items-center gap-3.5 rounded-[14px] border border-accent/25 bg-gradient-to-br from-ink to-brown-warm p-[18px] lg:gap-5 lg:p-7"
+      className="flex items-center gap-3.5 rounded-lg border border-accent/25 bg-gradient-to-br from-ink to-brown-warm p-[18px] lg:gap-5 lg:p-7"
     >
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] bg-accent text-accent-ink lg:h-16 lg:w-16">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-accent text-accent-ink lg:h-16 lg:w-16">
         <Heart size={22} strokeWidth={0} className="fill-current" />
       </span>
       <div className="min-w-0">
@@ -235,7 +235,7 @@ export function LanzamientoCard({ event }: { event: EventItem }) {
   // Desktop: banda horizontal a todo el ancho (texto | CTA) — la card centrada
   // angosta dejaba crema vacío a ambos lados, el anti-patrón del estándar.
   return (
-    <div className="mx-auto max-w-2xl rounded-[14px] border border-accent/30 bg-gradient-to-br from-ink to-brown-warm p-[18px] lg:flex lg:max-w-none lg:items-center lg:justify-between lg:gap-12 lg:rounded-[18px] lg:p-10">
+    <div className="mx-auto max-w-2xl rounded-lg border border-accent/30 bg-gradient-to-br from-ink to-brown-warm p-[18px] lg:flex lg:max-w-none lg:items-center lg:justify-between lg:gap-12 lg:rounded-[18px] lg:p-10">
       <div className="lg:min-w-0 lg:flex-1">
         <span className="inline-block rounded-[4px] bg-accent px-2 py-1 text-[8px] font-bold uppercase tracking-[0.08em] text-accent-ink lg:text-[10px]">
           Evento especial
@@ -249,7 +249,7 @@ export function LanzamientoCard({ event }: { event: EventItem }) {
       </div>
       <Link
         to={`/eventos/${event.slug}`}
-        className="mt-3.5 block rounded-[8px] bg-accent py-2.5 text-center text-[11px] font-bold uppercase tracking-[0.05em] text-accent-ink lg:mt-0 lg:w-72 lg:shrink-0 lg:py-3.5 lg:text-[13px]"
+        className="mt-3.5 block rounded-sm bg-accent py-2.5 text-center text-[11px] font-bold uppercase tracking-[0.05em] text-accent-ink lg:mt-0 lg:w-72 lg:shrink-0 lg:py-3.5 lg:text-[13px]"
       >
         Reservá tu lugar
       </Link>
@@ -269,8 +269,8 @@ export function PaywallCard({ priceLabel }: { priceLabel: string }) {
   return (
     <div className="mx-auto max-w-2xl overflow-hidden rounded-[18px] border border-accent/30 bg-gradient-to-br from-ink to-brown-warm">
       <div className="flex items-center justify-between bg-accent px-[18px] py-3 lg:px-8 lg:py-4">
-        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-white lg:text-[13px]">Socio CCM VIP</span>
-        <span className="rounded-full bg-white/20 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.05em] text-white lg:text-[11px]">
+        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-accent-ink lg:text-[13px]">Socio CCM VIP</span>
+        <span className="rounded-full bg-white/20 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.05em] text-accent-ink lg:text-[11px]">
           Membresía Premium
         </span>
       </div>
@@ -284,7 +284,7 @@ export function PaywallCard({ priceLabel }: { priceLabel: string }) {
         <div className="mt-4 flex flex-col gap-2.5 lg:mt-6 lg:grid lg:grid-cols-2 lg:gap-4">
           {PAYWALL_BENEFITS.map((b) => (
             <div key={b.title} className="flex items-start gap-2.5 lg:gap-3.5">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-accent/30 bg-accent/15 text-accent lg:h-11 lg:w-11">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-accent/30 bg-accent/15 text-accent lg:h-11 lg:w-11">
                 <b.icon size={15} />
               </span>
               <div>
@@ -325,7 +325,7 @@ export function PaywallCard({ priceLabel }: { priceLabel: string }) {
 /** inscripcion-item: fila de inscripción (hora dorada | título + rubro | chip Registrado). */
 export function InscripcionItem({ hora, titulo, plataforma }: { hora: string; titulo: string; plataforma: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-[12px] bg-white p-3 px-3.5 shadow-[0_1px_6px_rgba(0,0,0,0.06)] lg:gap-4 lg:p-5">
+    <div className="flex items-center gap-3 rounded-md bg-surface p-3 px-3.5 shadow-[0_1px_6px_rgba(0,0,0,0.06)] lg:gap-4 lg:p-5">
       <span className="min-w-[48px] shrink-0 text-[11px] font-bold text-accent lg:min-w-[64px] lg:text-[14px]">{hora}</span>
       <div className="min-w-0 flex-1">
         <div className="type-serif text-[13px] leading-tight text-ink lg:text-[16px]">{titulo}</div>

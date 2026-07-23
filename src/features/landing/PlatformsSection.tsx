@@ -31,7 +31,7 @@ export function PlatformsSection() {
                 <span className="eyebrow text-[10px] text-accent md:col-span-1">
                   {String(i + 1).padStart(2, '0')}
                 </span>
-                <h3 className="type-display text-3xl text-ink transition-transform duration-300 group-hover:translate-x-1.5 md:col-span-5 md:text-[2.6rem]">
+                <h3 className="type-display text-balance text-3xl text-ink transition-transform duration-300 group-hover:translate-x-1.5 md:col-span-5 md:text-[2.6rem]">
                   {p.name}
                 </h3>
                 <p className="mt-1 text-[15px] leading-relaxed text-ink-soft md:col-span-6 md:mt-0">

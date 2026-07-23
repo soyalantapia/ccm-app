@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Check, Minus, Plus, Star } from 'lucide-react'
+import { Camera, Check, Gift, Heart, Minus, Plus, Star } from 'lucide-react'
 import { AdBanner, Badge, Button, EmptyState, SectionTitle, Stat } from '../../components/ui'
 import { store, useStore } from '../../data/store'
 import { IDS } from '../../data/ids'
@@ -158,15 +158,15 @@ export default function MiQR() {
       {/* Mi Suscripción (suscripcion-card dorada si es socio, si no CTA de membresía) */}
       <SectionLabel>Mi Suscripción</SectionLabel>
       {isSocio ? (
-        <div className="mx-auto max-w-sm rounded-[14px] bg-gradient-to-br from-accent to-gold-deep p-[18px] text-center lg:max-w-md lg:p-7">
-          <span className="inline-block rounded-full bg-white/20 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-white lg:text-[10px]">
+        <div className="mx-auto max-w-sm rounded-lg bg-gradient-to-br from-accent to-gold-deep p-[18px] text-center lg:max-w-md lg:p-7">
+          <span className="inline-block rounded-full bg-white/20 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-accent-ink lg:text-[10px]">
             Activa
           </span>
-          <h3 className="type-display mt-2 text-[22px] text-white lg:text-[28px]">Socio CCM VIP</h3>
-          <p className="mt-1.5 text-[10px] text-white/80 lg:text-[12.5px]">Tu membresía premium está activa</p>
+          <h3 className="type-display mt-2 text-[22px] text-accent-ink lg:text-[28px]">Socio CCM VIP</h3>
+          <p className="mt-1.5 text-[10px] text-accent-ink/80 lg:text-[12.5px]">Tu membresía premium está activa</p>
           <Link
             to="/membresia"
-            className="mt-3.5 inline-block rounded-[8px] bg-white px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.05em] text-accent transition-transform active:scale-[0.98] lg:px-6 lg:text-[12px]"
+            className="mt-3.5 inline-block rounded-sm bg-surface px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.05em] text-accent transition-transform active:scale-[0.98] lg:px-6 lg:text-[12px]"
           >
             Ver detalles
           </Link>
@@ -174,14 +174,14 @@ export default function MiQR() {
       ) : (
         <Link
           to="/membresia"
-          className="mx-auto flex max-w-sm items-center justify-between gap-3 rounded-[14px] border border-accent/30 bg-gradient-to-br from-ink to-brown-warm p-[18px] text-left transition-transform active:scale-[0.99] lg:max-w-md lg:p-6"
+          className="mx-auto flex max-w-sm items-center justify-between gap-3 rounded-lg border border-accent/30 bg-gradient-to-br from-ink to-brown-warm p-[18px] text-left transition-transform active:scale-[0.99] lg:max-w-md lg:p-6"
         >
           <div>
             <div className="eyebrow text-[8px] text-accent lg:text-[10px]">Membresía</div>
             <div className="type-serif mt-1 text-[15px] text-night-ink lg:text-[18px]">Hacete Socio CCM VIP</div>
             <div className="mt-1 text-[10px] text-text-2 lg:text-[12.5px]">Capacitaciones · descuentos · eventos VIP</div>
           </div>
-          <span className="shrink-0 rounded-[8px] bg-accent px-3.5 py-2 text-[10px] font-bold uppercase text-white">
+          <span className="shrink-0 rounded-sm bg-accent px-3.5 py-2 text-[10px] font-bold uppercase text-accent-ink">
             Quiero ser VIP
           </span>
         </Link>
@@ -192,18 +192,18 @@ export default function MiQR() {
       <div className="grid grid-cols-2 gap-2.5 lg:gap-4">
         <Link
           to="/beneficios"
-          className="rounded-[12px] border-2 border-transparent bg-white p-3.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform active:scale-[0.98] lg:p-5"
+          className="rounded-md border-2 border-transparent bg-surface p-3.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform active:scale-[0.98] lg:p-5"
         >
-          <div className="text-[28px] lg:text-[36px]">🎁</div>
+          <Gift className="mx-auto size-7 text-accent lg:size-9" strokeWidth={1.5} aria-hidden />
           <div className="type-serif mt-2 text-[13px] text-ink lg:text-[16px]">Beneficios Socio</div>
           <div className="mt-1 text-[9px] leading-[1.4] text-text-3 lg:text-[11px]">Acceso a descuentos y ofertas básicas</div>
           <div className="mt-2.5 text-[10px] font-bold text-accent lg:text-[11px]">Ver →</div>
         </Link>
         <Link
           to="/beneficios"
-          className="rounded-[12px] border-2 border-accent bg-gradient-to-br from-ink to-brown-warm p-3.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform active:scale-[0.98] lg:p-5"
+          className="rounded-md border-2 border-accent bg-gradient-to-br from-ink to-brown-warm p-3.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform active:scale-[0.98] lg:p-5"
         >
-          <div className="text-[28px] lg:text-[36px]">⭐</div>
+          <Star className="mx-auto size-7 text-accent lg:size-9" strokeWidth={1.5} aria-hidden />
           <div className="type-serif mt-2 text-[13px] text-night-ink lg:text-[16px]">Beneficios VIP</div>
           <div className="mt-1 text-[9px] leading-[1.4] text-text-2 lg:text-[11px]">Acceso premium y exclusivo</div>
           <div className="mt-2.5 text-[10px] font-bold text-accent lg:text-[11px]">Ver →</div>
@@ -215,9 +215,9 @@ export default function MiQR() {
       <div className="grid grid-cols-2 gap-2.5 lg:gap-4">
         <Link
           to="/fotos"
-          className="rounded-[12px] border-2 border-transparent bg-white p-3.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform active:scale-[0.98] lg:p-5"
+          className="rounded-md border-2 border-transparent bg-surface p-3.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform active:scale-[0.98] lg:p-5"
         >
-          <div className="text-[28px] lg:text-[36px]">🤍</div>
+          <Heart className="mx-auto size-7 text-accent lg:size-9" strokeWidth={1.5} aria-hidden />
           <div className="type-serif mt-2 text-[13px] text-ink lg:text-[16px]">
             {favoritesCount} {favoritesCount === 1 ? 'favorita' : 'favoritas'}
           </div>
@@ -226,9 +226,9 @@ export default function MiQR() {
         </Link>
         <Link
           to="/fotos"
-          className="rounded-[12px] border-2 border-transparent bg-white p-3.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform active:scale-[0.98] lg:p-5"
+          className="rounded-md border-2 border-transparent bg-surface p-3.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.07)] transition-transform active:scale-[0.98] lg:p-5"
         >
-          <div className="text-[28px] lg:text-[36px]">📸</div>
+          <Camera className="mx-auto size-7 text-accent lg:size-9" strokeWidth={1.5} aria-hidden />
           <div className="type-serif mt-2 text-[13px] text-ink lg:text-[16px]">
             {downloadsCount} {downloadsCount === 1 ? 'descarga' : 'descargas'}
           </div>
@@ -250,7 +250,7 @@ export default function MiQR() {
       </div>
 
       {/* Lo administrativo, plegado al fondo (antes en /perfil) */}
-      <details className="group mt-10 rounded-[12px] border border-line bg-surface">
+      <details className="group mt-10 rounded-md border border-line bg-surface">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 [&::-webkit-details-marker]:hidden">
           <span className="eyebrow text-[10px] text-ink-soft">Postulaciones · Actividad · Permisos</span>
           <Plus

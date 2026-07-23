@@ -73,14 +73,14 @@ export default function Inicio() {
         {/* Elukamo accesos */}
         <SectionLabel>Elukamo</SectionLabel>
         <div className="grid grid-cols-2 gap-2.5 lg:gap-5">
-          <Link to="/contenido" className="flex flex-col gap-1.5 rounded-[12px] bg-ink p-3.5 lg:gap-2.5 lg:rounded-[16px] lg:p-6">
+          <Link to="/contenido" className="flex flex-col gap-1.5 rounded-md bg-ink p-3.5 lg:gap-2.5 lg:rounded-[16px] lg:p-6">
             <Mic size={20} className="text-accent lg:hidden" />
             <Mic size={28} className="hidden text-accent lg:block" />
             <span className="text-[8px] font-bold uppercase tracking-[0.1em] text-accent lg:text-[10px]">Elukamo</span>
             <span className="type-serif text-[13px] text-night-ink lg:text-[18px]">Entrevistas</span>
             <span className="text-[9px] font-semibold text-accent lg:text-[11px]">Ver todas →</span>
           </Link>
-          <Link to="/membresia" className="flex flex-col gap-1.5 rounded-[12px] bg-ink p-3.5 lg:gap-2.5 lg:rounded-[16px] lg:p-6">
+          <Link to="/membresia" className="flex flex-col gap-1.5 rounded-md bg-ink p-3.5 lg:gap-2.5 lg:rounded-[16px] lg:p-6">
             <GraduationCap size={20} className="text-accent lg:hidden" />
             <GraduationCap size={28} className="hidden text-accent lg:block" />
             <span className="text-[8px] font-bold uppercase tracking-[0.1em] text-accent lg:text-[10px]">Elukamo</span>
@@ -104,14 +104,14 @@ export default function Inicio() {
         {/* Membresía CTA (gradiente dorado) */}
         <Link
           to="/membresia"
-          className="mt-4 flex items-center justify-between gap-3 rounded-[12px] bg-gradient-to-br from-accent to-gold-deep px-4 py-3.5 lg:mt-10 lg:rounded-[18px] lg:px-9 lg:py-7"
+          className="mt-4 flex items-center justify-between gap-3 rounded-md bg-gradient-to-br from-accent to-gold-deep px-4 py-3.5 lg:mt-10 lg:rounded-[18px] lg:px-9 lg:py-7"
         >
           <div className="min-w-0">
-            <div className="text-[8px] font-bold uppercase tracking-[0.1em] text-white/70 lg:text-[10px]">Membresía</div>
-            <div className="type-display mt-0.5 text-[15px] text-white lg:mt-1 lg:text-[24px]">Socio CCM VIP</div>
-            <div className="mt-0.5 truncate text-[9px] text-white/75 lg:text-[13px]">Capacitaciones · descuentos · eventos VIP</div>
+            <div className="text-[8px] font-bold uppercase tracking-[0.1em] text-accent-ink/70 lg:text-[10px]">Membresía</div>
+            <div className="type-display mt-0.5 text-[15px] text-accent-ink lg:mt-1 lg:text-[24px]">Socio CCM VIP</div>
+            <div className="mt-0.5 truncate text-[9px] text-accent-ink/75 lg:text-[13px]">Capacitaciones · descuentos · eventos VIP</div>
           </div>
-          <span className="shrink-0 rounded-[8px] bg-white px-3.5 py-2 text-[10px] font-bold uppercase text-accent lg:rounded-[10px] lg:px-6 lg:py-3.5 lg:text-[12px]">
+          <span className="shrink-0 rounded-sm bg-surface px-3.5 py-2 text-[10px] font-bold uppercase text-accent lg:rounded-[10px] lg:px-6 lg:py-3.5 lg:text-[12px]">
             Quiero ser VIP
           </span>
         </Link>
