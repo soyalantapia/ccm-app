@@ -27,7 +27,11 @@ const createOrderSchema = z.object({
   buyerEmail: z.string().email().max(160).optional(),
   // El total lo calcula el server con el precio vigente: si viniera del cliente, se podría
   // comprar una entrada VIP a $1 editando el request.
-})
+  // `.strict()` a propósito: sin él zod DESCARTA en silencio todo campo no declarado y el server
+  // responde 201 igual. Un `buyername` mal tipeado, o datos que el front empiece a mandar y nadie
+  // agregue acá, se pierden sin que falle nada a la vista. Preferimos un 400 ruidoso en el deploy
+  // que descubrir una columna vacía cuando alguien reclama su entrada.
+}).strict()
 
 /** GET /api/v1/orders — órdenes del device ("Mis entradas"). */
 ordersRouter.get('/orders', requireDevice, async (req, res, next) => {

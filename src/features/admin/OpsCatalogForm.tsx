@@ -209,7 +209,12 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
             onChange={(e) =>
               setF((prev) => {
                 const kind = e.target.value as Kind
-                return { ...prev, kind, portfolio: prev.portfolio.slice(0, IMG_CAP[kind]) }
+                // NO se recorta el portfolio al cambiar de tipo. Antes, pasar de participante a
+                // expositor BORRABA en el acto las imágenes que sobraban del cupo nuevo, sin
+                // preguntar y sin poder deshacer: se subían cuatro fotos, se corregía el tipo y
+                // desaparecían dos. El cupo sigue frenando lo que se SUBE de más (línea 132);
+                // lo ya cargado se conserva y se avisa abajo del campo.
+                return { ...prev, kind }
               })
             }
           />
@@ -292,7 +297,11 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
 
         <Field
           label={`Portfolio · ${f.portfolio.length}/${IMG_CAP[f.kind]} imágenes`}
-          hint={`Hasta ${IMG_CAP[f.kind]} obras (${f.kind}). Cambiá el tipo arriba para el otro cupo.`}
+          hint={
+            f.portfolio.length > IMG_CAP[f.kind]
+              ? `Tenés ${f.portfolio.length} imágenes y el cupo de ${f.kind} es ${IMG_CAP[f.kind]}. No se borra ninguna: se guardan todas, pero no vas a poder sumar más hasta bajar alguna.`
+              : `Hasta ${IMG_CAP[f.kind]} obras (${f.kind}). Cambiá el tipo arriba para el otro cupo.`
+          }
         >
           <div className="flex flex-wrap items-center gap-2">
             <ImageUpload

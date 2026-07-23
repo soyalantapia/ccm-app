@@ -167,8 +167,17 @@ export async function decideApplication(
   // ninguna) el resultado de un envío que ya no le corresponde. Con la condición, esos updates
   // simplemente no matchean ninguna fila (count 0) y no hacen nada.
   try {
-    await getMailer().send(to, msg)
-    await prisma.application.updateMany({ where: { id, status }, data: { notifiedAt: new Date(), notifyError: null } })
+    // Mirar `delivered` en vez de asumir que send() falla ruidoso: el mailer de consola NO lanza
+    // excepción, loguea y devuelve delivered:false. Sin este chequeo, un deploy sin credenciales
+    // de correo dejaba postulaciones marcadas como AVISADAS a las que nunca se les avisó — y el
+    // organizador no tenía forma de distinguirlas de las que sí salieron.
+    const { delivered } = await getMailer().send(to, msg)
+    await prisma.application.updateMany({
+      where: { id, status },
+      data: delivered
+        ? { notifiedAt: new Date(), notifyError: null }
+        : { notifiedAt: null, notifyError: 'El correo no se pudo entregar. Revisá la configuración de envío.' },
+    })
   } catch (err) {
     const detalle = err instanceof Error ? err.message : String(err)
     await prisma.application.updateMany({ where: { id, status }, data: { notifyError: detalle.slice(0, 500) } })

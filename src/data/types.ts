@@ -247,8 +247,14 @@ export interface AdCampaign {
   headline: string
   cta?: string
   tagline?: string
-  hours: number
-  total: number
+  /**
+   * Lo contratado y lo pagado. OPCIONALES a propósito: el listado público de campañas
+   * (lo que consume el front sin sesión para pintar el banner del sponsor) NO los manda.
+   * Sólo llegan en la respuesta de la compra propia y en el panel del organizador.
+   * Si los leés, contemplá `undefined`: significa "no me lo mandaron", no "vale 0".
+   */
+  hours?: number
+  total?: number
   ts: string
 }
 
