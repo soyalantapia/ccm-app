@@ -80,7 +80,10 @@ export function SponsorCarousel({ className }: { className?: string }) {
   }
 
   return (
-    <div className={`mx-auto max-w-3xl ${className ?? ''}`}>
+    // Ancho completo del contenedor (el padre ya pone los gutters con su px-…), para que el banner
+    // se alinee con el resto del contenido en vez de quedar angosto y centrado con los costados
+    // vacíos. Antes era `mx-auto max-w-3xl` (768px). El arte sigue en 3:1.
+    <div className={`w-full ${className ?? ''}`}>
       {/* Ventana del carrusel */}
       <div
         className="group relative overflow-hidden rounded-[14px] border border-line"
