@@ -35,6 +35,9 @@ const schema = z.object({
   ADMIN_TOKEN_SECRET: z.string().min(32, 'ADMIN_TOKEN_SECRET debe tener al menos 32 caracteres').optional(),
   OTP_PEPPER: z.string().min(32, 'OTP_PEPPER debe tener al menos 32 caracteres').optional(),
   ACCREDITATION_TOKEN_SECRET: z.string().optional(), // ⏳ sin usar aún (Fase H: acreditación QR)
+  // Firma el token del link de una entrada regalada (lib/grantToken.ts). El token se DERIVA de
+  // este secreto y nunca se guarda: sin él no se puede fabricar ni verificar un link de cortesía.
+  GRANT_TOKEN_SECRET: z.string().min(32, 'GRANT_TOKEN_SECRET debe tener al menos 32 caracteres').optional(),
 
   // Email. Resolución: SMTP si hay host → Resend si hay clave → consola. Sin nada configurado
   // el circuito de login sigue andando y el código sale por el log (ver mail/mailer.ts).
@@ -102,6 +105,11 @@ export function assertProd(): void {
   // quedarían hasheados con un pepper débil. Nada de fallback silencioso a un valor de juguete.
   if (!env.ADMIN_TOKEN_SECRET) missing.push('ADMIN_TOKEN_SECRET — sin él no se pueden firmar las sesiones del panel (nadie entra)')
   if (!env.OTP_PEPPER) missing.push('OTP_PEPPER — sin él los códigos OTP no se pueden hashear de forma segura')
+  // Entradas regaladas: el link de cortesía se firma con este secreto (lib/grantToken.ts). Sin
+  // él, otorgar una entrada tira 500 al intentar derivar el token, y un link ya emitido no se
+  // puede verificar. Se exige en prod para que el fallo salga en el arranque, no en el primer
+  // regalo. En dev es opcional: sin la feature de regalos configurada, no molesta.
+  if (!env.GRANT_TOKEN_SECRET) missing.push('GRANT_TOKEN_SECRET — sin él no se pueden firmar ni verificar los links de entradas regaladas')
   // Correo: el código por mail es el ÚNICO login del panel (no hay contraseña de respaldo),
   // así que un deploy sin correo deja al organizador afuera de su propio sistema. Y con un
   // proveedor configurado pero sin MAIL_FROM es PEOR que no tener nada: el default apunta a
