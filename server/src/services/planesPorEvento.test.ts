@@ -24,7 +24,7 @@ const mockPrisma = {
 vi.mock('../lib/prisma.js', () => ({ prisma: mockPrisma }))
 
 const { createPlan, updatePlan, deletePlan } = await import('./adminService.js')
-const { getPlans } = await import('./catalogService.js')
+const { getPlans, getAllPlans } = await import('./catalogService.js')
 
 const FILA = {
   id: 'vip-sabado-a1b2c3',
@@ -39,6 +39,7 @@ const FILA = {
   day: 'sabado',
   kind: 'vip',
   preventa: false,
+  archived: false,
 }
 
 beforeEach(() => {
@@ -54,17 +55,18 @@ beforeEach(() => {
 })
 
 describe('leer los tipos de entrada de un evento', () => {
-  it('con eventId filtra por ese evento', async () => {
+  it('la lectura PÚBLICA excluye las retiradas de la venta', async () => {
+    // El corazón del feature: /plans nunca devuelve una entrada archived. Si el filtro se cayera,
+    // una entrada retirada volvería a aparecer y a cobrarse en la app.
     await getPlans('ev_1')
     expect(mockPrisma.ticketPlan.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { eventId: 'ev_1' } }),
+      expect.objectContaining({ where: { archived: false, eventId: 'ev_1' } }),
     )
   })
 
-  it('sin eventId devuelve todos: el panel de órdenes necesita resolver el nombre de cualquier plan vendido', async () => {
+  it('sin eventId, la pública sigue excluyendo las retiradas', async () => {
     await getPlans()
-    const args = mockPrisma.ticketPlan.findMany.mock.calls[0][0]
-    expect(args.where).toBeUndefined()
+    expect(mockPrisma.ticketPlan.findMany.mock.calls[0][0].where).toEqual({ archived: false })
   })
 
   it('ordena determinísticamente: destacados primero, después por precio', async () => {
@@ -80,6 +82,28 @@ describe('leer los tipos de entrada de un evento', () => {
   it('el evento viaja al front: sin eso no se puede filtrar del lado de la pantalla', async () => {
     const [plan] = await getPlans('ev_1')
     expect(plan.eventId).toBe('ev_1')
+  })
+})
+
+describe('getAllPlans — la lectura del PANEL, con retiradas incluidas', () => {
+  it('NO filtra por archived: el panel ve las retiradas para reactivarlas', async () => {
+    await getAllPlans('ev_1')
+    expect(mockPrisma.ticketPlan.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { eventId: 'ev_1' } }),
+    )
+    // where NO tiene archived: trae activas y retiradas.
+    expect(mockPrisma.ticketPlan.findMany.mock.calls[0][0].where.archived).toBeUndefined()
+  })
+
+  it('sin eventId trae absolutamente todos: AdminOrdenes resuelve hasta el nombre de una vendida y luego retirada', async () => {
+    await getAllPlans()
+    expect(mockPrisma.ticketPlan.findMany.mock.calls[0][0].where).toBeUndefined()
+  })
+
+  it('el flag archived viaja al front, para pintarla en gris', async () => {
+    mockPrisma.ticketPlan.findMany.mockResolvedValue([{ ...FILA, archived: true }])
+    const [plan] = await getAllPlans('ev_1')
+    expect(plan.archived).toBe(true)
   })
 })
 

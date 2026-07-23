@@ -74,17 +74,13 @@ export async function getSponsors(): Promise<Sponsor[]> {
 }
 
 /* ─── Planes de entrada ─── */
-/** Los tipos de entrada. Con `eventId` devuelve sólo los de ESE evento; sin él, todos.
- *  El filtro existe porque cada evento tiene sus propios tiers: sin acotar, las entradas de una
- *  capacitación se colarían en el selector del principal y le bajarían el "VIP desde $X". */
-export async function getPlans(eventId?: string): Promise<TicketPlan[]> {
-  const rows = await prisma.ticketPlan.findMany({
-    ...(eventId ? { where: { eventId } } : {}),
-    // Orden estable: primero los destacados, después por precio. Sin orderBy, Postgres devuelve
-    // heap-order y el selector de entradas cambiaba de orden entre visitas.
-    orderBy: [{ featured: 'desc' }, { price: 'asc' }],
-  })
-  return rows.map((p) => ({
+
+function planRow(p: {
+  id: string; eventId: string; name: string; tagline: string; price: number | null
+  serviceCharge: number; mpLink: string | null; perks: string[]; featured: boolean
+  day: string | null; kind: string; preventa: boolean; archived: boolean
+}): TicketPlan {
+  return {
     id: p.id as TicketPlan['id'],
     eventId: p.eventId,
     name: p.name,
@@ -94,10 +90,40 @@ export async function getPlans(eventId?: string): Promise<TicketPlan[]> {
     mpLink: p.mpLink,
     perks: p.perks,
     featured: p.featured,
-    ...(p.day ? { day: p.day } : {}),
-    kind: p.kind,
+    ...(p.day ? { day: p.day as TicketPlan['day'] } : {}),
+    kind: p.kind as TicketPlan['kind'],
     preventa: p.preventa,
-  }))
+    archived: p.archived,
+  }
+}
+
+// Primero los destacados, después por precio. Sin orderBy, Postgres devuelve heap-order y el
+// selector de entradas cambiaba de orden entre visitas.
+const ORDEN_PLAN = [{ featured: 'desc' as const }, { price: 'asc' as const }]
+
+/** Los tipos de entrada que se VENDEN. Con `eventId` sólo los de ESE evento; sin él, todos.
+ *  El filtro por evento existe porque cada evento tiene sus propios tiers: sin acotar, las
+ *  entradas de una capacitación se colarían en el selector del principal y le bajarían el "VIP
+ *  desde $X". Las retiradas (archived) nunca salen acá: la app no las muestra ni las cobra. */
+export async function getPlans(eventId?: string): Promise<TicketPlan[]> {
+  const rows = await prisma.ticketPlan.findMany({
+    where: { archived: false, ...(eventId ? { eventId } : {}) },
+    orderBy: ORDEN_PLAN,
+  })
+  return rows.map(planRow)
+}
+
+/** TODOS los tipos de entrada, retiradas incluidas. Sólo para el panel (detrás del guard de
+ *  permisos): el organizador necesita ver una entrada retirada para reactivarla, y AdminOrdenes
+ *  tiene que resolver el nombre de un plan aunque se lo haya sacado de la venta después de vender.
+ *  Es la misma división que getEvents/getAllEvents; se separa en dos funciones y no en un flag
+ *  para que ningún `req.query` pueda pedir "traé también las retiradas" por la puerta pública. */
+export async function getAllPlans(eventId?: string): Promise<TicketPlan[]> {
+  const rows = await prisma.ticketPlan.findMany({
+    ...(eventId ? { where: { eventId } } : {}),
+    orderBy: ORDEN_PLAN,
+  })
+  return rows.map(planRow)
 }
 
 /* ─── Convocatoria ─── */

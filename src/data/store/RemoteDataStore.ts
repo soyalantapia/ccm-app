@@ -129,6 +129,7 @@ export class RemoteDataStore extends LocalDataStore {
   private adminNotas?: Nota[]
   private adminContents?: ContentItem[] // /admin/contents: sin gate de socio (el panel debe ver el youtubeId)
   private adminEvents?: EventItem[] // /admin/events: incluye BORRADORES, que la ruta pública no devuelve
+  private adminPlans?: TicketPlan[] // /admin/plans: incluye RETIRADAS de la venta, que /plans no devuelve
   private draftBlocksInflight = new Set<string>() // evita pedir dos veces la agenda del mismo borrador
   private analytics?: AnalyticsEvent[] // analítica real cross-device (GET /admin/analytics), P1
   // Métricas del Dashboard (GET /admin/stats). Sin fallback al seed a propósito.
@@ -599,6 +600,7 @@ export class RemoteDataStore extends LocalDataStore {
     this.hydrateConvocatorias() // lista completa para gestionarlas (antes solo venían del seed)
     this.hydrateAdminContents() // youtubeId sin enmascarar para el panel
     this.hydrateAdminEvents() // el panel ve también lo que todavía no se publicó
+    this.hydrateAdminPlans() // el panel ve también las entradas retiradas de la venta
     this.hydrateAdminOrders() // todas las órdenes, no solo las del navegador del organizador
     this.hydrateAnalytics() // analítica REAL — antes Dashboard/SponsorReport leían el seed fabricado (P1)
     this.hydrateMpStatus() // conexión con Mercado Pago (Tarea 6)
@@ -831,7 +833,17 @@ export class RemoteDataStore extends LocalDataStore {
     // El filtro es en memoria a propósito: los planes ya vienen hidratados en bloque y son
     // pocos. Pedir /plans?eventId= por cada pantalla sería un request por evento para filtrar
     // una lista que ya está en el cliente.
-    const todos = this.plans ?? []
+    //
+    // El `!archived` es defensa en profundidad: la ruta pública /plans ya las excluye, pero
+    // durante la ventana optimista de un "retirar de la venta" el plan sigue en este caché con
+    // archived=true hasta que llega el refetch. Sin este filtro, seguiría a la venta ese instante.
+    const todos = (this.plans ?? []).filter((p) => !p.archived)
+    return eventId ? todos.filter((p) => p.eventId === eventId) : todos
+  }
+  /** El panel: incluye las retiradas. Cae al caché público mientras /admin/plans no llegó —ese
+   *  subconjunto es real (lo trajo /plans), sólo que sin las retiradas—, nunca al seed. */
+  override getAdminPlans(eventId?: string): TicketPlan[] {
+    const todos = this.adminPlans ?? this.plans ?? []
     return eventId ? todos.filter((p) => p.eventId === eventId) : todos
   }
   override getPlan(id: PlanId): TicketPlan | undefined {
@@ -1170,6 +1182,13 @@ export class RemoteDataStore extends LocalDataStore {
   private refetchGalleries(): void { this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries') }
   private refetchCatalog(): void { this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog') }
   private refetchPlans(): void { this.refetch('/plans', (v: TicketPlan[]) => (this.plans = v), 'plans') }
+  private hydrateAdminPlans(): void {
+    this.api.get<TicketPlan[]>('/admin/plans').then((p) => { this.adminPlans = p; bus.emit('plans') }).catch(() => {})
+  }
+  /** Tras escribir un plan hay que refrescar las DOS listas: la pública (/plans, sin retiradas) y
+   *  la del panel (/admin/plans, con retiradas). Si sólo se refrescara la pública, una entrada
+   *  recién retirada seguiría apareciendo en el panel —y una reactivada no volvería a la app. */
+  private refetchAllPlans(): void { this.refetchPlans(); this.hydrateAdminPlans() }
 
   override createSponsor(input: NewSponsor): Sponsor {
     const prevCache = this.sponsors // para deshacer si el backend rechaza
@@ -1283,31 +1302,39 @@ export class RemoteDataStore extends LocalDataStore {
     // Se refetchea y listo: es un alta puntual del panel, no un gesto de alta frecuencia.
     this.adminWrite(
       this.api.post(`/admin/events/${eventId}/plans`, input),
-      () => this.refetchPlans(),
-      () => this.refetchPlans(),
+      () => this.refetchAllPlans(),
+      () => this.refetchAllPlans(),
     )
   }
 
   override deletePlan(id: PlanId): void {
     const prev = this.plans
+    const prevAdmin = this.adminPlans
+    // Se saca de las DOS listas: la del panel (donde está a la vista) y la pública.
     if (this.plans) this.plans = this.plans.filter((p) => p.id !== id)
+    if (this.adminPlans) this.adminPlans = this.adminPlans.filter((p) => p.id !== id)
     bus.emit('plans')
     this.adminWrite(
       this.api.del(`/admin/plans/${id}`),
-      () => this.refetchPlans(),
-      // El server rechaza con 409 si ya tiene compras: se devuelve la fila a la lista.
-      () => { if (prev) this.plans = prev; bus.emit('plans'); this.refetchPlans() },
+      () => this.refetchAllPlans(),
+      // El server rechaza con 409 si ya tiene compras: se devuelven las filas a las listas.
+      () => { this.plans = prev; this.adminPlans = prevAdmin; bus.emit('plans'); this.refetchAllPlans() },
     )
   }
 
   override updatePlan(id: PlanId, patch: Partial<Omit<TicketPlan, 'id' | 'eventId'>>): void {
     const prev = this.plans
+    const prevAdmin = this.adminPlans
+    // El caché del panel SIEMPRE tiene el plan (incluye retiradas). El público puede no tenerlo
+    // —si está retirado, /plans no lo trae—, así que se mapea sólo donde esté; getPlans filtra
+    // las archived de todos modos, cubriendo el instante entre este optimista y el refetch.
     if (this.plans) this.plans = this.plans.map((p) => (p.id === id ? { ...p, ...patch } : p))
+    if (this.adminPlans) this.adminPlans = this.adminPlans.map((p) => (p.id === id ? { ...p, ...patch } : p))
     bus.emit('plans')
     this.adminWrite(
       this.api.patch(`/admin/plans/${id}`, patch),
-      () => this.refetchPlans(),
-      () => { if (prev) this.plans = prev; bus.emit('plans'); this.refetchPlans() },
+      () => this.refetchAllPlans(),
+      () => { this.plans = prev; this.adminPlans = prevAdmin; bus.emit('plans'); this.refetchAllPlans() },
     )
   }
 

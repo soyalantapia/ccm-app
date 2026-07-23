@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { EyeOff, RotateCcw, Trash2 } from 'lucide-react'
 import { Badge, Button, Card, Field, Input, toast } from '../../components/ui'
 import { store } from '../../data/store'
 import { esLinkDePagoReal } from '../../config/plans'
@@ -9,9 +9,58 @@ import { formatMoney } from './opsFormat'
 /**
  * Editor de un plan de entrada: precio y link de pago de Mercado Pago
  * editables en vivo (PRD §10.15). La General es gratuita y sin link.
+ *
+ * Una entrada RETIRADA de la venta se muestra en gris, sin los campos de edición y con un botón
+ * para volver a ponerla a la venta. Retirar es la salida cuando una entrada ya tiene compras (no
+ * se puede borrar sin llevarse el registro) o cuando terminó la preventa.
  */
 export function OpsPlanEditor({ plan, onBorrar }: { plan: TicketPlan; onBorrar?: () => void }) {
   const isFree = plan.kind === 'general'
+  const archived = plan.archived ?? false
+
+  const retirar = () => {
+    store.updatePlan(plan.id, { archived: true })
+    toast('Entrada retirada de la venta · ya no aparece en la app')
+  }
+  const volverALaVenta = () => {
+    store.updatePlan(plan.id, { archived: false })
+    toast('✓ Entrada de vuelta a la venta')
+  }
+
+  if (archived) {
+    return (
+      <Card className="flex h-full flex-col p-5 opacity-70 md:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="type-serif text-xl text-ink">{plan.name}</h3>
+            <p className="mt-1 text-xs leading-relaxed text-ink-soft">{plan.tagline}</p>
+          </div>
+          <Badge tone="neutral" className="shrink-0">
+            <EyeOff size={11} /> Retirada
+          </Badge>
+        </div>
+        <p className="mt-4 border-t border-line pt-4 text-xs leading-relaxed text-ink-soft">
+          No aparece en la app y no se puede comprar. Las ventas anteriores siguen válidas y sus
+          compradores conservan su entrada.
+        </p>
+        <div className="mt-auto flex flex-wrap items-center gap-2 pt-5">
+          <Button size="sm" variant="ink" onClick={volverALaVenta}>
+            <RotateCcw size={13} /> Volver a la venta
+          </Button>
+          {onBorrar && (
+            <button
+              type="button"
+              onClick={onBorrar}
+              aria-label={`Eliminar ${plan.name}`}
+              className="rounded-sm p-1.5 text-ink-soft transition-colors hover:bg-danger/10 hover:text-danger"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
+      </Card>
+    )
+  }
   const [price, setPrice] = useState(plan.price === null || plan.price === 0 ? '' : String(plan.price))
   // Los planes guardados en la base todavía traen el placeholder (la portada de MP) de un seed
   // viejo. Si se precargara el campo con eso, el organizador vería un "link cargado" que no cobra
@@ -114,6 +163,19 @@ export function OpsPlanEditor({ plan, onBorrar }: { plan: TicketPlan; onBorrar?:
           </Field>
         </div>
       )}
+
+      {/* Retirar de la venta: la salida cuando la entrada ya se vendió (no se puede borrar sin
+          llevarse el registro) o cuando terminó la preventa. Deja de aparecer sin perder nada. */}
+      <div className="mt-auto flex items-center justify-between gap-3 border-t border-line pt-4 text-xs text-ink-soft">
+        <span>Cuando deje de venderse, retirala en vez de borrarla.</span>
+        <button
+          type="button"
+          onClick={retirar}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-sm px-2 py-1 text-ink-soft transition-colors hover:bg-ink/5 hover:text-ink"
+        >
+          <EyeOff size={13} /> Retirar de la venta
+        </button>
+      </div>
     </Card>
   )
 }

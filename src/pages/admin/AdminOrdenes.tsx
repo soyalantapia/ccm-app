@@ -26,7 +26,9 @@ interface OrderRow {
 }
 
 export default function AdminOrdenes() {
-  const plans = useStore((s) => s.getPlans())
+  // getAdminPlans: una orden puede ser de una entrada que después se retiró de la venta; con
+  // getPlans (sin retiradas) su nombre no se resolvería y la fila mostraría el id crudo.
+  const plans = useStore((s) => s.getAdminPlans())
   // TODAS las órdenes, no solo las del navegador del organizador.
   const orders = useStore((s) => s.getAdminOrders())
   const analytics = useStore((s) => s.getAnalytics())

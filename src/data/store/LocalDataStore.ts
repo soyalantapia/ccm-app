@@ -279,7 +279,9 @@ export class LocalDataStore implements DataStore {
 
   /* ─── Planes y órdenes ─── */
 
-  getPlans(eventId?: string): TicketPlan[] {
+  /** El panel: incluye las retiradas. En demo el seed no tiene ninguna, pero se mantiene la
+   *  distinción para que los consumidores del panel usen la misma API que en remoto. */
+  getAdminPlans(eventId?: string): TicketPlan[] {
     const overrides = readJSON<Partial<Record<PlanId, PlanOverride>>>(K.planOverrides, {})
     const extra = readJSON<TicketPlan[]>(K.planExtra, [])
     return [...seedPlans, ...extra]
@@ -288,6 +290,11 @@ export class LocalDataStore implements DataStore {
         const o = overrides[plan.id]
         return o ? { ...plan, ...(o.price !== undefined ? { price: o.price } : {}), ...(o.mpLink ? { mpLink: o.mpLink } : {}) } : plan
       })
+  }
+
+  getPlans(eventId?: string): TicketPlan[] {
+    // Público: sin las retiradas de la venta.
+    return this.getAdminPlans(eventId).filter((plan) => !plan.archived)
   }
 
   getPlan(id: PlanId): TicketPlan | undefined {

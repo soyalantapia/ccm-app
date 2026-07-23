@@ -345,6 +345,10 @@ model TicketPlan {
   day           PlanDay?
   kind          PlanKind
   preventa      Boolean  @default(false)
+  // Retirada de la venta: deja de aparecer en la app pero NO se borra. Es la salida para cuando
+  // una entrada tiene ventas (no se puede borrar sin llevarse el registro) o cuando terminó la
+  // preventa. La lectura pública filtra archived=false; el panel las sigue viendo para reactivarla.
+  archived      Boolean  @default(false)
 
   orders TicketOrder[]
 

@@ -1,8 +1,21 @@
 import { Router } from 'express'
 import * as eventService from '../services/eventService.js'
+import * as catalogService from '../services/catalogService.js'
 import { requirePermission } from '../middlewares/admin.js'
 
 export const eventsRouter = Router()
+
+/** GET /api/v1/admin/plans — TODOS los tipos de entrada, retiradas incluidas. La ruta pública
+ *  /plans sólo devuelve las que están a la venta; el panel necesita ver una retirada para
+ *  reactivarla, y /admin/ordenes para resolver el nombre de un plan ya vendido y luego retirado. */
+eventsRouter.get('/admin/plans', requirePermission('events:write'), async (req, res, next) => {
+  try {
+    const eventId = typeof req.query.eventId === 'string' ? req.query.eventId : undefined
+    res.json(await catalogService.getAllPlans(eventId))
+  } catch (err) {
+    next(err)
+  }
+})
 
 /** GET /api/v1/events — todos los eventos (con sponsorIds). Público. */
 eventsRouter.get('/events', async (_req, res, next) => {

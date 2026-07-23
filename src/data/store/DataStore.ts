@@ -138,6 +138,12 @@ export interface DataStore {
    * resuelve el nombre de cualquier plan que la persona haya comprado, sea de donde sea.
    */
   getPlans(eventId?: string): TicketPlan[]
+  /**
+   * Como getPlans pero incluye las entradas RETIRADAS de la venta. Sólo para el panel: la ficha
+   * del evento las muestra en gris para reactivarlas, y "Tus órdenes"/AdminOrdenes resuelve el
+   * nombre de una entrada que se vendió y después se retiró. La app pública nunca las ve.
+   */
+  getAdminPlans(eventId?: string): TicketPlan[]
   getPlan(id: PlanId): TicketPlan | undefined
   /** Alta de un tipo de entrada DENTRO de un evento. El server genera el id a partir del nombre. */
   createPlan(eventId: string, input: NewPlan): void

@@ -133,6 +133,9 @@ export interface TicketPlan {
   day?: 'sabado' | 'domingo' | 'combo'
   kind: 'general' | 'vip'
   preventa?: boolean
+  /** Retirada de la venta: no aparece en la app, pero sigue existiendo (sus órdenes quedan
+   *  válidas). Sólo el panel la ve, para reactivarla. La lectura pública nunca la trae. */
+  archived?: boolean
 }
 
 export type OrderStatus = 'iniciada' | 'redirigida_mp' | 'confirmada' | 'cancelada'

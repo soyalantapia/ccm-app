@@ -46,7 +46,9 @@ export default function AdminEventoDetalle() {
   const iniciativas = useStore((s) => s.getAdminEvents().filter((e) => e.parentId === id))
   // Los tipos de entrada de ESTE evento. Antes vivían en una pantalla suelta que los mostraba
   // todos juntos, sin decir de quién eran — que era justo el problema.
-  const planes = useStore((s) => s.getPlans(id))
+  // getAdminPlans, no getPlans: el panel muestra también las entradas retiradas de la venta, en
+  // gris y con el botón para reactivarlas. La ficha pública las esconde.
+  const planes = useStore((s) => s.getAdminPlans(id))
   // Los inscriptos REALES, de todos los dispositivos. Antes esto salía de getRegistrations(),
   // que es device-scoped (lo dice el docstring de DataStore): la lista mostraba únicamente las
   // inscripciones del teléfono desde el que se estaba mirando, o sea casi siempre ninguna. Para

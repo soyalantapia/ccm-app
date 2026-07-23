@@ -423,6 +423,7 @@ export function toTicketPlan(p: {
   day: string | null
   kind: string
   preventa: boolean
+  archived: boolean
 }): DomainTicketPlan {
   return {
     id: p.id as DomainTicketPlan['id'],
@@ -437,5 +438,6 @@ export function toTicketPlan(p: {
     ...(p.day ? { day: p.day as DomainTicketPlan['day'] } : {}),
     kind: p.kind as DomainTicketPlan['kind'],
     preventa: p.preventa,
+    archived: p.archived,
   }
 }

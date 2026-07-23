@@ -428,6 +428,10 @@ function datosDePlan(patch: Record<string, unknown>): Record<string, unknown> {
     data.serviceCharge = precioValido(patch.serviceCharge, 'cargo por servicio') ?? 0
   }
   if ('mpLink' in patch) data.mpLink = cleanStoredUrl(patch.mpLink as string | null | undefined, 'link de pago')
+  // Retirar/reactivar una entrada. Coacciona a booleano en vez de copiar el crudo: el patch viene
+  // del body sin castear, y `archived: "false"` (string) es truthy y dejaría la entrada retirada
+  // "sin querer". Es el mismo tipo de descuido que este archivo ya evita con el precio.
+  if ('archived' in patch) data.archived = Boolean(patch.archived)
   return data
 }
 
@@ -506,7 +510,7 @@ export async function deletePlan(id: PlanId): Promise<void> {
       // organizador quedaba dando vueltas buscando un botón inventado. Se dice lo que es.
       throw conflict(
         'HAS_ORDERS',
-        `No se puede borrar: este tipo de entrada tiene ${conRastro} compra(s) registrada(s) y borrarlo se llevaría el respaldo de esas ventas. Podés cambiarle el nombre, el precio o el link de pago.`,
+        `No se puede borrar: este tipo de entrada tiene ${conRastro} compra(s) registrada(s) y borrarlo se llevaría el respaldo de esas ventas. Si ya no la vendés, retirala de la venta: deja de aparecer sin perder las ventas.`,
       )
     }
     // Carritos abandonados: alguien apretó "Continuar" y cerró la pestaña antes de llegar a
