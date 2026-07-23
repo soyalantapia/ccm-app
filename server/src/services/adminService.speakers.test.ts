@@ -31,4 +31,12 @@ describe('updateCatalogProfile — apariciones de speaker', () => {
     await updateCatalogProfile('cat-1', { name: 'X' } as never)
     expect(tx.eventSpeaker.deleteMany).not.toHaveBeenCalled()
   })
+
+  it('borra todas las apariciones cuando speakerAppearances es un array vacío', async () => {
+    await updateCatalogProfile('cat-1', {
+      speakerAppearances: [],
+    } as never)
+    expect(tx.eventSpeaker.deleteMany).toHaveBeenCalledWith({ where: { profileId: 'cat-1' } })
+    expect(tx.eventSpeaker.createMany).not.toHaveBeenCalled()
+  })
 })
