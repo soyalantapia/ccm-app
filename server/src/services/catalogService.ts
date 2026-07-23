@@ -45,7 +45,7 @@ export async function getSpeakersByEvent(): Promise<SpeakersByEvent[]> {
         .map((s) => s.profile)
         .filter((p) => (vistos.has(p.id) ? false : (vistos.add(p.id), true)))
         .map(toCatalogProfile)
-      return { eventId: ev.id, eventTitle: ev.title, eventDate: String(ev.startDate), speakers }
+      return { eventId: ev.id, eventTitle: ev.title, eventDate: ev.startDate.toISOString().slice(0, 10), speakers }
     })
     .filter((ev) => ev.speakers.length > 0)
 }
