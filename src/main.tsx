@@ -10,11 +10,15 @@ import App from './App'
 import { queryClient } from './lib/queryClient'
 import { initTheme } from './lib/theme'
 import { ensureDevice } from './lib/identity'
+import { instalarDropGuard } from './lib/dropGuard'
 
 // El service worker lo registra <UpdatePrompt/> (useRegisterSW) para poder
 // avisar "nueva versión disponible" en vez de dejar un build viejo en pantalla.
 initTheme()
 ensureDevice()
+// Soltar una foto encima del formulario hacía que el navegador navegara al archivo y se
+// llevara puesto todo lo cargado. Ver src/lib/dropGuard.ts.
+instalarDropGuard()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

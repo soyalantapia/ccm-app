@@ -404,15 +404,24 @@ export function toTicketOrder(
   }
 }
 
-/** Fila AdCampaign → campaña del dominio (publicidad autogestionada). */
-export function toAdCampaign(c: AdCampaign): DomainAdCampaign {
+/**
+ * Fila AdCampaign → campaña del dominio (publicidad autogestionada).
+ *
+ * `conPrecio` es false por defecto porque el consumidor principal es GET /api/v1/campaigns, que
+ * es PÚBLICO: lo lee el front sin sesión para pintar el banner del sponsor. Con hours y total
+ * adentro, cualquiera con curl leía cuánto pagó cada marca y cuántas horas contrató — el dato
+ * comercial que sostiene la negociación por rubro y la exclusividad que se vende en el pitch.
+ *
+ * No se cierra el endpoint a propósito: cerrarlo apaga el banner del sponsor que pagó, en
+ * silencio, porque el front se lo traga en un catch vacío. Se saca el precio, no el acceso.
+ */
+export function toAdCampaign(c: AdCampaign, conPrecio = false): DomainAdCampaign {
   return {
     id: c.id,
     slot: c.slot,
     brand: c.brand,
     headline: c.headline,
-    hours: c.hours,
-    total: c.total,
+    ...(conPrecio ? { hours: c.hours, total: c.total } : {}),
     ts: c.ts.toISOString(),
     ...(c.cta ? { cta: c.cta } : {}),
     ...(c.tagline ? { tagline: c.tagline } : {}),

@@ -65,7 +65,11 @@ export function contenidoCoincide(filepath: string, ext: string): boolean {
   }
 }
 
-const MAX_BYTES = 5 * 1024 * 1024 // 5 MB
+// 20 MB: el tope se aplica al archivo ORIGINAL, ANTES de optimizar (optimizeInPlace corre
+// después). Con 5 MB se rechazaban las fotos del fotógrafo del evento —8 a 12 MB— que el
+// propio server sabe achicar: medido, una de 4,22 MB / 4032x3024 queda en 0,64 MB / 2000x1500
+// en medio segundo. Era tirar material que entraba perfecto.
+const MAX_BYTES = 20 * 1024 * 1024 // 20 MB
 
 /** Resuelve la URL pública de un archivo subido a partir de su nombre. */
 function publicUrl(filename: string): string {
@@ -140,7 +144,7 @@ export async function handleUpload(req: IncomingMessage): Promise<{ url: string 
     const code = (err as { code?: number })?.code
     // 1009 = biggerThanMaxFileSize, 1015 = biggerThanTotalMaxFileSize
     if (code === 1009 || code === 1015) {
-      throw new ApiError(413, 'FILE_TOO_LARGE', 'La imagen supera los 5 MB. Comprimila o subí una versión más liviana.')
+      throw new ApiError(413, 'FILE_TOO_LARGE', 'La imagen supera los 20 MB. Probá con una versión más liviana.')
     }
     throw new ApiError(400, 'UPLOAD_FAILED', 'No se pudo procesar el archivo. Verificá que sea una imagen válida (jpeg/png/webp/gif) de hasta 5 MB.')
   }

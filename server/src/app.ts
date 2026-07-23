@@ -15,6 +15,7 @@ import { notasRouter } from './routes/notas.js'
 import { analyticsRouter } from './routes/analytics.js'
 import { eventsRouter } from './routes/events.js'
 import { registrationsRouter } from './routes/registrations.js'
+import { grantsRouter } from './routes/grants.js'
 import { catalogRouter } from './routes/catalog.js'
 import { photosRouter } from './routes/photos.js'
 import { ordersRouter } from './routes/orders.js'
@@ -97,6 +98,7 @@ export function createApp() {
   v1.use(analyticsRouter) // Fase A: /analytics, /admin/analytics
   v1.use(eventsRouter) // Fase B: /events, /events/:slug, /events/:id/blocks, /blocks/:id/availability
   v1.use(registrationsRouter) // Fase B: /registrations
+  v1.use(grantsRouter) // Entradas regaladas — lado del invitado: /grants/:id/preview y /claim
   v1.use(catalogRouter) // Fase E: /catalog, /galleries, /contents
   v1.use(photosRouter) // Fase E: /favorites, /downloads
   v1.use(adminTeamRouter) // Gestión del equipo: /admin/team* (sólo OWNER)

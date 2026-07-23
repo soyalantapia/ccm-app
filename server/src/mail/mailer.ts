@@ -39,10 +39,25 @@ class ResendMailer implements Mailer {
     private from: string,
   ) {}
   async send(to: string, msg: EmailMsg) {
+    // Resend embebe imágenes inline vía adjuntos con content_id: el HTML las referencia con
+    // `cid:...` y se ven sin pedir "mostrar imágenes".
+    const attachments = msg.attachments?.map((a) => ({
+      filename: a.filename,
+      content: a.content.toString('base64'),
+      content_type: a.contentType,
+      content_id: a.cid,
+    }))
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: this.from, to, subject: msg.subject, html: msg.html, text: msg.text }),
+      body: JSON.stringify({
+        from: this.from,
+        to,
+        subject: msg.subject,
+        html: msg.html,
+        text: msg.text,
+        ...(attachments?.length ? { attachments } : {}),
+      }),
     })
     if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text().catch(() => '')}`)
     const data = (await res.json().catch(() => ({}))) as { id?: string }
@@ -68,7 +83,21 @@ class SmtpMailer implements Mailer {
       greetingTimeout: 5000,
       socketTimeout: 10000,
     })
-    const info = await tx.sendMail({ from: this.from, to, subject: msg.subject, html: msg.html, text: msg.text })
+    // nodemailer embebe imágenes inline con `cid`: el HTML las referencia con `cid:...`.
+    const attachments = msg.attachments?.map((a) => ({
+      filename: a.filename,
+      content: a.content,
+      contentType: a.contentType,
+      cid: a.cid,
+    }))
+    const info = await tx.sendMail({
+      from: this.from,
+      to,
+      subject: msg.subject,
+      html: msg.html,
+      text: msg.text,
+      ...(attachments?.length ? { attachments } : {}),
+    })
     return { id: info.messageId ?? 'sent', delivered: true }
   }
 }

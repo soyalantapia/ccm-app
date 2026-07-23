@@ -4,7 +4,7 @@
  * Uso:
  *   <ImageUpload onUrl={(url) => setF(p => ({ ...p, banner: url }))} />
  *
- * Al seleccionar un archivo local (jpeg/png/webp/gif, ≤5 MB), hace POST
+ * Al seleccionar un archivo local (jpeg/png/webp/gif, ≤20 MB), hace POST
  * /admin/upload con FormData y, al recibir { url }, llama onUrl(url).
  * Si UPLOAD_DIR no está configurado en el server, muestra un aviso claro.
  */
@@ -29,7 +29,7 @@ interface Props {
 
 // SVG excluido a propósito: es ejecutable y se serviría desde el origen de la app (XSS).
 const ACCEPT = 'image/jpeg,image/png,image/webp,image/gif'
-const MAX_BYTES = 5 * 1024 * 1024
+const MAX_BYTES = 20 * 1024 * 1024 // espejo de uploadService.ts — el server achica solo
 
 function apiBase() {
   const raw = import.meta.env.VITE_API_URL ?? window.location.origin
@@ -84,7 +84,7 @@ export function ImageUpload({ onUrl, className = '', label = 'Subir imagen', mul
   /** Devuelve true si la subida salió bien. */
   async function subirUno(file: File): Promise<boolean> {
     if (file.size > MAX_BYTES) {
-      toast(`"${file.name}" supera los 5 MB. Comprimila antes de subirla.`, 'info')
+      toast(`"${file.name}" supera los 20 MB. Probá con una versión más liviana.`, 'info')
       return false
     }
     return handleFile(file)
@@ -92,7 +92,7 @@ export function ImageUpload({ onUrl, className = '', label = 'Subir imagen', mul
 
   async function handleFile(file: File): Promise<boolean> {
     if (file.size > MAX_BYTES) {
-      toast('La imagen supera los 5 MB. Comprimila antes de subirla.', 'info')
+      toast('La imagen supera los 20 MB. Comprimila antes de subirla.', 'info')
       return false
     }
     setUploading(true)

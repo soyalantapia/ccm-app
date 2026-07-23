@@ -38,6 +38,24 @@ function cupoValido(raw: unknown, campo = 'cupo'): number | null {
   return n
 }
 
+/**
+ * Tipo de perfil del catálogo. La columna es un String libre, pero el dominio tiene exactamente
+ * dos valores y el serializador colapsa a 'participante' TODO lo que no sea 'expositor'.
+ * Sin este guard, un `kind` con otra grafía —"Expositor" con mayúscula, o con un espacio de más—
+ * se guarda, devuelve 200, y el perfil vuelve como participante sin que nadie se entere: se
+ * pierde el cupo de imágenes propio y el campo de proyectos. Y no se puede auditar desde la API,
+ * porque el GET ya sale colapsado.
+ * Normaliza lo que se quiso decir; rechaza con un 400 visible lo que no existe.
+ */
+const KINDS = ['participante', 'expositor', 'speaker'] as const
+type CatalogKind = (typeof KINDS)[number]
+function kindValido(raw: unknown, fallback: CatalogKind = 'participante'): CatalogKind {
+  if (raw == null) return fallback
+  const k = String(raw).trim().toLowerCase()
+  if ((KINDS as readonly string[]).includes(k)) return k as CatalogKind
+  throw badRequest('INVALID_CATALOG_KIND', `El tipo de perfil debe ser ${KINDS.join(' o ')}.`)
+}
+
 /* ─── Eventos ─── */
 async function readEvent(id: string): Promise<EventItem> {
   const ev = await prisma.event.findUniqueOrThrow({
@@ -344,7 +362,7 @@ async function readCatalog(id: string): Promise<CatalogProfile> {
   return toCatalogProfile(c)
 }
 export async function createCatalogProfile(c: CatalogProfile): Promise<CatalogProfile> {
-  await prisma.catalogProfile.create({ data: { id: c.id, slug: c.slug, name: c.name, role: c.role, kind: c.kind ?? 'participante', platform: c.platform, city: c.city, bio: c.bio, projects: c.projects ?? null, photo: c.photo, instagram: c.instagram ?? null, whatsapp: c.whatsapp ?? null, verified: c.verified, participatesIn: c.participatesIn, quote: c.quote ?? null } })
+  await prisma.catalogProfile.create({ data: { id: c.id, slug: c.slug, name: c.name, role: c.role, kind: kindValido(c.kind), platform: c.platform, city: c.city, bio: c.bio, projects: c.projects ?? null, photo: c.photo, instagram: c.instagram ?? null, whatsapp: c.whatsapp ?? null, verified: c.verified, participatesIn: c.participatesIn, quote: c.quote ?? null } })
   if (c.portfolio?.length) await prisma.portfolioPiece.createMany({ data: c.portfolio.map((p, i) => ({ id: p.id, profileId: c.id, image: p.image, title: p.title, caption: p.caption ?? null, price: precioValido(p.price, 'precio de la obra'), order: i })) })
   // Alta: no hay filas previas de EventSpeaker que reemplazar, sólo crearlas si vinieron.
   if ('speakerAppearances' in c && Array.isArray((c as { speakerAppearances?: unknown }).speakerAppearances)) {
@@ -358,6 +376,9 @@ export async function createCatalogProfile(c: CatalogProfile): Promise<CatalogPr
 export async function updateCatalogProfile(id: string, patch: Partial<CatalogProfile>): Promise<CatalogProfile> {
   const data: Record<string, unknown> = {}
   for (const k of ['slug', 'name', 'role', 'kind', 'platform', 'city', 'bio', 'projects', 'photo', 'instagram', 'whatsapp', 'verified', 'participatesIn', 'quote'] as const) if (k in patch) data[k] = (patch as Record<string, unknown>)[k]
+  // El for de arriba copia `kind` crudo; acá se pisa con el valor validado. La condición es
+  // `!== undefined` y no `'kind' in patch`: campo que no viene es campo que no se toca.
+  if (patch.kind !== undefined) data.kind = kindValido(patch.kind)
   await prisma.$transaction(async (tx) => {
     // Lock del padre antes de reemplazar sus hijos: dos organizadores guardando la misma
     // entidad a la vez borran y recrean las mismas filas hijas, y el segundo choca contra la

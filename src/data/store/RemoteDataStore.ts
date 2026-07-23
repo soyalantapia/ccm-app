@@ -14,6 +14,8 @@ import type {
   NewConvocatoria,
   NewCampaign,
   HydratableResource,
+  GrantPreview,
+  GrantClaim,
 } from './DataStore'
 import { slugify } from './overlay'
 import { newId, writeJSON } from '../../lib/storage'
@@ -1832,6 +1834,35 @@ export class RemoteDataStore extends LocalDataStore {
         return null
       }
     }
+  }
+
+  override async previewGrant(grantId: string, token: string): Promise<GrantPreview> {
+    // Solo lectura: si el link está roto o el server no responde, la pantalla trata el error como
+    // "link inválido" (no_existe) en vez de quedar colgada. El token viaja en la query (GET).
+    try {
+      return await this.api.get<GrantPreview>(`/grants/${grantId}/preview?token=${encodeURIComponent(token)}`)
+    } catch {
+      return { ok: false, motivo: 'no_existe' }
+    }
+  }
+
+  override async claimGrant(grantId: string, token: string): Promise<GrantClaim> {
+    // El invitado pudo no haber abierto nunca la app: sin token de device, el claim daría 401.
+    // Lo aseguramos primero (POST /devices si falta) para que ESTE dispositivo quede enlazado a la
+    // persona del regalo. Sin token no se puede reclamar: devolvemos un motivo que la UI muestra.
+    await this.ensureDeviceToken()
+    if (!getDeviceToken()) return { ok: false, motivo: 'no_existe' }
+    const res = await this.api.post<GrantClaim>(`/grants/${grantId}/claim`, { token })
+    if (res.ok) {
+      // El claim materializó una inscripción server-side y enlazó este dispositivo a la persona
+      // del regalo, pero los cachés device-scoped se hidrataron al ARRANCAR, antes de todo esto.
+      // Sin refrescarlos, el invitado toca "Abrir mi entrada" y Mi QR le dice "todavía no tenés tu
+      // QR" (lee el caché viejo y vacío). Re-hidratamos registros (acreditación + "Mis
+      // Inscripciones") y perfil (ahora trae el nombre de la persona ya enlazada).
+      this.hydrateRegistrations()
+      this.hydrateProfile()
+    }
+    return res
   }
 
   private scheduleFlush(): void {

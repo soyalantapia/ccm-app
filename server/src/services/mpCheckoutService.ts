@@ -9,7 +9,7 @@
  * orden y se regalaban las demás.
  */
 import { prisma } from '../lib/prisma.js'
-import { env } from '../lib/env.js'
+import { publicBase } from '../lib/publicUrl.js'
 import { ApiError, notFound, conflict, badRequest } from '../lib/errors.js'
 import * as mpApi from '../lib/mpApi.js'
 import { getValidToken } from './mpOAuthService.js'
@@ -128,16 +128,8 @@ async function resolverCrudo(kind: PaymentKind, resourceId: string, deviceId?: s
   }
 }
 
-/**
- * Base pública del server, para armar las URLs de vuelta y de aviso. Mismo patrón que
- * adminAuth.ts (publicBase): PUBLIC_BASE_URL ya existe en el proyecto para esto exacto. Antes
- * se recortaba un sufijo de MP_REDIRECT_URI con un regex anclado — fragil (si la variable no
- * estaba seteada la base quedaba vacía, y con otra forma el regex no matcheaba) y la
- * consecuencia real era que MP nunca podía entregar el aviso de pago.
- */
-function baseUrl(): string {
-  return (env.PUBLIC_BASE_URL ?? 'http://localhost:5173').replace(/\/$/, '')
-}
+/** Base pública del server, para armar las URLs de vuelta y de aviso. Ver lib/publicUrl.ts. */
+const baseUrl = publicBase
 
 /** Duerme `ms` milisegundos. Usado para los backoffs cortos de los defectos A y B. */
 function dormir(ms: number): Promise<void> {

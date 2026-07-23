@@ -1,10 +1,12 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { requirePermission } from '../middlewares/admin.js'
-import { notFound } from '../lib/errors.js'
+import { badRequest, notFound } from '../lib/errors.js'
 import * as admin from '../services/adminService.js'
 import * as applicationService from '../services/applicationService.js'
 import * as personService from '../services/personService.js'
+import * as grantService from '../services/grantService.js'
+import * as grantMailService from '../services/grantMailService.js'
 import * as catalogService from '../services/catalogService.js'
 import { handleUpload } from '../services/uploadService.js'
 import * as orderService from '../services/orderService.js'
@@ -260,6 +262,60 @@ adminRouter.get('/admin/people/:id', requirePermission('people:read'), async (re
       return
     }
     res.json(ficha)
+  } catch (err) {
+    next(err)
+  }
+})
+
+/* ─── Entradas regaladas (cortesías) ─── */
+
+// Regalar N entradas de un evento a una persona. Devuelve el grant con su link para copiar.
+adminRouter.post('/admin/grants', requirePermission('grants:write'), async (req, res, next) => {
+  try {
+    const b = req.body as { personId?: string; eventId?: string; qty?: number; note?: string }
+    if (!b.personId || !b.eventId) {
+      next(badRequest('GRANT_INCOMPLETO', 'Falta la persona o el evento.'))
+      return
+    }
+    const grant = await grantService.crearGrant({
+      personId: b.personId,
+      eventId: b.eventId,
+      qty: typeof b.qty === 'number' ? b.qty : 1,
+      note: typeof b.note === 'string' ? b.note : undefined,
+      grantedById: req.admin!.userId,
+    })
+    // El mail sale acá, best-effort: si falla, el grant YA está creado (el link se puede copiar
+    // de la ficha) y la respuesta lleva el resultado del envío para que el panel lo muestre.
+    const envio = await grantMailService.enviarMailDeGrant(grant.id)
+    res.status(201).json({ ...grant, envio })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// Las cortesías de una persona, para la ficha.
+adminRouter.get('/admin/people/:id/grants', requirePermission('grants:write'), async (req, res, next) => {
+  try {
+    res.json(await grantService.grantsDePersona(req.params.id))
+  } catch (err) {
+    next(err)
+  }
+})
+
+// Reenviar el mail de una cortesía (mismo link, sale de nuevo).
+adminRouter.post('/admin/grants/:id/resend', requirePermission('grants:write'), async (req, res, next) => {
+  try {
+    res.json(await grantMailService.enviarMailDeGrant(req.params.id))
+  } catch (err) {
+    next(err)
+  }
+})
+
+// Revocar una cortesía (si estaba reclamada, también cancela la inscripción que creó).
+adminRouter.delete('/admin/grants/:id', requirePermission('grants:write'), async (req, res, next) => {
+  try {
+    await grantService.revocarGrant(req.params.id)
+    res.status(204).end()
   } catch (err) {
     next(err)
   }

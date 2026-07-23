@@ -23,6 +23,7 @@ export const PERMISSIONS = [
   'sponsors:write', // sponsors y planes de entrada
   'analytics:read', // dashboard y métricas
   'orders:read', // entradas y órdenes
+  'grants:write', // regalar entradas de cortesía desde el CRM
   'team:manage', // invitar, cambiar rol, desactivar
   'upload', // subir imágenes
 ] as const
@@ -48,6 +49,7 @@ const GRANTS: Record<Exclude<AdminRole, 'OWNER'>, readonly Permission[]> = {
     'content:write',
     'analytics:read',
     'orders:read',
+    'grants:write',
     'upload',
   ],
   // Prensa y marketing. Publica contenido; NO ve datos de postulantes.

@@ -36,6 +36,8 @@ import type {
   CheckoutItem,
   CatalogSpeakerAppearances,
   DataStore,
+  GrantClaim,
+  GrantPreview,
   HydratableResource,
   NewBlock,
   NewPlan,
@@ -843,5 +845,15 @@ export class LocalDataStore implements DataStore {
   /** En demo no hay server: se devuelve la lista vacía en vez de inventar inscriptos. */
   async fetchInscriptos(_eventId: string): Promise<InscriptoAdmin[]> {
     return []
+  }
+
+  /** Las entradas regaladas viven en el backend; en la demo no hay ninguna que resolver, así que
+   *  la pantalla /i/:token degrada a "link inválido" en vez de romperse. */
+  async previewGrant(_grantId: string, _token: string): Promise<GrantPreview> {
+    return { ok: false, motivo: 'no_existe' }
+  }
+
+  async claimGrant(_grantId: string, _token: string): Promise<GrantClaim> {
+    return { ok: false, motivo: 'no_existe' }
   }
 }

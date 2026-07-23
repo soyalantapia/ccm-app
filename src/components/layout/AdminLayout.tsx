@@ -38,7 +38,7 @@ interface NavItem {
   needs?: Permission
 }
 
-const SECTIONS: NavItem[] = [
+export const SECTIONS: NavItem[] = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true, needs: 'analytics:read' },
   { to: '/admin/eventos', label: 'Eventos', icon: CalendarDays, needs: 'events:write' },
   { to: '/admin/convocatorias', label: 'Convocatorias', icon: ClipboardList, needs: 'convocatorias:write' },
@@ -62,15 +62,19 @@ const SECTIONS: NavItem[] = [
    son atajos a secciones que YA están en SECTIONS, así que si el rol no llega a la sección
    tampoco tiene que ver el atajo. Sin el filtro, en celular un CONTENT (prensa/marketing) veía
    "Usuarios" —el CRM con datos personales— y al tocarlo se comía el 403 del backend. */
-const NAV_LEFT: NavItem[] = [
+export const NAV_LEFT: NavItem[] = [
   { to: '/admin/eventos', label: 'Eventos', icon: CalendarDays, needs: 'events:write' },
   { to: '/admin/personas', label: 'Usuarios', icon: Users, needs: 'people:read' },
 ]
-const NAV_CENTER = { to: '/admin', label: 'Panel', icon: LayoutDashboard, end: true }
-const NAV_RIGHT: NavItem[] = [
+export const NAV_CENTER = { to: '/admin', label: 'Panel', icon: LayoutDashboard, end: true }
+export const NAV_RIGHT: NavItem[] = [
   { to: '/admin/galerias', label: 'Sponsors', icon: Images, needs: 'content:write' },
 ]
-const MORE: NavItem[] = [
+export const MORE: NavItem[] = [
+  // Convocatorias estaba declarada en SECTIONS pero en NINGÚN nav del celular: desde el teléfono
+  // no había forma de llegar salvo tipeando /admin/convocatorias a mano. Y es justo la sección
+  // que se le muestra a las universidades.
+  { to: '/admin/convocatorias', label: 'Convocatorias', icon: ClipboardList, needs: 'convocatorias:write' },
   { to: '/admin/postulaciones', label: 'Postulaciones', icon: Inbox, needs: 'applications:read' },
   { to: '/admin/catalogo', label: 'Expositores', icon: Store, needs: 'catalog:write' },
   { to: '/admin/contenido', label: 'Contenido', icon: Film, needs: 'content:write' },

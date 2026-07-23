@@ -42,6 +42,7 @@ const Stand = lazyWithReload(() => import('./pages/Stand'))
 const Legales = lazyWithReload(() => import('./pages/Legales'))
 const Inicio = lazyWithReload(() => import('./pages/app/Inicio'))
 const MiQR = lazyWithReload(() => import('./pages/app/MiQR'))
+const EntradaRegalo = lazyWithReload(() => import('./pages/EntradaRegalo'))
 const Dashboard = lazyWithReload(() => import('./pages/admin/Dashboard'))
 const AdminEventos = lazyWithReload(() => import('./pages/admin/AdminEventos'))
 const AdminEventoDetalle = lazyWithReload(() => import('./pages/admin/AdminEventoDetalle'))
@@ -120,6 +121,9 @@ const router = createBrowserRouter(
             { path: '/privacidad', element: <S><Legales kind="privacidad" /></S> },
             { path: '/app', element: <S><Inicio /></S> },
             { path: '/mi-qr', element: <S><MiQR /></S> },
+            // El link del mail "te regalaron entradas" (/i/<grantId>.<token>). :token captura el
+            // segmento entero; la página separa grantId y token en el primer punto.
+            { path: '/i/:token', element: <S><EntradaRegalo /></S> },
             // El viejo Perfil vive dentro del hub Mi QR — los links existentes siguen andando
             { path: '/perfil', element: <Navigate to="/mi-qr" replace /> },
             { path: '*', element: <NotFound /> },
