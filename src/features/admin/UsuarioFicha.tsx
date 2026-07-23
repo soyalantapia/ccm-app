@@ -1,5 +1,6 @@
 import { Badge, Sheet } from '../../components/ui'
 import { usePerson } from '../../data/queries'
+import { RegalarEntradas } from './RegalarEntradas'
 import {
   campoLabel,
   formatDateTime,
@@ -111,6 +112,8 @@ export function UsuarioFicha({ personId, onClose }: Props) {
               </ul>
             )}
           </section>
+
+          {personId && <RegalarEntradas personId={personId} />}
 
           {data.postulacionesDetalle.length > 0 && (
             <section>
