@@ -191,3 +191,32 @@ describe('el cobro espera a que las órdenes existan de verdad', () => {
     await waitFor(() => expect(startCheckout).toHaveBeenCalled())
   })
 })
+
+/**
+ * "Vacío = a confirmar, no se vende todavía" es lo que promete el formulario del panel al cargar
+ * un tipo de entrada sin precio. Nada lo hacía cumplir: la entrada salía con el stepper puesto,
+ * `p.price ?? 0` la mostraba en "$0" y el comprador podía cerrar una orden por cero pesos.
+ */
+describe('un tipo de entrada sin precio se anuncia, no se vende', () => {
+  it('no muestra $0 ni el stepper: dice que el precio está a confirmar', () => {
+    planes = [planVip({ id: 'sunset-vip', name: 'Sunset VIP', price: null })]
+    render(<TicketSelector />)
+    expect(screen.getByText('Sunset VIP')).toBeTruthy()
+    expect(screen.getByText(/Precio a confirmar/i)).toBeTruthy()
+    expect(screen.queryByLabelText('Agregar Sunset VIP')).toBeNull()
+  })
+
+  it('no entra en el total ni deja llegar al checkout', () => {
+    planes = [planVip({ id: 'sunset-vip', name: 'Sunset VIP', price: null })]
+    render(<TicketSelector />)
+    // Sin nada comprable, la barra sticky del total no aparece.
+    expect(screen.queryByText(/Continuar/i)).toBeNull()
+    expect(createOrders).not.toHaveBeenCalled()
+  })
+
+  it('la de al lado, con precio, se sigue vendiendo normal', () => {
+    planes = [planVip({ id: 'sunset-vip', name: 'Sunset VIP', price: null }), planVip()]
+    render(<TicketSelector />)
+    expect(screen.getByLabelText('Agregar Sábado · Night VIP')).toBeTruthy()
+  })
+})

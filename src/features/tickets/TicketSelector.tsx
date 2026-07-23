@@ -74,7 +74,14 @@ export function TicketSelector({
   const busyRef = useRef(false)
   const [busy, setBusy] = useState(false)
 
-  const vipPlans = useMemo(() => plans.filter((p) => p.kind === 'vip'), [plans])
+  /**
+   * Las que se pueden comprar de verdad. Un precio vacío significa "a confirmar, no se vende
+   * todavía" —así lo dice el formulario del panel— pero nada lo hacía cumplir: la entrada salía
+   * con el stepper puesto, `p.price ?? 0` la mostraba en "$0" y el comprador podía cerrar una
+   * orden por cero pesos. El tier se sigue mostrando, con su precio a confirmar; lo que no hace
+   * es venderse.
+   */
+  const vipPlans = useMemo(() => plans.filter((p) => p.kind === 'vip' && p.price != null), [plans])
 
   const totalQty = vipPlans.reduce((acc, p) => acc + (qty[p.id] ?? 0), 0)
   const total = vipPlans.reduce(
@@ -198,6 +205,8 @@ export function TicketSelector({
       <div className="overflow-hidden rounded-md border border-line bg-surface">
         {plans.map((plan) => {
           const isFree = plan.kind === 'general'
+          // Anunciada pero todavía sin precio: se muestra, no se vende (ver vipPlans).
+          const aConfirmar = !isFree && plan.price == null
           const count = qty[plan.id] ?? 0
           return (
             <article
@@ -217,6 +226,8 @@ export function TicketSelector({
                 <p className="type-serif mt-2 text-lg text-ink">
                   {isFree ? (
                     'Gratis'
+                  ) : aConfirmar ? (
+                    <span className="text-ink-soft">Precio a confirmar</span>
                   ) : (
                     <>
                       {formatMoney(plan.price ?? 0)}
@@ -244,6 +255,11 @@ export function TicketSelector({
                     Inscribirme
                   </Button>
                 )
+              ) : aConfirmar ? (
+                // Sin stepper: el stepper es la promesa de que se puede comprar, y no se puede.
+                <Badge tone="outline" className="shrink-0">
+                  Próximamente
+                </Badge>
               ) : (
                 <div className="flex shrink-0 items-center gap-3">
                   <button
