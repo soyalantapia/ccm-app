@@ -163,6 +163,7 @@ model Device {
   applications  Application[]
   analytics     AnalyticsEvent[]
   payments      Payment[]
+  grantsClaimed TicketGrant[]
 
   personId String?
   person   Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
@@ -190,6 +191,7 @@ model Person {
 
   devices      Device[]
   applications Application[]
+  grants       TicketGrant[]
 
   @@index([createdAt])
 }
@@ -259,6 +261,7 @@ model Event {
   registrations Registration[]
   sponsors      EventSponsor[]
   convocatorias Convocatoria[]
+  grants        TicketGrant[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -319,6 +322,58 @@ model Registration {
   @@unique([deviceId, eventId, blockId])
   @@index([blockId, status])
   @@index([eventId, status])
+}
+
+enum GrantStatus {
+  pendiente // otorgado, todavía sin reclamar
+  reclamado // el invitado abrió el link y quedó inscripto
+  revocado // el organizador lo dio de baja; el link deja de funcionar
+}
+
+/**
+ * Una entrada REGALADA por el organizador a una persona, desde el CRM.
+ *
+ * Existe porque toda inscripción/orden normal nace del DISPOSITIVO del comprador (requireDevice),
+ * y los invitados de cortesía —prensa, sponsors— casi nunca abrieron la app. Por eso el grant
+ * cuelga de Person (email), no de Device: la persona puede no tener ningún dispositivo todavía.
+ *
+ * Ciclo: el organizador lo crea (pendiente) → sale un mail con un link → el invitado lo abre en
+ * su teléfono → se le crea el dispositivo y el grant pasa a `reclamado`, materializando una
+ * Registration confirmada vía confirmarLugar() (el mismo camino que una compra o una inscripción
+ * gratis, así aparece en la ficha de la persona, en Entradas y órdenes, y en la lista de puerta).
+ *
+ * El cupo se reserva al OTORGAR, no al reclamar: si se chequeara al reclamar, el organizador
+ * mandaría 20 invitaciones a un taller de 5 lugares y se enterarían los invitados de a uno, con
+ * el mail en la mano. Por eso los grants activos (pendiente + reclamado) cuentan contra capacity.
+ *
+ * El token del link NO se guarda: se DERIVA por HMAC de (id + tokenVersion) con GRANT_TOKEN_SECRET
+ * (ver lib/grantToken.ts). Reenviar = recomputar el mismo token. Rotar el link = subir tokenVersion.
+ * Revocar = status revocado (el reclamo lo rechaza). Nada de secretos en reposo: una filtración de
+ * la base no regala entradas.
+ */
+model TicketGrant {
+  id           String      @id @default(cuid())
+  personId     String
+  eventId      String
+  qty          Int         @default(1) // cuántas entradas admite este regalo (una persona, N lugares)
+  note         String? // nota interna del organizador (ej. "prensa La Voz")
+  status       GrantStatus @default(pendiente)
+  tokenVersion Int         @default(1) // subirlo invalida el link viejo sin borrar el grant
+  grantedById  String? // AdminUser que lo otorgó (audit); null si el usuario se dio de baja
+  createdAt    DateTime    @default(now())
+
+  claimedByDeviceId String? // el dispositivo que lo reclamó
+  claimedAt         DateTime?
+
+  person     Person     @relation(fields: [personId], references: [id], onDelete: Cascade)
+  event      Event      @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  grantedBy  AdminUser? @relation(fields: [grantedById], references: [id], onDelete: SetNull)
+  claimedBy  Device?    @relation(fields: [claimedByDeviceId], references: [id], onDelete: SetNull)
+
+  // Una persona no recibe dos regalos ACTIVOS para el mismo evento (se filtra por status en la
+  // app; el índice acelera esa consulta y el conteo de cupo por evento).
+  @@index([eventId, status])
+  @@index([personId, status])
 }
 
 // ─────────────────────────────────────────────────────────
@@ -882,6 +937,7 @@ model AdminUser {
 
   sessions   AdminSession[]
   loginCodes AdminLoginCode[]
+  grants     TicketGrant[]
 }
 
 // Sesión del panel. Es la AUTORIDAD: el token firmado no alcanza por sí solo, tiene que existir
