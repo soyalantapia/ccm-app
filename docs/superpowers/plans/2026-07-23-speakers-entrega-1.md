@@ -181,11 +181,12 @@ model EventSpeaker {
   blockId   String?  // presente si el evento tiene grilla; null si el evento ES la actividad
   order     Int      @default(0)
 
+  id        String   @id @default(cuid()) // PK sintética: Postgres no admite NULL en columnas de PK, y el caso "evento sin grilla" necesita blockId null. Patrón de PortfolioPiece.
   event   Event          @relation(fields: [eventId],   references: [id], onDelete: Cascade)
   profile CatalogProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   block   EventBlock?    @relation(fields: [blockId],   references: [id], onDelete: Cascade)
 
-  @@id([eventId, profileId, blockId])
+  @@unique([eventId, profileId, blockId])
   @@index([eventId])
   @@index([profileId])
 }
@@ -206,13 +207,15 @@ ALTER TABLE "CatalogProfile" ADD COLUMN "quote" TEXT;
 
 -- Tabla puente evento ↔ persona del catálogo (con bloque opcional)
 CREATE TABLE "EventSpeaker" (
+    "id" TEXT NOT NULL,
     "eventId" TEXT NOT NULL,
     "profileId" TEXT NOT NULL,
     "blockId" TEXT,
     "order" INTEGER NOT NULL DEFAULT 0,
-    CONSTRAINT "EventSpeaker_pkey" PRIMARY KEY ("eventId","profileId","blockId")
+    CONSTRAINT "EventSpeaker_pkey" PRIMARY KEY ("id")
 );
 
+CREATE UNIQUE INDEX "EventSpeaker_eventId_profileId_blockId_key" ON "EventSpeaker"("eventId","profileId","blockId");
 CREATE INDEX "EventSpeaker_eventId_idx" ON "EventSpeaker"("eventId");
 CREATE INDEX "EventSpeaker_profileId_idx" ON "EventSpeaker"("profileId");
 
@@ -224,7 +227,7 @@ ALTER TABLE "EventSpeaker" ADD CONSTRAINT "EventSpeaker_blockId_fkey"
     FOREIGN KEY ("blockId") REFERENCES "EventBlock"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ```
 
-> ⚠️ Nota sobre la PK: Postgres permite filas con `blockId = NULL` repetidas bajo una PK compuesta que incluye la columna nullable (dos NULL son distintos). Para esta entrega alcanza — un evento sin grilla tendrá una fila por persona y no se re-inserta la misma. Si más adelante se necesita impedir el duplicado exacto con `blockId` null, se agrega un índice único parcial. No se hace ahora (YAGNI).
+> Nota: PK sintética `id` + `@@unique([eventId,profileId,blockId])`. Postgres NO admite NULL en columnas de PRIMARY KEY, por eso no se usa PK compuesta. Bajo UNIQUE dos NULL son distintos, así que varias personas con blockId null en el mismo evento conviven (correcto). Si más adelante hace falta impedir el duplicado exacto con blockId null, se agrega un índice único parcial. No ahora (YAGNI).
 
 - [ ] **Step 6: Aplicar la migración a la base local**
 
