@@ -199,7 +199,9 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
       participatesIn,
       portfolio,
       quote: f.quote.trim() || undefined,
-      ...(f.kind === 'speaker' ? { speakerAppearances: f.apps } : {}),
+      // Un speaker puro y un expositor-que-además-da-charla cargan apariciones; un
+      // participante no. deriveApps() reconstruye f.apps para los dos casos por igual.
+      ...(f.kind === 'speaker' || f.kind === 'expositor' ? { speakerAppearances: f.apps } : {}),
     }
     if (profile) {
       store.updateCatalogProfile(profile.id, data)
@@ -277,7 +279,7 @@ export function OpsCatalogForm({ open, profile, onClose }: Props) {
           </Field>
         )}
 
-        {f.kind === 'speaker' && (
+        {(f.kind === 'speaker' || f.kind === 'expositor') && (
           <fieldset className="rounded-sm border border-line p-3">
             <legend className="px-1 text-[13px] font-medium text-ink-soft">¿En qué eventos habla?</legend>
             {eventos.map((ev) => {
