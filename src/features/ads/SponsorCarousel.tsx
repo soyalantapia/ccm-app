@@ -6,10 +6,11 @@ import { store, useStore } from '../../data/store'
 import type { Sponsor } from '../../data/types'
 
 /**
- * Lockup de marca on-brand cuando el sponsor todavía no tiene arte (`banner`).
- * Mantiene el slot vivo en prod —donde el backend aún no persiste banners— en vez
- * de renderizar un hueco; el cliente lo reemplaza cargando el arte real. Mismo 3:1
- * que la imagen para que el carrusel no salte.
+ * Lockup de marca on-brand para un sponsor que todavía no tiene arte (`banner`) cargado — en vez
+ * de renderizar un hueco. El backend SÍ persiste y serializa el banner (adminService.createSponsor/
+ * updateSponsor y toSponsor lo incluyen), así que apenas el cliente sube el arte desde el panel
+ * (OpsSponsorForm), este lockup se reemplaza por la imagen. Mismo 3:1 que la imagen para que el
+ * carrusel no salte al cambiar de slide.
  */
 function SponsorLockup({ sponsor }: { sponsor: Sponsor }) {
   return (
@@ -34,9 +35,10 @@ function SponsorLockup({ sponsor }: { sponsor: Sponsor }) {
  * Los banners son placeholders on-brand — el cliente los cambia por el arte real.
  */
 export function SponsorCarousel({ className }: { className?: string }) {
-  // Todos los sponsors: con banner → imagen; sin banner → lockup de marca (fallback).
-  // Antes se filtraba por `s.banner`, y como el backend no serializa banner, en prod
-  // quedaba vacío (n===0 → null) y el slot desaparecía. Ver P1 del análisis.
+  // Todos los sponsors del panel: con banner → imagen; sin banner → lockup de marca (fallback).
+  // NO se filtra por `s.banner`: un sponsor recién cargado que todavía no subió su arte igual
+  // tiene que aparecer (con el lockup), no desaparecer. Filtrarlo dejaba el slot vacío
+  // (n===0 → null). El dato viene de getSponsors(), o sea de la base editable desde el admin.
   const sponsors = useStore((s) => s.getSponsors())
   const n = sponsors.length
   const [i, setI] = useState(0)
