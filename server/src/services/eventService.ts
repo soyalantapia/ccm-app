@@ -1,13 +1,23 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma.js'
 import { toEventItem, toEventBlock } from '../lib/serialize.js'
 import { notFound } from '../lib/errors.js'
 import type { EventItem, EventBlock } from '@domain/types'
 
-/** Los eventos que ve el público: sólo los publicados. Un borrador no existe para nadie
- *  fuera del panel — se filtra acá, en el server, y no escondiendo cosas en la interfaz. */
+/**
+ * Un evento es visible para el público si está publicado Y, si es una INICIATIVA, su evento
+ * padre también lo está. Sin la segunda mitad, publicar un taller adentro de un evento que
+ * todavía es borrador lo saca al aire igual: se llegaba a la ficha del taller —y aparecía en el
+ * listado— de algo que el organizador ni siquiera había anunciado.
+ */
+const VISIBLE_AL_PUBLICO: Prisma.EventWhereInput = {
+  published: true,
+  OR: [{ parentId: null }, { parent: { published: true } }],
+}
+
 export async function getEvents(): Promise<EventItem[]> {
   const rows = await prisma.event.findMany({
-    where: { published: true },
+    where: VISIBLE_AL_PUBLICO,
     orderBy: { startDate: 'asc' },
     include: { sponsors: { select: { sponsorId: true } } },
   })
@@ -26,11 +36,15 @@ export async function getAllEvents(): Promise<EventItem[]> {
 export async function getEvent(slug: string): Promise<EventItem> {
   const ev = await prisma.event.findUnique({
     where: { slug },
-    include: { sponsors: { select: { sponsorId: true } } },
+    include: { sponsors: { select: { sponsorId: true } }, parent: { select: { published: true } } },
   })
   // Un borrador responde igual que un evento inexistente: si diera un error distinto, la ficha
   // de un evento sin publicar sería adivinable desde afuera probando slugs.
-  if (!ev || !ev.published) throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
+  // Y una iniciativa hereda la visibilidad de su padre: publicada adentro de un borrador, sigue
+  // sin existir para el público.
+  if (!ev || !ev.published || (ev.parent && !ev.parent.published)) {
+    throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
+  }
   return toEventItem(ev)
 }
 
@@ -44,8 +58,13 @@ export async function getEvent(slug: string): Promise<EventItem> {
  *  "el admin ve borradores": un getAllX no se prende de casualidad desde una ruta pública, un
  *  flag sí, alcanza con reenviarle un req.query sin castear. */
 async function requireVisibleEvent(eventId: string): Promise<void> {
-  const ev = await prisma.event.findUnique({ where: { id: eventId }, select: { published: true } })
-  if (!ev || !ev.published) {
+  const ev = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { published: true, parent: { select: { published: true } } },
+  })
+  // Ídem para las rutas hijas (agenda, cupo, inscripción): una iniciativa dentro de un borrador
+  // no expone su grilla ni acepta gente.
+  if (!ev || !ev.published || (ev.parent && !ev.parent.published)) {
     throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
   }
 }
@@ -98,11 +117,12 @@ export async function generalRegistrationCount(eventId: string): Promise<number>
 export async function blockAvailability(blockId: string): Promise<Availability> {
   const block = await prisma.eventBlock.findUnique({
     where: { id: blockId },
-    include: { event: { select: { published: true } } },
+    include: { event: { select: { published: true, parent: { select: { published: true } } } } },
   })
   // Bloque de un borrador → el MISMO BLOCK_NOT_FOUND que un id inventado. Acá el 404 habla de
   // bloque y no de evento a propósito: contestar EVENT_NOT_FOUND delataría que el bloque existe.
-  if (!block || !block.event.published) {
+  // Y si el evento es una iniciativa, hereda del padre: dentro de un borrador tampoco se ve.
+  if (!block || !block.event.published || (block.event.parent && !block.event.parent.published)) {
     throw notFound('BLOCK_NOT_FOUND', 'Bloque no encontrado')
   }
   const confirmadas = await prisma.registration.count({ where: { blockId, status: 'confirmada' } })
@@ -172,7 +192,7 @@ export async function getEventsWithBlocks(): Promise<(EventItem & { blocks: Even
   const rows = await prisma.event.findMany({
     // Ruta pública: mismos eventos que devuelve getEvents(). Si acá no se filtrara, el bootstrap
     // del front —que usa este endpoint— se traería los borradores igual.
-    where: { published: true },
+    where: VISIBLE_AL_PUBLICO,
     orderBy: { startDate: 'asc' },
     include: {
       sponsors: { select: { sponsorId: true } },

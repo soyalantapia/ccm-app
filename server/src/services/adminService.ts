@@ -420,6 +420,13 @@ function datosDePlan(patch: Record<string, unknown>): Record<string, unknown> {
   const data: Record<string, unknown> = {}
   for (const k of CAMPOS_PLAN) if (k in patch) data[k] = patch[k]
   if ('price' in patch) data.price = precioValido(patch.price, 'precio del plan')
+  // Fuera de la lista de arriba porque es PLATA y necesita la misma validación que el precio:
+  // entraba como texto sin control. Y estaba directamente ausente, así que el cargo que cargaba
+  // el organizador se descartaba en silencio y la entrada quedaba en 0 — el formulario lo pedía,
+  // el toast decía que salió bien, y no se guardaba nada.
+  if ('serviceCharge' in patch) {
+    data.serviceCharge = precioValido(patch.serviceCharge, 'cargo por servicio') ?? 0
+  }
   if ('mpLink' in patch) data.mpLink = cleanStoredUrl(patch.mpLink as string | null | undefined, 'link de pago')
   return data
 }

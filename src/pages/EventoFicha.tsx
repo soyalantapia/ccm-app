@@ -8,6 +8,7 @@ import type { EventBlock } from '../data/types'
 import { BlockRow } from '../features/eventos/BlockRow'
 import { EventCard } from '../features/eventos/EventCard'
 import { EventCta } from '../features/eventos/EventCta'
+import { TicketSelector } from '../features/tickets/TicketSelector'
 import { ConvocatoriaBanner } from '../features/eventos/ConvocatoriaBanner'
 import { PrincipalBody } from '../features/eventos/PrincipalBody'
 import { EVENT_TYPE_LABELS, blockSortKey, dayLabel } from '../features/eventos/eventMeta'
@@ -52,6 +53,7 @@ function SocioGate() {
 export default function EventoFicha() {
   const { slug } = useParams<{ slug: string }>()
   const events = useEvents()
+  const plans = useStore((s) => s.getPlans())
   const isSocio = useStore((s) => s.isSocio())
   const hydrating = useStore((s) => s.isHydrating('events'))
   const event = events.find((e) => e.slug === slug)
@@ -97,6 +99,10 @@ export default function EventoFicha() {
   /* Iniciativas que cuelgan de este evento. Se listan sólo acá y en el panel: el filtro de la
      grilla general las saca a propósito, para que no aparezcan como encuentros sueltos. */
   const iniciativas = events.filter((e) => e.parentId === event.id)
+  /* Los tipos de entrada de ESTE evento. Hasta acá sólo el evento principal podía mostrarlos
+     —el selector vivía adentro de PrincipalBody—, así que se podían cargar entradas para
+     cualquier evento y ninguna era visible ni comprable fuera del principal. */
+  const entradas = plans.filter((p) => p.eventId === event.id)
 
   return (
     <>
@@ -179,10 +185,37 @@ export default function EventoFicha() {
                 {event.description}
               </p>
               <div className="mt-8">
-                {locked ? <SocioGate /> : <EventCta key={event.id} event={event} />}
+                {/* Con tipos de entrada cargados el CTA suelto sobra y además se contradice:
+                    mostraría "Comprar mi lugar · $25.000" arriba de un selector donde la misma
+                    entrada puede costar otra cosa. Manda el selector, que es más específico. */}
+                {locked ? (
+                  <SocioGate />
+                ) : entradas.length > 0 ? null : (
+                  <EventCta key={event.id} event={event} />
+                )}
               </div>
             </div>
           </section>
+
+          {/* Entradas de este evento. El precio suelto del evento (EventCta) y los tipos de
+              entrada son dos formas distintas de vender: si hay tipos cargados, mandan ellos,
+              porque son más específicos —cada uno con su precio, su cargo y sus ventajas. */}
+          {!locked && entradas.length > 0 && (
+            <section className="mx-auto max-w-6xl px-5 pb-12 md:pb-16">
+              <SectionTitle
+                eyebrow="Entradas"
+                title={
+                  <>
+                    Elegí tu <em className="text-accent">entrada</em>
+                  </>
+                }
+                lead="Cada tipo incluye cosas distintas. El cupo se actualiza en vivo."
+              />
+              <div className="mt-8 md:mt-10">
+                <TicketSelector eventId={event.id} />
+              </div>
+            </section>
+          )}
 
           {/* Grilla de bloques con cupo en vivo (oculta tras el candado) */}
           {!locked && (

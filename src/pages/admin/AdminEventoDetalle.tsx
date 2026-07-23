@@ -27,7 +27,11 @@ export default function AdminEventoDetalle() {
   const [borrarPlan, setBorrarPlan] = useState<TicketPlan | null>(null)
   const [deleteBlock, setDeleteBlock] = useState<EventBlock | null>(null)
 
-  const event = useStore((s) => s.getEventById(id))
+  // De la lista del PANEL, no de la pública: getEventById() lee sólo lo publicado, así que un
+  // evento recién creado —que nace borrador— aparecía en el listado con su cartel "Borrador" y
+  // al abrirlo decía "Evento no encontrado". O sea que el flujo entero de "creá el borrador y
+  // después completalo" estaba cortado justo en el segundo paso.
+  const event = useStore((s) => s.getAdminEvents().find((e) => e.id === id))
   const blocks = useStore((s) =>
     s.getBlocks(id).map((block) => {
       const avail = s.blockAvailability(block.id)
@@ -97,7 +101,10 @@ export default function AdminEventoDetalle() {
         <CorePageHeader
           eyebrow={EVENT_TYPE_META[event.type].label}
           title={event.title}
-          live
+          // `live` habla del sistema; `publicado`, de ESTE evento. Sin lo segundo, un borrador
+          // mostraba "● En vivo" y el organizador podía creer que ya estaba publicado.
+          live={event.published !== false}
+          publicado={event.published !== false}
           lead={
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span>

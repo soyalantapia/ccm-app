@@ -8,12 +8,18 @@ interface CorePageHeaderProps {
   lead?: ReactNode
   /** Indicador "● En vivo" (punto success con pulso). */
   live?: boolean
+  /**
+   * Estado de publicación de la ENTIDAD que se está mirando. Es distinto de `live`, que habla de
+   * la conexión con el sistema. En la ficha de un evento los dos se confundían: un borrador
+   * mostraba "● En vivo" y se leía como "este evento ya está publicado", que es lo contrario.
+   */
+  publicado?: boolean
   /** Acciones a la derecha (ej: Exportar CSV). */
   actions?: ReactNode
 }
 
 /** Cabecera editorial de página admin: eyebrow dorado + display serif + acciones. */
-export function CorePageHeader({ title, eyebrow = 'Admin', lead, live, actions }: CorePageHeaderProps) {
+export function CorePageHeader({ title, eyebrow = 'Admin', lead, live, publicado, actions }: CorePageHeaderProps) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
       <div className="min-w-0">
@@ -25,6 +31,11 @@ export function CorePageHeader({ title, eyebrow = 'Admin', lead, live, actions }
                 ●
               </span>
               En vivo
+            </span>
+          )}
+          {publicado === false && (
+            <span className="eyebrow rounded-sm bg-ink/8 px-2.5 py-1 text-[9px] text-ink-soft">
+              Borrador · no lo ve el público
             </span>
           )}
         </div>
