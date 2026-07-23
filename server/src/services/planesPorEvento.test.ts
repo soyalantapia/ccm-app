@@ -10,13 +10,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const tx = {
   $queryRaw: vi.fn(),
-  ticketOrder: { count: vi.fn() },
+  ticketOrder: { count: vi.fn(), deleteMany: vi.fn() },
   ticketPlan: { delete: vi.fn() },
 }
 
 const mockPrisma = {
   event: { findUnique: vi.fn() },
-  ticketPlan: { findMany: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+  ticketPlan: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
   ticketOrder: { count: vi.fn() },
   $transaction: vi.fn((fn: (c: typeof tx) => unknown) => fn(tx)),
 }
@@ -46,9 +46,11 @@ beforeEach(() => {
   mockPrisma.event.findUnique.mockResolvedValue({ id: 'ev_1' })
   mockPrisma.ticketPlan.create.mockResolvedValue(FILA)
   mockPrisma.ticketPlan.findMany.mockResolvedValue([FILA])
+  mockPrisma.ticketPlan.findUnique.mockResolvedValue(FILA)
   mockPrisma.$transaction.mockImplementation((fn: (c: typeof tx) => unknown) => fn(tx))
   tx.$queryRaw.mockResolvedValue([])
   tx.ticketOrder.count.mockResolvedValue(0)
+  tx.ticketOrder.deleteMany.mockResolvedValue({ count: 0 })
 })
 
 describe('leer los tipos de entrada de un evento', () => {
@@ -127,6 +129,8 @@ describe('crear un tipo de entrada', () => {
 describe('editar un tipo de entrada', () => {
   it('ahora acepta todos los campos, no sólo precio y link', async () => {
     // Antes updatePlan aceptaba EXACTAMENTE {price, mpLink}: no se podía ni renombrar una entrada.
+    // La entrada no tiene precio cargado, así que pasarla a "general" (la gratuita) es coherente.
+    mockPrisma.ticketPlan.findUnique.mockResolvedValue({ ...FILA, price: null })
     await updatePlan('p1', { name: 'Nuevo nombre', tagline: 'Nueva bajada', kind: 'general' })
     const data = mockPrisma.ticketPlan.update.mock.calls[0][0].data
     expect(data).toMatchObject({ name: 'Nuevo nombre', tagline: 'Nueva bajada', kind: 'general' })
@@ -155,6 +159,37 @@ describe('borrar un tipo de entrada', () => {
   it('sin compras se borra', async () => {
     await deletePlan('p1')
     expect(tx.ticketPlan.delete).toHaveBeenCalledWith({ where: { id: 'p1' } })
+  })
+
+  it('sólo bloquean las órdenes que dejan rastro, no un carrito abandonado', async () => {
+    // Las órdenes se crean ANTES de pedir el link de pago, así que cualquier visitante que
+    // apriete "Continuar" y cierre la pestaña deja una fila 'iniciada'. Como no existe DELETE de
+    // órdenes ni purga por vencimiento, esa fila clavaba el tipo de entrada para siempre: el
+    // organizador ya no podía borrar algo que cargó mal y nunca vendió.
+    await deletePlan('p1')
+    expect(tx.ticketOrder.count).toHaveBeenCalledWith({
+      where: { planId: 'p1', status: { in: ['confirmada', 'redirigida_mp', 'cancelada'] } },
+    })
+    expect(tx.ticketOrder.deleteMany).toHaveBeenCalledWith({
+      where: { planId: 'p1', status: 'iniciada' },
+    })
+    expect(tx.ticketPlan.delete).toHaveBeenCalled()
+  })
+
+  it('una compra confirmada, una en curso o una cancelada SÍ bloquean: son registros de algo que pasó', async () => {
+    tx.ticketOrder.count.mockResolvedValue(1)
+    await expect(deletePlan('p1')).rejects.toMatchObject({ code: 'HAS_ORDERS' })
+    // Y no se toca ninguna orden: si el borrado no procede, nada se limpia.
+    expect(tx.ticketOrder.deleteMany).not.toHaveBeenCalled()
+  })
+
+  it('el 409 ya no manda a "sacalo de la venta": ese control no existe', async () => {
+    // El mensaje mandaba a retirar la entrada de la venta, y TicketPlan no tiene forma de
+    // hacerlo. El organizador quedaba buscando un botón inventado.
+    tx.ticketOrder.count.mockResolvedValue(2)
+    await expect(deletePlan('p1')).rejects.toMatchObject({
+      message: expect.not.stringContaining('sacalo de la venta'),
+    })
   })
 
   it('toma el lock de la fila ANTES de contar las compras', async () => {

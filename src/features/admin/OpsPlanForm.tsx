@@ -88,6 +88,14 @@ export function OpsPlanForm({ open, eventId, onClose }: Props) {
     const serviceCharge = numero(f.serviceCharge, 'cargo por servicio')
     if (serviceCharge === 'error') return
 
+    // La General es la acreditación gratuita en toda la app: el selector le imprime "Gratis" y la
+    // inscribe sin cobrar, mire lo que mire el precio. Cargarla con valor no la encarece — la
+    // regala mostrando el número en el panel. El server rechaza lo mismo (verificarCoherencia).
+    if (f.kind === 'general' && price != null && price > 0) {
+      setError('Una entrada "General" es la acreditación gratuita y no se cobra. Si la vas a vender, elegí el tipo "VIP".')
+      return
+    }
+
     store.createPlan(eventId, {
       name,
       tagline: f.tagline.trim(),

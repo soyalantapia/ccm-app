@@ -275,3 +275,81 @@ describe('el cupo del evento se GUARDA, no sólo se muestra', () => {
     expect(await guardar()).toMatchObject({ capacity: 30, seedTaken: 4 })
   })
 })
+
+/**
+ * Una INICIATIVA se carga con este mismo formulario desde la ficha de su evento padre. Antes no
+ * heredaba NADA: arrancaba con la sede del config —el Hotel Quinto Centenario, con su link de
+ * Google Maps— aunque el padre fuera en otro lado, y con el tipo "Camino a CCM", que se publica
+ * en la ficha y hasta le cuelga el banner de convocatoria a diseñadores. Un taller adentro de un
+ * evento en Carlos Paz salía anunciado en Córdoba y rotulado como otra cosa, sin ningún error.
+ */
+describe('una iniciativa hereda lo que ya sabemos de su evento padre', () => {
+  const PADRE = {
+    id: 'ev_padre',
+    slug: 'camino-carlos-paz',
+    type: 'camino',
+    title: 'Camino a CCM · Carlos Paz',
+    dateLabel: 'Sábado 12 de septiembre',
+    startDate: '2026-09-12',
+    venue: 'Centro Cultural Comechingones',
+    address: 'Av. San Martín 500, Carlos Paz',
+    mapsUrl: 'https://maps.example/carlos-paz',
+    description: 'x',
+    cover: 'img/x.jpg',
+    socioOnly: true,
+  } as EventItem
+
+  const montarIniciativa = () =>
+    render(<OpsEventForm open parent={PADRE} onClose={() => {}} />)
+
+  it('hereda la sede y la dirección del padre, no las del config', async () => {
+    montarIniciativa()
+    const guardado = await guardar()
+    expect(guardado).toMatchObject({
+      venue: 'Centro Cultural Comechingones',
+      address: 'Av. San Martín 500, Carlos Paz',
+    })
+  })
+
+  it('el link del mapa se arma con la sede heredada', async () => {
+    montarIniciativa()
+    const { mapsUrl } = (await guardar()) as { mapsUrl: string }
+    expect(decodeURIComponent(mapsUrl)).toContain('Carlos Paz')
+  })
+
+  it('hereda el candado de Socios: el padre es premium y lo de adentro también', async () => {
+    montarIniciativa()
+    expect(await guardar()).toMatchObject({ socioOnly: true })
+  })
+
+  it('NO nace como "Camino a CCM": ese tipo se publica en la ficha y arrastra el banner de convocatoria', async () => {
+    montarIniciativa()
+    const { type } = (await guardar()) as { type: string }
+    expect(type).not.toBe('camino')
+  })
+
+  it('hereda la fecha del padre: pasa adentro del evento', async () => {
+    montarIniciativa()
+    expect(await guardar()).toMatchObject({ startDate: '2026-09-12' })
+  })
+
+  it('queda colgada del padre', async () => {
+    montarIniciativa()
+    expect(await guardar()).toMatchObject({ parentId: 'ev_padre' })
+  })
+
+  it('el sheet dice de qué evento cuelga: el backdrop tapa la ficha del padre', () => {
+    montarIniciativa()
+    expect(screen.getByText(/Nueva iniciativa · Camino a CCM · Carlos Paz/)).toBeTruthy()
+  })
+
+  it('un evento suelto (sin padre) sigue arrancando con la sede de siempre', async () => {
+    render(<OpsEventForm open onClose={() => {}} />)
+    // Sin padre no hay fecha heredada, y la fecha es obligatoria: hay que ponerla a mano. Ésa es
+    // justamente una de las cosas que la iniciativa se ahorra.
+    fireEvent.change(fecha(), { target: { value: '2026-10-17' } })
+    const { venue, parentId } = (await guardar()) as { venue: string; parentId?: string }
+    expect(venue).toBe('Hotel Quinto Centenario')
+    expect(parentId).toBeUndefined()
+  })
+})

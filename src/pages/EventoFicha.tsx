@@ -4,7 +4,7 @@ import { ArrowUpRight, CalendarDays, Check, ChevronLeft, Clock, Lock, MapPin, Ti
 import { ButtonLink, EmptyState, Eyebrow, Img, PagePending, SectionTitle } from '../components/ui'
 import { store, useStore } from '../data/store'
 import { useEvents } from '../data/queries'
-import type { EventBlock } from '../data/types'
+import type { EventBlock, EventItem } from '../data/types'
 import { BlockRow } from '../features/eventos/BlockRow'
 import { EventCard } from '../features/eventos/EventCard'
 import { EventCta } from '../features/eventos/EventCta'
@@ -46,6 +46,37 @@ function SocioGate() {
 }
 
 /**
+ * Lo que pasa ADENTRO de este evento y se difunde o se cobra aparte: un workshop, una
+ * capacitación, una masterclass. Cada una tiene su ficha y su link propios.
+ *
+ * Está afuera del cuerpo de la ficha porque el evento PRINCIPAL usa otro layout (PrincipalBody) y
+ * esta sección vivía adentro del `else`: las iniciativas del principal —el caso más obvio, un
+ * taller adentro de CCM 2026— no aparecían en ninguna pantalla pública. Se llegaba sólo con el
+ * link directo, y el listado general las esconde a propósito.
+ */
+function Iniciativas({ items, locked }: { items: EventItem[]; locked: (e: EventItem) => boolean }) {
+  if (items.length === 0) return null
+  return (
+    <section className="mx-auto max-w-6xl px-5 pb-12 md:pb-16">
+      <SectionTitle
+        eyebrow="Adentro de este evento"
+        title={
+          <>
+            Workshops y <em className="text-accent">capacitaciones</em>
+          </>
+        }
+        lead="Actividades con cupo propio que se reservan aparte."
+      />
+      <div className="mt-8 grid gap-5 md:mt-10 md:grid-cols-2 lg:grid-cols-3">
+        {items.map((ini) => (
+          <EventCard key={ini.id} event={ini} registered={false} locked={locked(ini)} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/**
  * Ficha /eventos/:slug. El evento principal usa el layout completo de expo
  * (compra de entradas adentro, info real, agenda, director); caminos y
  * capacitaciones mantienen la grilla con inscripción por bloque.
@@ -82,7 +113,16 @@ export default function EventoFicha() {
   }
 
   const isPrincipal = event.type === 'principal'
-  const locked = !isPrincipal && !!event.socioOnly && !isSocio
+  /* El candado de Socios alcanza a lo que pasa ADENTRO: un taller colgado de una capacitación
+     premium es parte de ella, no una puerta de atrás. Una iniciativa nace con socioOnly en false,
+     así que sin heredarlo el candado del evento grande se abría solo con cargarle algo adentro.
+     El server hereda lo mismo, en registrationService. */
+  const padre = event.parentId ? events.find((e) => e.id === event.parentId) : undefined
+  const soloSocios = !!event.socioOnly || !!padre?.socioOnly
+  const locked = !isPrincipal && soloSocios && !isSocio
+  /* El mismo candado, para las tarjetas de las iniciativas de este evento: sin esto la tarjeta
+     sale sin la chapa "Solo Socios" y prometiendo una inscripción que el server rechaza. */
+  const estaTrabada = (ini: EventItem) => (!!ini.socioOnly || soloSocios) && !isSocio
 
   /* Bloques ordenados por día + hora, agrupados por día (solo no-principal). */
   const sortedBlocks = isPrincipal
@@ -175,7 +215,10 @@ export default function EventoFicha() {
       </section>
 
       {isPrincipal ? (
-        <PrincipalBody event={event} />
+        <>
+          <PrincipalBody event={event} />
+          <Iniciativas items={iniciativas} locked={estaTrabada} />
+        </>
       ) : (
         <>
           {/* Descripción editorial + CTA general (arriba de la grilla) */}
@@ -248,26 +291,7 @@ export default function EventoFicha() {
           </section>
           )}
 
-          {/* Iniciativas: lo que pasa ADENTRO de este evento y se difunde o se cobra aparte —
-              un workshop, una capacitación. Cada una tiene su propia ficha y su propio link. */}
-          {iniciativas.length > 0 && (
-            <section className="mx-auto max-w-6xl px-5 pb-12 md:pb-16">
-              <SectionTitle
-                eyebrow="Adentro de este evento"
-                title={
-                  <>
-                    Workshops y <em className="text-accent">capacitaciones</em>
-                  </>
-                }
-                lead="Actividades con cupo propio que se reservan aparte."
-              />
-              <div className="mt-8 grid gap-5 md:mt-10 md:grid-cols-2 lg:grid-cols-3">
-                {iniciativas.map((ini) => (
-                  <EventCard key={ini.id} event={ini} registered={false} />
-                ))}
-              </div>
-            </section>
-          )}
+          <Iniciativas items={iniciativas} locked={estaTrabada} />
 
           {/* Convocatoria asociada (solo Caminos) */}
           {event.type === 'camino' && <ConvocatoriaBanner />}

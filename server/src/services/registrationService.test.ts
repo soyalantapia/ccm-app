@@ -133,6 +133,75 @@ describe('register — gates del evento', () => {
   })
 })
 
+/**
+ * Una INICIATIVA (un taller, una capacitación) es un evento colgado de otro. Nace con `published`
+ * y `socioOnly` en false y nada los cascadeaba: publicar el taller lo sacaba al aire aunque el
+ * evento grande siguiera siendo borrador, y colgarle una actividad a una capacitación premium
+ * abría una puerta gratis a lo que estaba detrás del candado de Socios.
+ */
+describe('register — lo que una iniciativa hereda de su evento padre', () => {
+  const INICIATIVA = { ...EVENTO_VIVO, id: 'ini_1', parentId: 'ev_padre' }
+
+  it('padre en BORRADOR → 404, aunque la iniciativa esté publicada', async () => {
+    // La lectura pública ya devolvía 404 (eventService.VISIBLE_AL_PUBLICO), pero este POST
+    // seguía aceptando: no se veía la ficha y la inscripción entraba igual.
+    mockPrisma.event.findUnique.mockResolvedValue({
+      ...INICIATIVA,
+      parent: { published: false, socioOnly: false },
+    })
+    await expect(register('dev_1', 'ini_1')).rejects.toMatchObject({
+      status: 404,
+      code: 'EVENT_NOT_FOUND',
+    })
+  })
+
+  it('padre sólo para Socios → la iniciativa también, sin membresía da 403', async () => {
+    mockPrisma.event.findUnique.mockResolvedValue({
+      ...INICIATIVA,
+      socioOnly: false, // la iniciativa nace SIN candado: el que manda es el del padre
+      parent: { published: true, socioOnly: true },
+    })
+    mockPrisma.membership.findUnique.mockResolvedValue(null)
+    await expect(register('dev_1', 'ini_1')).rejects.toMatchObject({
+      status: 403,
+      code: 'SOCIO_ONLY',
+    })
+  })
+
+  it('padre sólo para Socios y el visitante ES socio → pasa', async () => {
+    mockPrisma.event.findUnique.mockResolvedValue({
+      ...INICIATIVA,
+      parent: { published: true, socioOnly: true },
+    })
+    mockPrisma.membership.findUnique.mockResolvedValue({ deviceId: 'dev_1', tier: 'socio' })
+    await expect(register('dev_1', 'ini_1')).resolves.toMatchObject({ eventId: 'ini_1' })
+  })
+
+  it('padre publicado y abierto → la iniciativa se comporta como cualquier evento', async () => {
+    mockPrisma.event.findUnique.mockResolvedValue({
+      ...INICIATIVA,
+      parent: { published: true, socioOnly: false },
+    })
+    await expect(register('dev_1', 'ini_1')).resolves.toMatchObject({ eventId: 'ini_1' })
+  })
+
+  it('un evento de primer nivel (sin padre) sigue andando igual', async () => {
+    mockPrisma.event.findUnique.mockResolvedValue({ ...EVENTO_VIVO, parent: null })
+    await expect(register('dev_1', 'ev_1')).resolves.toMatchObject({ eventId: 'ev_1' })
+  })
+
+  it('la consulta trae al padre: sin el include, heredar es imposible', async () => {
+    await register('dev_1', 'ev_1')
+    expect(mockPrisma.event.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          parent: { select: { published: true, socioOnly: true } },
+        }),
+      }),
+    )
+  })
+})
+
 describe('register con bloque — cupo y lock', () => {
   it('toma el lock de la fila del bloque ANTES de contar', async () => {
     await register('dev_1', 'ev_1', 'blk_1')

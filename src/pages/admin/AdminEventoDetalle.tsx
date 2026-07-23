@@ -324,7 +324,7 @@ export default function AdminEventoDetalle() {
       <OpsEventForm open={editOpen} event={event} onClose={() => setEditOpen(false)} />
       <OpsEventForm
         open={iniciativaOpen}
-        parentId={event.id}
+        parent={event}
         onClose={() => setIniciativaOpen(false)}
       />
       <OpsPlanForm open={planOpen} eventId={event.id} onClose={() => setPlanOpen(false)} />

@@ -27,20 +27,25 @@ export async function register(
   eventId: string,
   blockId?: string,
 ): Promise<Registration> {
-  const event = await prisma.event.findUnique({ where: { id: eventId } })
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    // El padre viaja en la misma consulta porque una INICIATIVA hereda dos cosas suyas: si se ve
+    // (`published`) y para quiénes es (`socioOnly`). Sin esto, las dos reglas del evento grande
+    // se evaporaban al colgarle un taller adentro.
+    include: { parent: { select: { published: true, socioOnly: true } } },
+  })
   // Un borrador no toma inscripciones y contesta lo mismo que un id inventado. El eventId lo
   // genera el cliente, así que sin este gate alcanzaba con adivinarlo para quedar CONFIRMADO —
   // con QR y ocupando cupo— en un evento que todavía no salió a la calle. Va primero, antes que
   // past y socioOnly, para no filtrar por el mensaje de error.
-  if (!event || !event.published) throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
-
-  // Un borrador no acepta inscripciones. `published` se filtraba SOLO en las lecturas de
-  // eventService (getEvents, getEvent, getEventsWithBlocks) y no acá, así que con el id de un
-  // evento sin publicar —que no es secreto: lo genera el cliente y está a la vista en el panel—
-  // se podía crear una Registration CONFIRMADA y quedarse con un QR de algo que el público ni ve.
-  // Responde igual que un evento inexistente, por la misma razón que getEvent: si el error fuera
-  // distinto, la existencia de un borrador sería adivinable desde afuera.
-  if (!event.published) throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
+  //
+  // La iniciativa hereda la visibilidad del padre, igual que en las lecturas (eventService
+  // VISIBLE_AL_PUBLICO): un taller publicado adentro de un evento que sigue en borrador no
+  // existe para el público, así que tampoco puede tomar inscripciones. La lectura ya devolvía
+  // 404 y esta ruta seguía aceptando: la ficha no se veía, pero el POST entraba igual.
+  if (!event || !event.published || (event.parent && !event.parent.published)) {
+    throw notFound('EVENT_NOT_FOUND', 'Evento no encontrado')
+  }
 
   // Evento finalizado: cerrar la inscripción (antes se podía inscribir a un evento pasado y
   // recibir un QR para algo que ya sucedió). El front revierte el optimista ante este 409.
@@ -58,8 +63,11 @@ export async function register(
     )
   }
 
-  // Gate socioOnly a nivel evento (el bloque lo hereda).
-  if (event.socioOnly) {
+  // Gate socioOnly a nivel evento (el bloque lo hereda) y también a nivel PADRE: un taller
+  // colgado de una capacitación exclusiva de Socios es parte de ella, no una puerta de atrás.
+  // El alta de una iniciativa nace con socioOnly en false, así que sin heredarlo el candado del
+  // evento grande se abría solo con cargarle una actividad adentro.
+  if (event.socioOnly || event.parent?.socioOnly) {
     const membership = await prisma.membership.findUnique({ where: { deviceId } })
     if (membership?.tier !== 'socio') {
       throw forbidden('SOCIO_ONLY', 'Este evento es exclusivo para Socios CCM')

@@ -6,10 +6,19 @@ import { toast } from '../components/ui'
 
 /**
  * Acción compartida "Registrate gratis" (header, landing, /entradas):
- * perfil progresivo → inscripción al evento principal → Mi QR.
+ * perfil progresivo → inscripción → Mi QR.
+ *
+ * `eventId` por defecto es el principal, que es de dónde salen casi todos los llamados. Pero el
+ * parámetro NO es decorativo: el selector de entradas ahora se muestra en la ficha de cualquier
+ * evento, y su entrada gratuita llamaba acá sin decir a cuál. Resultado: el visitante apretaba
+ * "Inscribirme" en un taller y quedaba anotado en CCM 2026 —otro evento, con su QR y todo—
+ * mientras el taller seguía sin nadie.
  */
-export async function registerFree(navigate: NavigateFunction): Promise<void> {
-  if (store.isRegistered(IDS.events.principal)) {
+export async function registerFree(
+  navigate: NavigateFunction,
+  eventId: string = IDS.events.principal,
+): Promise<void> {
+  if (store.isRegistered(eventId)) {
     navigate('/mi-qr')
     return
   }
@@ -22,7 +31,10 @@ export async function registerFree(navigate: NavigateFunction): Promise<void> {
     },
   )
   if (!ok) return
-  store.register(IDS.events.principal)
-  toast('¡Listo! Ya estás en CCM 2026')
+  store.register(eventId)
+  // El mensaje nombra el evento real: "Ya estás en CCM 2026" después de anotarse a un taller es
+  // la misma confusión que causaba el bug, contada de otra forma.
+  const titulo = store.getEventById(eventId)?.title
+  toast(titulo ? `¡Listo! Ya estás en ${titulo}` : '¡Listo! Ya estás inscripto')
   navigate('/mi-qr')
 }

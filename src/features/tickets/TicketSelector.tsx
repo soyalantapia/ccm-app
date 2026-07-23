@@ -234,7 +234,13 @@ export function TicketSelector({
                     <Check size={11} /> Inscripto
                   </Badge>
                 ) : (
-                  <Button size="sm" variant="outline" className="shrink-0" onClick={() => void registerFree(navigate)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0"
+                    // Al evento de ESTE selector, no al principal: ver registerFree en lib/actions.
+                    onClick={() => void registerFree(navigate, eventId)}
+                  >
                     Inscribirme
                   </Button>
                 )

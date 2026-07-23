@@ -37,6 +37,8 @@ const DEL_FORMULARIO = {
 beforeEach(() => {
   vi.clearAllMocks()
   mockPrisma.event.findUnique.mockResolvedValue({ id: 'ev_1' })
+  // updatePlan lee la fila para medir la coherencia sobre cómo queda DESPUÉS del patch.
+  mockPrisma.ticketPlan.findUnique.mockResolvedValue({ kind: 'vip', price: 30000 })
   mockPrisma.ticketPlan.create.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
     Promise.resolve({ perks: [], ...data }),
   )
@@ -99,5 +101,52 @@ describe('edición de un tipo de entrada', () => {
     const { data } = mockPrisma.ticketPlan.update.mock.calls[0][0]
     expect(data).not.toHaveProperty('name')
     expect(data).not.toHaveProperty('serviceCharge')
+  })
+})
+
+/**
+ * «General» no es una etiqueta más: toda la app la trata como la acreditación gratuita. El
+ * selector le imprime "Gratis" ignorando el precio y la inscribe sin cobrar; el panel le tapa el
+ * campo de precio con la leyenda "gratuita, sin link de pago". Una General con precio no es una
+ * entrada cara: es una entrada que se regala mientras el panel muestra $30.000. Y como el editor
+ * esconde ese campo justamente cuando es general, tampoco había cómo corregirla.
+ */
+describe('General y precio no pueden convivir', () => {
+  it('no se puede CREAR una general con precio', async () => {
+    await expect(
+      createPlan('ev_1', { ...DEL_FORMULARIO, kind: 'general' as const }),
+    ).rejects.toMatchObject({ code: 'INVALID_PLAN' })
+    expect(mockPrisma.ticketPlan.create).not.toHaveBeenCalled()
+  })
+
+  it('una general SIN precio se crea normal: es el caso legítimo', async () => {
+    await createPlan('ev_1', { ...DEL_FORMULARIO, kind: 'general' as const, price: null })
+    expect(mockPrisma.ticketPlan.create).toHaveBeenCalled()
+  })
+
+  it('tampoco se le puede poner precio a una general que ya existe', async () => {
+    mockPrisma.ticketPlan.findUnique.mockResolvedValue({ kind: 'general', price: null })
+    await expect(updatePlan('p1', { price: 30000 })).rejects.toMatchObject({ code: 'INVALID_PLAN' })
+    expect(mockPrisma.ticketPlan.update).not.toHaveBeenCalled()
+  })
+
+  it('ni pasar a general una entrada que ya tiene precio cargado', async () => {
+    // El patch trae SÓLO el tipo; el precio viejo sigue ahí. Mirar el patch no alcanza: hay que
+    // mirar cómo queda la entrada.
+    mockPrisma.ticketPlan.findUnique.mockResolvedValue({ kind: 'vip', price: 30000 })
+    await expect(updatePlan('p1', { kind: 'general' })).rejects.toMatchObject({
+      code: 'INVALID_PLAN',
+    })
+  })
+
+  it('pasar a general Y borrar el precio en el mismo patch sí se puede', async () => {
+    mockPrisma.ticketPlan.findUnique.mockResolvedValue({ kind: 'vip', price: 30000 })
+    await updatePlan('p1', { kind: 'general', price: null })
+    expect(mockPrisma.ticketPlan.update).toHaveBeenCalled()
+  })
+
+  it('una VIP con precio no se toca: es el caso de siempre', async () => {
+    await updatePlan('p1', { price: 45000 })
+    expect(mockPrisma.ticketPlan.update).toHaveBeenCalled()
   })
 })

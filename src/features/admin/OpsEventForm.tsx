@@ -4,6 +4,7 @@ import { store } from '../../data/store'
 import type { EventItem, EventType } from '../../data/types'
 import { fechaEnTexto, esTextoAutomatico, textoContradiceLaFecha } from '../../lib/eventDate'
 import { validarPrecioEvento } from '../eventos/precioEvento'
+import { validarCupo } from '../eventos/cupoEvento'
 import { config } from '../../config'
 
 const TYPE_OPTIONS: { value: EventType; label: string }[] = [
@@ -89,6 +90,32 @@ function fromEvent(e: EventItem): Form {
   }
 }
 
+/**
+ * Lo que una INICIATIVA hereda de su evento padre al nacer. Antes no heredaba nada: arrancaba con
+ * la sede del config —el Hotel Quinto Centenario, con su link de Google Maps y todo— aunque el
+ * evento padre fuera en otro lado, y con el tipo "Camino a CCM", que se publica en la ficha y
+ * hasta le cuelga el banner de convocatoria a diseñadores. Un taller adentro de un evento en
+ * Carlos Paz salía anunciado en Córdoba y rotulado como otra cosa, sin un solo error.
+ *
+ * Todo esto es editable: son valores de arranque, no candados.
+ */
+function desdeElPadre(padre: EventItem): Form {
+  return {
+    ...empty,
+    // Una iniciativa es una actividad adentro de otra cosa: "capacitación" le queda mucho más
+    // cerca que "Camino a CCM", que es un evento previo con entidad propia.
+    type: 'capacitacion',
+    venue: padre.venue,
+    address: padre.address,
+    // Pasa adentro del evento, así que por defecto pasa el mismo día.
+    startDate: padre.startDate.slice(0, 10),
+    dateLabel: padre.dateLabel,
+    // El candado de Socios del padre alcanza a lo que pasa adentro (el server lo hereda igual,
+    // en registrationService). Se prellena para que el panel muestre lo mismo que hace la app.
+    socioOnly: padre.socioOnly ?? false,
+  }
+}
+
 interface Props {
   open: boolean
   /** Evento a editar; omitido = crear nuevo. */
@@ -96,14 +123,15 @@ interface Props {
   /**
    * Al crear: de qué evento cuelga esta INICIATIVA. Se pasa desde la ficha del padre, así el
    * organizador no elige "qué tipo de entidad es" — elige dónde está parado y el sistema
-   * completa el resto.
+   * completa el resto. Va el evento entero, no sólo el id, porque "el resto" incluye heredar
+   * su sede, su fecha y su candado de Socios.
    */
-  parentId?: string
+  parent?: EventItem
   onClose: () => void
 }
 
 /** Alta y edición de eventos desde el admin (CRUD real sobre la capa local). */
-export function OpsEventForm({ open, event, parentId, onClose }: Props) {
+export function OpsEventForm({ open, event, parent, onClose }: Props) {
   const [f, setF] = useState<Form>(empty)
   const [error, setError] = useState('')
 
@@ -114,13 +142,13 @@ export function OpsEventForm({ open, event, parentId, onClose }: Props) {
 
   useEffect(() => {
     if (!open) return
-    const inicial = event ? fromEvent(event) : empty
+    const inicial = event ? fromEvent(event) : parent ? desdeElPadre(parent) : empty
     setF(inicial)
     setError('')
     setTextoPersonalizado(
       !!event && !!inicial.dateLabel && !esTextoAutomatico(inicial.startDate, inicial.dateLabel),
     )
-  }, [open, event])
+  }, [open, event, parent])
 
   const set = (k: keyof Form) => (e: { target: { value: string } }) =>
     setF((prev) => ({ ...prev, [k]: e.target.value }))
@@ -164,6 +192,20 @@ export function OpsEventForm({ open, event, parentId, onClose }: Props) {
       return
     }
     const price = precio.price
+    // Cupo y ya-anotados con las mismas reglas que el precio (cupoEvento.ts, con tests). Antes
+    // salían a un `Number()` pelado: "30 lugares" daba NaN, viajaba como null y el backend lo
+    // leía como "sin tope"; "1.000" daba 1 y el evento se agotaba con la primera inscripción.
+    // Los dos casos guardaban bien, sin error y con el cartel de siempre.
+    const cupo = validarCupo(f.capacity, 'cupo')
+    if (!cupo.ok) {
+      setError(cupo.error)
+      return
+    }
+    const anotados = validarCupo(f.seedTaken, 'número de ya anotados', 0)
+    if (!anotados.ok) {
+      setError(anotados.error)
+      return
+    }
     // El link de mapa se recalcula cuando cambia la SEDE. Antes la condición era
     // `event?.mapsUrl ? conservarlo : generarlo`, usando "existe" como proxy de "lo cargó el
     // organizador a mano" — pero el form nunca expuso mapsUrl y el create siempre lo genera,
@@ -192,8 +234,8 @@ export function OpsEventForm({ open, event, parentId, onClose }: Props) {
       // estado y se prellenaban al editar, pero nunca entraban al payload — así que el
       // organizador cargaba "50 lugares", veía el toast de guardado, y el número se tiraba
       // en silencio. El backend siempre los aceptó (adminService: create y update).
-      capacity: f.capacity.trim() === '' ? null : Number(f.capacity),
-      seedTaken: f.seedTaken.trim() === '' ? 0 : Number(f.seedTaken),
+      capacity: cupo.valor,
+      seedTaken: anotados.valor ?? 0,
       // Booleanos SIEMPRE explícitos (no `|| undefined`): destildar un flag tiene que llegar
       // al backend como false, no desaparecer del patch.
       past: f.past,
@@ -212,14 +254,21 @@ export function OpsEventForm({ open, event, parentId, onClose }: Props) {
             : '✓ Borrador guardado',
       )
     } else {
-      store.createEvent({ ...data, sponsorIds: [], ...(parentId ? { parentId } : {}) })
+      store.createEvent({ ...data, sponsorIds: [], ...(parent ? { parentId: parent.id } : {}) })
       toast(publicar ? '✓ Publicado · ya aparece en la app' : '✓ Borrador guardado · no lo ve el público')
     }
     onClose()
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title={event ? 'Editar evento' : 'Crear evento'} size="lg">
+    <Sheet
+      open={open}
+      onClose={onClose}
+      // El sheet tapa la ficha del padre con un backdrop opaco, así que "Crear evento" a secas
+      // dejaba al organizador sin ninguna pista de dónde estaba parado ni de qué le va a colgar.
+      title={event ? 'Editar evento' : parent ? `Nueva iniciativa · ${parent.title}` : 'Crear evento'}
+      size="lg"
+    >
       <form onSubmit={submit} className="space-y-4">
         {/* Preview en vivo — "ver cómo queda" la ficha mientras se carga (feedback Gastón). */}
         <div className="overflow-hidden rounded-lg border border-ink/10 bg-bg">

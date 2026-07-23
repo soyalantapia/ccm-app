@@ -431,6 +431,23 @@ function datosDePlan(patch: Record<string, unknown>): Record<string, unknown> {
   return data
 }
 
+/**
+ * «General» y «VIP» no son dos etiquetas intercambiables: toda la app trata a la General como la
+ * acreditación gratuita. El selector le imprime "Gratis" ignorando el precio y le pone un botón
+ * que inscribe sin cobrar (TicketSelector), y el panel le tapa el campo de precio con la leyenda
+ * "gratuita, sin link de pago" (OpsPlanEditor). Una General con precio, entonces, no es una
+ * entrada cara: es una entrada que se regala mientras el panel muestra $30.000 y nadie se entera.
+ * Y desde el panel no había cómo arreglarla, porque el editor esconde justo ese campo.
+ */
+function verificarCoherencia(kind: unknown, price: unknown): void {
+  if (kind === 'general' && price != null && Number(price) > 0) {
+    throw badRequest(
+      'INVALID_PLAN',
+      'Una entrada "General" es la acreditación gratuita y no se cobra. Si la vas a vender, elegí el tipo "VIP".',
+    )
+  }
+}
+
 /** Alta de un tipo de entrada DENTRO de un evento. Hasta acá no existía: los 5 planes venían del
  *  seed y sólo se les podía editar precio y link, así que un evento nuevo no podía vender nada. */
 export async function createPlan(eventId: string, input: Record<string, unknown>): Promise<TicketPlan> {
@@ -438,6 +455,9 @@ export async function createPlan(eventId: string, input: Record<string, unknown>
   if (!ev) throw conflict('EVENT_NOT_FOUND', 'El evento no existe')
   const nombre = String(input.name ?? '').trim()
   if (!nombre) throw badRequest('INVALID_PLAN', 'El tipo de entrada necesita un nombre.')
+  const kind = (input.kind as 'general' | 'vip') ?? 'general'
+  const datos = datosDePlan(input)
+  verificarCoherencia(kind, datos.price)
   const row = await prisma.ticketPlan.create({
     data: {
       // Id legible y estable, derivado del nombre: aparece en la URL del checkout y en los
@@ -447,15 +467,25 @@ export async function createPlan(eventId: string, input: Record<string, unknown>
       name: nombre,
       tagline: String(input.tagline ?? '').trim(),
       perks: Array.isArray(input.perks) ? (input.perks as string[]) : [],
-      kind: (input.kind as 'general' | 'vip') ?? 'general',
-      ...datosDePlan(input),
+      kind,
+      ...datos,
     },
   })
   return toTicketPlan(row)
 }
 
 export async function updatePlan(id: PlanId, patch: Record<string, unknown>): Promise<void> {
-  await prisma.ticketPlan.update({ where: { id }, data: datosDePlan(patch) })
+  const datos = datosDePlan(patch)
+  // La coherencia se mide sobre cómo queda la entrada DESPUÉS del patch, no sobre lo que vino en
+  // él: cambiar sólo el tipo a "general" dejando el precio viejo produce exactamente la misma
+  // entrada regalada que crearla mal de entrada.
+  const actual = await prisma.ticketPlan.findUnique({ where: { id }, select: { kind: true, price: true } })
+  if (!actual) throw conflict('PLAN_NOT_FOUND', 'El tipo de entrada no existe')
+  verificarCoherencia(
+    'kind' in datos ? datos.kind : actual.kind,
+    'price' in datos ? datos.price : actual.price,
+  )
+  await prisma.ticketPlan.update({ where: { id }, data: datos })
 }
 
 /** Baja con pre-chequeo dentro de la transacción, mismo patrón que deleteEvent: TicketOrder.planId
@@ -464,10 +494,28 @@ export async function updatePlan(id: PlanId, patch: Record<string, unknown>): Pr
 export async function deletePlan(id: PlanId): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "TicketPlan" WHERE id = ${id} FOR UPDATE`
-    const ordenes = await tx.ticketOrder.count({ where: { planId: id } })
-    if (ordenes > 0) {
-      throw conflict('HAS_ORDERS', `No se puede borrar: este tipo de entrada tiene ${ordenes} compra(s). Bajale el precio o sacalo de la venta.`)
+    // Sólo cuentan las órdenes que dejan RASTRO: una compra confirmada (hubo plata), una que
+    // está adentro de un pago en curso (puede confirmarse en cualquier momento por el webhook) y
+    // una cancelada (es la decisión de alguien, y borrarla borra el registro de esa decisión).
+    const conRastro = await tx.ticketOrder.count({
+      where: { planId: id, status: { in: ['confirmada', 'redirigida_mp', 'cancelada'] } },
+    })
+    if (conRastro > 0) {
+      // El mensaje anterior mandaba a "bajale el precio o sacalo de la venta": el segundo control
+      // no existe en ningún lado —TicketPlan no tiene forma de retirarse de la venta— así que el
+      // organizador quedaba dando vueltas buscando un botón inventado. Se dice lo que es.
+      throw conflict(
+        'HAS_ORDERS',
+        `No se puede borrar: este tipo de entrada tiene ${conRastro} compra(s) registrada(s) y borrarlo se llevaría el respaldo de esas ventas. Podés cambiarle el nombre, el precio o el link de pago.`,
+      )
     }
+    // Carritos abandonados: alguien apretó "Continuar" y cerró la pestaña antes de llegar a
+    // Mercado Pago. No hubo plata ni decisión de nadie, y la fila existe sólo porque las órdenes
+    // se crean ANTES de pedir el link de pago (orderService). Bloqueaban el borrado igual que una
+    // venta real —TicketOrder.planId es Restrict— y no había ninguna forma de sacarlas: no existe
+    // DELETE de órdenes ni purga por vencimiento. Un tipo de entrada cargado mal quedaba clavado
+    // para siempre porque un visitante hizo click una vez.
+    await tx.ticketOrder.deleteMany({ where: { planId: id, status: 'iniciada' } })
     await tx.ticketPlan.delete({ where: { id } })
   })
 }

@@ -12,14 +12,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  */
 
 const mockPrisma = {
-  ticketPlan: { update: vi.fn() },
+  ticketPlan: { update: vi.fn(), findUnique: vi.fn() },
 }
 
 vi.mock('../lib/prisma.js', () => ({ prisma: mockPrisma }))
 
 const { updatePlan } = await import('./adminService.js')
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  // updatePlan lee la fila actual para chequear que el tipo y el precio no se contradigan.
+  mockPrisma.ticketPlan.findUnique.mockResolvedValue({ kind: 'vip', price: null })
+})
 
 describe('updatePlan — el precio se valida antes de llegar a una columna Int', () => {
   it('acepta un precio normal y lo redondea a entero', async () => {
