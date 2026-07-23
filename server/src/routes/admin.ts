@@ -7,6 +7,7 @@ import * as applicationService from '../services/applicationService.js'
 import * as personService from '../services/personService.js'
 import * as grantService from '../services/grantService.js'
 import * as grantMailService from '../services/grantMailService.js'
+import * as emailTemplateService from '../services/emailTemplateService.js'
 import * as catalogService from '../services/catalogService.js'
 import { handleUpload } from '../services/uploadService.js'
 import * as orderService from '../services/orderService.js'
@@ -316,6 +317,44 @@ adminRouter.delete('/admin/grants/:id', requirePermission('grants:write'), async
   try {
     await grantService.revocarGrant(req.params.id)
     res.status(204).end()
+  } catch (err) {
+    next(err)
+  }
+})
+
+// ─── Automatizaciones: editar el HTML de los mails automáticos (solo OWNER) ───
+adminRouter.get('/admin/email-templates', requirePermission('automations:write'), async (_req, res, next) => {
+  try {
+    res.json(await emailTemplateService.listarPlantillas())
+  } catch (err) {
+    next(err)
+  }
+})
+
+// Guardar el override de una plantilla (asunto + cuerpo HTML). El HTML se sanea en el service.
+adminRouter.patch('/admin/email-templates/:key', requirePermission('automations:write'), async (req, res, next) => {
+  try {
+    const b = req.body as { subject?: string; html?: string }
+    res.json(await emailTemplateService.guardarPlantilla(req.params.key, b, req.admin!.userId))
+  } catch (err) {
+    next(err)
+  }
+})
+
+// Restaurar la plantilla a su original (borra el override).
+adminRouter.delete('/admin/email-templates/:key', requirePermission('automations:write'), async (req, res, next) => {
+  try {
+    res.json(await emailTemplateService.restaurarPlantilla(req.params.key))
+  } catch (err) {
+    next(err)
+  }
+})
+
+// Preview de un borrador (sin guardar): render con valores de ejemplo, saneado. Para el iframe del panel.
+adminRouter.post('/admin/email-templates/:key/preview', requirePermission('automations:write'), async (req, res, next) => {
+  try {
+    const b = req.body as { subject?: string; html?: string }
+    res.json(await emailTemplateService.previewPlantilla(req.params.key, b))
   } catch (err) {
     next(err)
   }

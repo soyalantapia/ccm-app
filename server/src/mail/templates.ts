@@ -97,6 +97,199 @@ const capsList = (items: string[]) => `
       .join('')}
   </table>`
 
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Plantillas EDITABLES (pestaña Automatizaciones del panel)
+ *
+ * Los mails que van a personas —cortesía, postulación aceptada/rechazada— se definen con TOKENS
+ * {{variable}} en vez de valores interpolados. Una sola fuente de verdad: la función que envía y el
+ * "original" que ve el editor salen de acá. El organizador puede pisar el ASUNTO y el CUERPO (inner)
+ * desde el panel; el envoltorio de marca (encabezado, pie, fondo), el escapado de cada valor y el QR
+ * los sigue poniendo el server. Así un override no rompe la identidad ni inyecta HTML sin sanear:
+ *   - el HTML guardado se sanea con allowlist (emailTemplateService),
+ *   - cada valor se ESCAPA al interpolar (no puede meter tags),
+ *   - {{qr}} lo expande el server a un <img cid:…> propio (el admin sólo elige DÓNDE va).
+ *
+ * NO son editables el OTP de login (romperlo traba el acceso) ni la invitación de equipo (lista de
+ * permisos dinámica): se quedan como funciones directas más abajo.
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+export interface TemplateVar {
+  token: string
+  descripcion: string
+  ejemplo: string
+}
+
+export interface EditableTemplateDef {
+  key: string
+  nombre: string
+  descripcion: string
+  variables: TemplateVar[]
+  /** Si true, {{qr}} está disponible y se expande al bloque del código QR embebido (cid). */
+  hasQr?: boolean
+  footer: string
+  /** Plantillas con {{tokens}}. subject/inner son pisables desde el panel; text/preview no. */
+  defaultSubject: string
+  defaultInner: string
+  defaultText: string
+  previewTpl: string
+  /** Deriva los VALORES de los tokens a partir de las opciones tipadas del llamador. */
+  valores: (opts: Record<string, unknown>) => Record<string, string>
+}
+
+const TOKEN_RE = /\{\{\s*(\w+)\s*\}\}/g
+
+/** Reemplaza {{token}} por el valor. En HTML, ESCAPA el valor (no puede inyectar tags). {{qr}} lo
+ *  pone el server. Un token desconocido se borra (no se filtra "{{loquesea}}" al usuario). */
+function interpolar(tpl: string, valores: Record<string, string>, opts: { html: boolean; qrImg?: string }): string {
+  return tpl.replace(TOKEN_RE, (_m, tk: string) => {
+    if (tk === 'qr') return opts.qrImg ?? ''
+    const v = valores[tk] ?? ''
+    return opts.html ? esc(v) : v
+  })
+}
+
+/** El bloque del QR embebido, con el cid que puso el llamador. Server-side, no lo escribe el admin. */
+function bloqueQr(qrCid: string): string {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px;">
+      <tr><td align="center" style="padding:6px 0 14px;">
+        <img src="cid:${esc(qrCid)}" width="220" height="220" alt="Tu código QR de acceso" style="display:block;width:220px;height:220px;border-radius:10px;border:1px solid #e6ddd1;">
+        <div style="color:${MUTED};font-size:12px;line-height:1.5;margin-top:10px;">Este es tu código de acceso.</div>
+      </td></tr>
+    </table>`
+}
+
+/**
+ * Arma el EmailMsg de una plantilla editable. `override` (del panel) pisa asunto y cuerpo; si es
+ * null se usa el default del registry. Los valores se interpolan escapados; el QR y el shell los
+ * pone el server. `text` y `preview` salen SIEMPRE del default (el admin sólo edita el HTML).
+ */
+export function renderEditable(
+  key: string,
+  valores: Record<string, string>,
+  opts: { qrCid?: string; qrImg?: string; override?: { subject: string; html: string } | null } = {},
+): EmailMsg {
+  const def = EDITABLE_TEMPLATES[key]
+  if (!def) throw new Error(`Plantilla de email desconocida: ${key}`)
+  const subjectTpl = opts.override?.subject ?? def.defaultSubject
+  const innerTpl = opts.override?.html ?? def.defaultInner
+  // qrImg explícito (preview) tiene prioridad; si no, el bloque real por cid.
+  const qrImg = opts.qrImg ?? (def.hasQr && opts.qrCid ? bloqueQr(opts.qrCid) : '')
+  return {
+    subject: interpolar(subjectTpl, valores, { html: false }),
+    html: shell({
+      preview: interpolar(def.previewTpl, valores, { html: false }),
+      inner: interpolar(innerTpl, valores, { html: true, qrImg }),
+      footer: def.footer,
+    }),
+    text: interpolar(def.defaultText, valores, { html: false }),
+  }
+}
+
+const FOOTER_CORTESIA =
+  'Te llega este mail porque el equipo de CCM te regaló una entrada para su evento.<br>Si creés que fue un error, podés ignorarlo.'
+
+export const EDITABLE_TEMPLATES: Record<string, EditableTemplateDef> = {
+  ticket_grant: {
+    key: 'ticket_grant',
+    nombre: 'Entrada regalada (cortesía)',
+    descripcion: 'Se manda cuando regalás entradas a una persona desde el CRM. Lleva el QR y el link para abrir la app.',
+    hasQr: true,
+    footer: FOOTER_CORTESIA,
+    variables: [
+      { token: 'saludo', descripcion: 'Saludo con el nombre, si lo hay ("Hola Ana. ")', ejemplo: 'Hola Ana. ' },
+      { token: 'cantidad', descripcion: 'Cuántas entradas ("una entrada" / "3 entradas")', ejemplo: '2 entradas' },
+      { token: 'evento', descripcion: 'Nombre del evento', ejemplo: 'Expo Córdoba Corazón de Moda' },
+      { token: 'cuando', descripcion: 'Fecha y horario', ejemplo: 'Sábado 19 de septiembre · 17 a 20 hs' },
+      { token: 'donde', descripcion: 'Lugar', ejemplo: 'Quinto Centenario' },
+      { token: 'link', descripcion: 'Link para abrir la entrada en la app', ejemplo: 'https://…/i/abc.def' },
+      { token: 'qr', descripcion: 'El código QR embebido (imagen). Poné {{qr}} donde quieras que aparezca.', ejemplo: '[QR]' },
+    ],
+    defaultSubject: 'Te regalaron una entrada para {{evento}}',
+    previewTpl: 'Córdoba Corazón de Moda te regaló {{cantidad}}.',
+    defaultInner: `
+    ${h1('Te regalaron una entrada 🎟️')}
+    ${p(`{{saludo}}<strong style="color:${INK};">Córdoba Corazón de Moda</strong> te regaló {{cantidad}} para que puedas participar de:`)}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;background-color:${PAPER};border-radius:12px;">
+      <tr><td style="padding:18px 20px;">
+        <div style="color:${INK};font-size:17px;font-weight:700;line-height:1.3;margin:0 0 6px;">{{evento}}</div>
+        <div style="color:${MUTED};font-size:14px;line-height:1.6;">{{cuando}}<br>{{donde}}</div>
+      </td></tr>
+    </table>
+    {{qr}}
+    ${p('Para usarlo, abrí tu entrada en la app de CCM desde este botón:')}
+    ${button('{{link}}', 'Abrir mi entrada en la app')}
+    ${p(`<span style="font-size:13px;color:${MUTED};">Si el botón no funciona, copiá y pegá este link:<br><span style="color:${INK};word-break:break-all;">{{link}}</span></span>`)}`,
+    defaultText: `{{saludo}}Córdoba Corazón de Moda te regaló {{cantidad}} para participar de:
+
+{{evento}}
+{{cuando}}
+{{donde}}
+
+Para usar tu entrada, abrila en la app de CCM desde este link:
+{{link}}
+
+(El código QR de acceso va adjunto en la versión con imágenes de este mail.)`,
+    valores: (o) => ({
+      saludo: o.name ? `Hola ${String(o.name)}. ` : '',
+      cantidad: o.qty === 1 ? 'una entrada' : `${Number(o.qty)} entradas`,
+      evento: String(o.eventTitle ?? ''),
+      cuando: String(o.eventWhen ?? ''),
+      donde: String(o.eventVenue ?? ''),
+      link: String(o.claimUrl ?? ''),
+    }),
+  },
+
+  application_accepted: {
+    key: 'application_accepted',
+    nombre: 'Postulación aceptada',
+    descripcion: 'Se manda cuando aceptás una postulación a una convocatoria.',
+    footer: FOOTER_ACCESO,
+    variables: [
+      { token: 'nombre', descripcion: 'Nombre del postulante', ejemplo: 'Ana Gómez' },
+      { token: 'convocatoria', descripcion: 'Nombre de la convocatoria', ejemplo: 'Camino a CCM' },
+    ],
+    defaultSubject: 'Quedaste seleccionado — {{convocatoria}}',
+    previewTpl: 'Tu postulación a {{convocatoria}} fue aceptada.',
+    defaultInner: `
+    ${h1('Quedaste seleccionado')}
+    ${p(`Hola {{nombre}}. Tu postulación a <strong style="color:${INK};">{{convocatoria}}</strong> fue aceptada por el equipo de CCM.`)}
+    ${p('En los próximos días te escribimos con los detalles de la fecha, el lugar y lo que tenés que llevar. Si tenés alguna consulta, respondé este mail.')}`,
+    defaultText: `Quedaste seleccionado.
+
+Hola {{nombre}}. Tu postulación a {{convocatoria}} fue aceptada por el equipo de CCM.
+
+En los próximos días te escribimos con los detalles de la fecha, el lugar y lo que tenés que llevar.
+Si tenés alguna consulta, respondé este mail.`,
+    valores: (o) => ({ nombre: String(o.name ?? ''), convocatoria: String(o.convocatoria ?? '') }),
+  },
+
+  application_rejected: {
+    key: 'application_rejected',
+    nombre: 'Postulación no seleccionada',
+    descripcion: 'Se manda cuando rechazás una postulación. Corto y cordial. El motivo interno NUNCA viaja.',
+    footer: FOOTER_ACCESO,
+    variables: [
+      { token: 'nombre', descripcion: 'Nombre del postulante', ejemplo: 'Ana Gómez' },
+      { token: 'convocatoria', descripcion: 'Nombre de la convocatoria', ejemplo: 'Camino a CCM' },
+    ],
+    defaultSubject: 'Sobre tu postulación a {{convocatoria}}',
+    previewTpl: 'Gracias por postularte a CCM.',
+    defaultInner: `
+    ${h1('Sobre tu postulación')}
+    ${p(`Hola {{nombre}}. Gracias por postularte a <strong style="color:${INK};">{{convocatoria}}</strong>.`)}
+    ${p('Esta vez no pudimos darte un lugar. Recibimos muchas más postulaciones que cupos, y la decisión fue difícil.')}
+    ${p('Nos gustaría verte en las próximas convocatorias. Seguí atento, que van a salir pronto.')}`,
+    defaultText: `Sobre tu postulación.
+
+Hola {{nombre}}. Gracias por postularte a {{convocatoria}}.
+
+Esta vez no pudimos darte un lugar. Recibimos muchas más postulaciones que cupos, y la decisión fue difícil.
+
+Nos gustaría verte en las próximas convocatorias. Seguí atento, que van a salir pronto.`,
+    valores: (o) => ({ nombre: String(o.name ?? ''), convocatoria: String(o.convocatoria ?? '') }),
+  },
+}
+
 /** El código para entrar. Se manda cada vez que alguien lo pide desde el login. */
 export function otpEmail(opts: { name: string; code: string; ttlMin: number }): EmailMsg {
   const inner = `
@@ -171,22 +364,7 @@ Entrar: ${opts.loginUrl}`
  * vez de limitarse a anunciar.
  */
 export function applicationAcceptedEmail(opts: { name: string; convocatoria: string }): EmailMsg {
-  const conv = esc(opts.convocatoria)
-  const inner = `
-    ${h1('Quedaste seleccionado')}
-    ${p(`Hola ${esc(opts.name)}. Tu postulación a <strong style="color:${INK};">${conv}</strong> fue aceptada por el equipo de CCM.`)}
-    ${p('En los próximos días te escribimos con los detalles de la fecha, el lugar y lo que tenés que llevar. Si tenés alguna consulta, respondé este mail.')}`
-  const text = `Quedaste seleccionado.
-
-Hola ${opts.name}. Tu postulación a ${opts.convocatoria} fue aceptada por el equipo de CCM.
-
-En los próximos días te escribimos con los detalles de la fecha, el lugar y lo que tenés que llevar.
-Si tenés alguna consulta, respondé este mail.`
-  return {
-    subject: `Quedaste seleccionado — ${opts.convocatoria}`,
-    html: shell({ preview: `Tu postulación a ${opts.convocatoria} fue aceptada.`, inner }),
-    text,
-  }
+  return renderEditable('application_accepted', EDITABLE_TEMPLATES.application_accepted.valores(opts))
 }
 
 /**
@@ -196,24 +374,7 @@ Si tenés alguna consulta, respondé este mail.`
  * filtrarla sería el peor bug de esta pantalla. Que no exista el parámetro es la garantía.
  */
 export function applicationRejectedEmail(opts: { name: string; convocatoria: string }): EmailMsg {
-  const conv = esc(opts.convocatoria)
-  const inner = `
-    ${h1('Sobre tu postulación')}
-    ${p(`Hola ${esc(opts.name)}. Gracias por postularte a <strong style="color:${INK};">${conv}</strong>.`)}
-    ${p('Esta vez no pudimos darte un lugar. Recibimos muchas más postulaciones que cupos, y la decisión fue difícil.')}
-    ${p('Nos gustaría verte en las próximas convocatorias. Seguí atento, que van a salir pronto.')}`
-  const text = `Sobre tu postulación.
-
-Hola ${opts.name}. Gracias por postularte a ${opts.convocatoria}.
-
-Esta vez no pudimos darte un lugar. Recibimos muchas más postulaciones que cupos, y la decisión fue difícil.
-
-Nos gustaría verte en las próximas convocatorias. Seguí atento, que van a salir pronto.`
-  return {
-    subject: `Sobre tu postulación a ${opts.convocatoria}`,
-    html: shell({ preview: 'Gracias por postularte a CCM.', inner }),
-    text,
-  }
+  return renderEditable('application_rejected', EDITABLE_TEMPLATES.application_rejected.valores(opts))
 }
 
 /**
@@ -234,49 +395,5 @@ export function ticketGrantEmail(opts: {
   claimUrl: string
   qrCid: string
 }): EmailMsg {
-  const saludo = opts.name ? `Hola ${esc(opts.name)}. ` : ''
-  const entradas = opts.qty === 1 ? 'una entrada' : `${opts.qty} entradas`
-  const evento = esc(opts.eventTitle)
-  const cuando = esc(opts.eventWhen)
-  const donde = esc(opts.eventVenue)
-
-  const inner = `
-    ${h1('Te regalaron una entrada 🎟️')}
-    ${p(`${saludo}<strong style="color:${INK};">Córdoba Corazón de Moda</strong> te regaló ${entradas} para que puedas participar de:`)}
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;background-color:${PAPER};border-radius:12px;">
-      <tr><td style="padding:18px 20px;">
-        <div style="color:${INK};font-size:17px;font-weight:700;line-height:1.3;margin:0 0 6px;">${evento}</div>
-        <div style="color:${MUTED};font-size:14px;line-height:1.6;">${cuando}<br>${donde}</div>
-      </td></tr>
-    </table>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px;">
-      <tr><td align="center" style="padding:6px 0 14px;">
-        <img src="cid:${esc(opts.qrCid)}" width="220" height="220" alt="Tu código QR de acceso" style="display:block;width:220px;height:220px;border-radius:10px;border:1px solid #e6ddd1;">
-        <div style="color:${MUTED};font-size:12px;line-height:1.5;margin-top:10px;">Este es tu código de acceso.</div>
-      </td></tr>
-    </table>
-    ${p('Para usarlo, abrí tu entrada en la app de CCM desde este botón:')}
-    ${button(opts.claimUrl, 'Abrir mi entrada en la app')}
-    ${p(`<span style="font-size:13px;color:${MUTED};">Si el botón no funciona, copiá y pegá este link:<br><span style="color:${INK};word-break:break-all;">${esc(opts.claimUrl)}</span></span>`)}`
-
-  const text = `${opts.name ? `Hola ${opts.name}. ` : ''}Córdoba Corazón de Moda te regaló ${entradas} para participar de:
-
-${opts.eventTitle}
-${opts.eventWhen}
-${opts.eventVenue}
-
-Para usar tu entrada, abrila en la app de CCM desde este link:
-${opts.claimUrl}
-
-(El código QR de acceso va adjunto en la versión con imágenes de este mail.)`
-
-  return {
-    subject: `Te regalaron una entrada para ${opts.eventTitle}`,
-    html: shell({
-      preview: `Córdoba Corazón de Moda te regaló ${entradas}.`,
-      inner,
-      footer: 'Te llega este mail porque el equipo de CCM te regaló una entrada para su evento.<br>Si creés que fue un error, podés ignorarlo.',
-    }),
-    text,
-  }
+  return renderEditable('ticket_grant', EDITABLE_TEMPLATES.ticket_grant.valores(opts), { qrCid: opts.qrCid })
 }

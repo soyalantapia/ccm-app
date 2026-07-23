@@ -376,6 +376,24 @@ model TicketGrant {
   @@index([personId, status])
 }
 
+/**
+ * Override de una plantilla de email automático, editable desde el panel (pestaña
+ * Automatizaciones). Sólo se guarda lo que el organizador PISÓ: si no hay fila para una `key`, el
+ * mail usa la plantilla del código (fallback). Así "restaurar el original" es borrar la fila.
+ *
+ * `html` es el CUERPO (inner) con tokens {{variable}} — el envoltorio de marca (encabezado, pie,
+ * fondo) y el escapado de valores los sigue poniendo el server, así que un override no puede ni
+ * romper la identidad ni inyectar un valor sin escapar. El HTML se sanea (allowlist) al guardarse.
+ */
+model EmailTemplate {
+  key         String     @id // clave estable de la plantilla: 'ticket_grant', 'application_accepted', …
+  subject     String // asunto override (también admite tokens)
+  html        String // cuerpo (inner) HTML override, con tokens {{var}}; saneado al guardar
+  updatedAt   DateTime   @updatedAt
+  updatedById String? // AdminUser que lo editó (audit); null si se dio de baja
+  updatedBy   AdminUser? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
 // ─────────────────────────────────────────────────────────
 //  ENTRADAS, PLANES Y ÓRDENES
 // ─────────────────────────────────────────────────────────
@@ -935,9 +953,10 @@ model AdminUser {
   createdAt DateTime        @default(now())
   lastLogin DateTime?
 
-  sessions   AdminSession[]
-  loginCodes AdminLoginCode[]
-  grants     TicketGrant[]
+  sessions       AdminSession[]
+  loginCodes     AdminLoginCode[]
+  grants         TicketGrant[]
+  emailTemplates EmailTemplate[]
 }
 
 // Sesión del panel. Es la AUTORIDAD: el token firmado no alcanza por sí solo, tiene que existir
