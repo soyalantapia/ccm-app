@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   CalendarDays,
   Inbox,
+  Mail,
   Megaphone,
   Newspaper,
   MoreHorizontal,
@@ -52,6 +53,7 @@ export const SECTIONS: NavItem[] = [
   { to: '/admin/banners', label: 'Banners', icon: Megaphone, needs: 'content:write' },
   { to: '/admin/ordenes', label: 'Ventas', icon: Ticket, needs: 'orders:read' },
   { to: '/admin/equipo', label: 'Equipo y permisos', icon: ShieldCheck, needs: 'team:manage' },
+  { to: '/admin/automatizaciones', label: 'Automatizaciones', icon: Mail, needs: 'automations:write' },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]
 
@@ -83,6 +85,7 @@ export const MORE: NavItem[] = [
   { to: '/admin/banners', label: 'Banners', icon: Megaphone, needs: 'content:write' },
   { to: '/admin/ordenes', label: 'Ventas', icon: Ticket, needs: 'orders:read' },
   { to: '/admin/equipo', label: 'Equipo y permisos', icon: ShieldCheck, needs: 'team:manage' },
+  { to: '/admin/automatizaciones', label: 'Automatizaciones', icon: Mail, needs: 'automations:write' },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]
 

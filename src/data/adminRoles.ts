@@ -21,6 +21,7 @@ export type Permission =
   | 'analytics:read'
   | 'orders:read'
   | 'grants:write'
+  | 'automations:write'
   | 'team:manage'
   | 'upload'
 

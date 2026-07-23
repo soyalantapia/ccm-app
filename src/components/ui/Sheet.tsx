@@ -10,7 +10,13 @@ interface SheetProps {
   title?: ReactNode
   children: ReactNode
   /** max-w del panel en desktop */
-  size?: 'md' | 'lg'
+  size?: 'md' | 'lg' | 'xl'
+}
+
+const SIZE_MAXW: Record<'md' | 'lg' | 'xl', string> = {
+  md: 'sm:max-w-md',
+  lg: 'sm:max-w-2xl',
+  xl: 'sm:max-w-4xl', // editores anchos: cuerpo + vista previa lado a lado
 }
 
 /** Bottom sheet en mobile, diálogo centrado en desktop. */
@@ -37,9 +43,7 @@ export function Sheet({ open, onClose, title, children, size = 'md' }: SheetProp
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         aria-label={title ? undefined : 'Diálogo'}
-        className={`relative flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-lg border-t border-line bg-surface shadow-2xl animate-sheet-up sm:rounded-lg sm:border sm:animate-rise ${
-          size === 'lg' ? 'sm:max-w-2xl' : 'sm:max-w-md'
-        }`}
+        className={`relative flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-lg border-t border-line bg-surface shadow-2xl animate-sheet-up sm:rounded-lg sm:border sm:animate-rise ${SIZE_MAXW[size]}`}
       >
         <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-line sm:hidden" aria-hidden />
         <div className="flex items-start justify-between gap-4 px-6 pt-4 sm:pt-6">
