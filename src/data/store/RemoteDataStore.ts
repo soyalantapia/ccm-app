@@ -1,6 +1,7 @@
 import { LocalDataStore, K } from './LocalDataStore'
 import type {
   BlockAvailability,
+  CatalogSpeakerAppearances,
   CheckoutItem,
   PhotoDownload,
   NewEvent,
@@ -50,6 +51,7 @@ import type {
   OrderStatus,
   AdSlot,
   InscriptoAdmin,
+  SpeakersByEvent,
 } from '../types'
 
 interface BufferedEvent {
@@ -105,6 +107,9 @@ export class RemoteDataStore extends LocalDataStore {
 
   // Caché de Fase E (catálogo / galerías / contenido / favoritos / descargas).
   private catalog?: CatalogProfile[]
+  // GET /speakers: catálogo agrupado por evento (kind: 'speaker'). Cache aparte de `catalog`
+  // porque la forma es distinta (agrupada, no lista plana) y la sirve otra ruta pública.
+  private speakersByEvent?: SpeakersByEvent[]
   private galleries?: Gallery[]
   private contents?: ContentItem[]
   private favorites?: string[]
@@ -580,6 +585,7 @@ export class RemoteDataStore extends LocalDataStore {
   /** Contenido PÚBLICO (no requiere identidad): catálogo, galerías, contenidos, sponsors, planes. */
   private hydratePublicContent(): void {
     this.refetch<CatalogProfile[]>('/catalog', (c) => (this.catalog = c), 'catalog')
+    this.refetch<SpeakersByEvent[]>('/speakers', (s) => (this.speakersByEvent = s), 'speakersByEvent')
     this.refetch<Gallery[]>('/galleries', (g) => (this.galleries = g), 'galleries')
     this.refetch<ContentItem[]>('/contents', (c) => (this.contents = c), 'contents')
     this.refetch<Sponsor[]>('/sponsors', (s) => (this.sponsors = s), 'sponsors')
@@ -1180,7 +1186,13 @@ export class RemoteDataStore extends LocalDataStore {
   /* Re-hidratadores de las listas que sirven a la vez al público y al panel. */
   private refetchSponsors(): void { this.refetch('/sponsors', (v: Sponsor[]) => (this.sponsors = v), 'sponsors') }
   private refetchGalleries(): void { this.refetch('/galleries', (v: Gallery[]) => (this.galleries = v), 'galleries') }
-  private refetchCatalog(): void { this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog') }
+  /** Tras una escritura de catálogo hay que refrescar las DOS listas: la plana (/catalog) y la
+   *  agrupada por evento (/speakers) — un alta/edición/baja de un perfil kind:'speaker' con
+   *  apariciones cambia lo que ve la página pública /speakers, no sólo el catálogo. */
+  private refetchCatalog(): void {
+    this.refetch('/catalog', (v: CatalogProfile[]) => (this.catalog = v), 'catalog')
+    this.refetch('/speakers', (v: SpeakersByEvent[]) => (this.speakersByEvent = v), 'speakersByEvent')
+  }
   private refetchPlans(): void { this.refetch('/plans', (v: TicketPlan[]) => (this.plans = v), 'plans') }
   private hydrateAdminPlans(): void {
     this.api.get<TicketPlan[]>('/admin/plans').then((p) => { this.adminPlans = p; bus.emit('plans') }).catch(() => {})
@@ -1259,13 +1271,15 @@ export class RemoteDataStore extends LocalDataStore {
     )
   }
 
-  override createCatalogProfile(input: NewCatalogProfile): CatalogProfile {
+  override createCatalogProfile(input: NewCatalogProfile & CatalogSpeakerAppearances): CatalogProfile {
     const prevCache = this.catalog // para deshacer si el backend rechaza
     // Dedup de slug: dos expositores con el mismo nombre chocan con el @unique → 409 → el ítem
     // desaparece del panel sin aviso. Espeja el dedup de notas/convocatorias.
     const ctaken = new Set((this.catalog ?? []).map((c) => c.slug))
     let cslug = input.slug || slugify(input.name)
     for (let i = 2, base = cslug; ctaken.has(cslug); i++) cslug = `${base}-${i}`
+    // El spread conserva `speakerAppearances` tal cual llegó en `input`: el POST se lo manda al
+    // backend sin stripearlo (la relación EventSpeaker la resuelve el server contra ese campo).
     const profile: CatalogProfile = { ...input, id: newId('cat'), slug: cslug }
     if (this.catalog) this.catalog = [...this.catalog, profile]
     this.track('admin_catalog_created', { profileId: profile.id })
@@ -1275,11 +1289,12 @@ export class RemoteDataStore extends LocalDataStore {
     )
     return profile
   }
-  override updateCatalogProfile(id: string, patch: Partial<CatalogProfile>): void {
+  override updateCatalogProfile(id: string, patch: Partial<CatalogProfile> & CatalogSpeakerAppearances): void {
     const prevCache = this.catalog // para deshacer si el backend rechaza
     if (this.catalog) this.catalog = this.catalog.map((c) => (c.id === id ? { ...c, ...patch } : c))
     this.track('admin_catalog_updated', { profileId: id })
     bus.emit('catalog')
+    // `patch` (con `speakerAppearances` incluido si vino) viaja tal cual al backend.
     this.adminWrite(this.api.patch(`/admin/catalog/${id}`, patch), () => this.refetchCatalog(),
       () => { this.catalog = prevCache; bus.emit('catalog') },
     )
@@ -1504,6 +1519,11 @@ export class RemoteDataStore extends LocalDataStore {
   }
   override getCatalogProfile(slug: string): CatalogProfile | undefined {
     return this.catalog?.find((c) => c.slug === slug)
+  }
+  /** GET /speakers, ya agrupado por evento por el backend. Nunca cae al seed (no hay seed de
+   *  speakers): vacío hasta que el fetch resuelva, igual que el resto de esta sección. */
+  override getSpeakersByEvent(): SpeakersByEvent[] {
+    return this.speakersByEvent ?? []
   }
   override getGalleries(): Gallery[] {
     return this.galleries ?? []

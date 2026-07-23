@@ -20,6 +20,7 @@ import type {
   Sponsor,
   AdSlot,
   SpeakerAppearanceInput,
+  SpeakersByEvent,
   SponsorCreative,
   MpStatus,
   TicketOrder,
@@ -174,9 +175,14 @@ export interface DataStore {
   /* Catálogo */
   getCatalog(): CatalogProfile[]
   getCatalogProfile(slug: string): CatalogProfile | undefined
-  createCatalogProfile(input: NewCatalogProfile): CatalogProfile
-  updateCatalogProfile(id: string, patch: Partial<CatalogProfile>): void
+  createCatalogProfile(input: NewCatalogProfile & CatalogSpeakerAppearances): CatalogProfile
+  updateCatalogProfile(id: string, patch: Partial<CatalogProfile> & CatalogSpeakerAppearances): void
   deleteCatalogProfile(id: string): void
+
+  /** Perfiles del catálogo agrupados por evento en el que hablan (kind: 'speaker'), tal como
+   *  los ve la página pública /speakers. Hidratado del backend (GET /api/v1/speakers); en la
+   *  demo (LocalDataStore) no hay tabla EventSpeaker, así que devuelve []. */
+  getSpeakersByEvent(): SpeakersByEvent[]
 
   /* Fotos */
   getGalleries(): Gallery[]
