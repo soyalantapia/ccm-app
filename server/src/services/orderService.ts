@@ -123,7 +123,10 @@ export async function getCampaigns(): Promise<AdCampaign[]> {
     },
     orderBy: { ts: 'asc' },
   })
-  return rows.map(toAdCampaign)
+  // Arrow explícita, NO `rows.map(toAdCampaign)`: map pasa (valor, ÍNDICE, array), y el índice
+  // caería en `conPrecio` — con lo cual de la SEGUNDA campaña en adelante el precio se filtraría
+  // igual. El bug más silencioso posible: la primera fila sale bien y las demás no.
+  return rows.map((r) => toAdCampaign(r))
 }
 
 interface NuevaCampania {
@@ -154,5 +157,6 @@ export async function createCampaign(input: NuevaCampania): Promise<AdCampaign> 
       status: 'pendiente_pago',
     },
   })
-  return toAdCampaign(row)
+  // Con precio: es la respuesta de la compra propia, a quien la acaba de hacer.
+  return toAdCampaign(row, true)
 }
