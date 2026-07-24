@@ -79,6 +79,7 @@ const SOURCE_LABELS: Record<string, string> = {
   descarga_foto: 'Descarga de foto',
   postulacion: 'Postulación',
   postulacion_camino: 'Postulación Camino a CCM',
+  cuenta: 'Datos de la cuenta',
 }
 
 /** Humaniza la acción que originó la captura de un dato (PRD §7). */

@@ -92,7 +92,7 @@ export interface PersonaFicha extends PersonaListItem {
   campos: PersonaCampo[]
   consentimientos: { terms: string | null; news: string | null; sponsors: string | null }
   inscripcionesDetalle: { id: string; eventId: string; blockId: string | null; status: string; ts: string }[]
-  postulacionesDetalle: { id: string; convocatoriaId: string; status: string; ts: string; data: unknown }[]
+  postulacionesDetalle: { id: string; convocatoriaId: string; convocatoriaTitle: string | null; status: string; ts: string; data: unknown }[]
   ordenesDetalle: {
     id: string
     planId: string
