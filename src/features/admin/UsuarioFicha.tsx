@@ -122,7 +122,7 @@ export function UsuarioFicha({ personId, onClose }: Props) {
                 {data.postulacionesDetalle.map((a) => (
                   <li key={a.id} className="rounded-sm border border-line p-3">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-[13px] text-ink">{a.convocatoriaId}</span>
+                      <span className="text-[13px] text-ink">{a.convocatoriaTitle ?? a.convocatoriaId}</span>
                       <Badge tone={APPLICATION_STATUS_META[a.status as keyof typeof APPLICATION_STATUS_META]?.tone ?? 'neutral'}>
                         {APPLICATION_STATUS_META[a.status as keyof typeof APPLICATION_STATUS_META]?.label ?? a.status}
                       </Badge>

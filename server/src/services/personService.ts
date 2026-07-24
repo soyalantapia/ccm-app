@@ -214,8 +214,9 @@ function camposDesdePostulacion(
 function camposDe(
   fields: Array<{ key: string; value: string; source: string; capturedAt: Date }>,
   app: { data: unknown; ts: Date } | undefined,
+  canonical: { email: string | null; dni: string | null; capturedAt: Date },
 ): PersonaCampo[] {
-  return [
+  const base = [
     ...fields.map((f) => ({
       key: f.key,
       value: f.value,
@@ -224,6 +225,15 @@ function camposDe(
     })),
     ...camposDesdePostulacion(app, new Set(fields.map((f) => f.key))),
   ]
+  // Las columnas CANÓNICAS de Person (email/dni) —las mismas que pinta la lista— se agregan si
+  // ninguna fuente anterior ya trajo esa clave. Sin esto, una persona con email/DNI en Person pero
+  // sin ProfileField ni postulación (llegó por otro canal: orden, inscripción) figuraba "no dejó
+  // ningún dato" en la ficha aunque la lista la muestra con su email: contradicción lista/ficha.
+  const tiene = (k: string) => base.some((c) => c.key === k)
+  const cap = canonical.capturedAt.toISOString()
+  if (canonical.email && !tiene('email')) base.push({ key: 'email', value: canonical.email, source: 'cuenta', capturedAt: cap })
+  if (canonical.dni && !tiene('dni')) base.push({ key: 'dni', value: canonical.dni, source: 'cuenta', capturedAt: cap })
+  return base
 }
 
 export async function listPeople(opts: { q?: string; cursor?: string; limit?: number }): Promise<{
@@ -265,7 +275,9 @@ export async function listPeople(opts: { q?: string; cursor?: string; limit?: nu
         include: {
           fields: true,
           membership: true,
-          _count: { select: { registrations: true } },
+          // Solo las CONFIRMADAS cuentan como "inscripciones": una cancelada (p.ej. al revocar una
+          // cortesía reclamada) no debe seguir inflando el número de la lista y la ficha.
+          _count: { select: { registrations: { where: { status: 'confirmada' } } } },
         },
       },
       applications: { orderBy: { ts: 'desc' } },
@@ -302,7 +314,7 @@ export async function listPeople(opts: { q?: string; cursor?: string; limit?: nu
     const fields = p.devices.flatMap((d) => d.fields)
     const appData = p.applications[0]?.data ?? null
     // Mismo criterio que la ficha: si el dato no llegó por ProfileField, vale el de la postulación.
-    const campos = camposDe(fields, p.applications[0])
+    const campos = camposDe(fields, p.applications[0], { email: p.email, dni: p.dni, capturedAt: p.createdAt })
     const campo = (k: string) => campos.find((c) => c.key === k)?.value ?? null
     const ultimaAct = masReciente(
       p.devices.map((d) => ultimaPorDevice.get(d.id)).filter((t): t is Date => t !== undefined),
@@ -341,7 +353,7 @@ export interface PersonaFicha extends PersonaListItem {
   campos: PersonaCampo[]
   consentimientos: { terms: string | null; news: string | null; sponsors: string | null }
   inscripcionesDetalle: { id: string; eventId: string; blockId: string | null; status: string; ts: string }[]
-  postulacionesDetalle: { id: string; convocatoriaId: string; status: string; ts: string; data: unknown }[]
+  postulacionesDetalle: { id: string; convocatoriaId: string; convocatoriaTitle: string | null; status: string; ts: string; data: unknown }[]
   /** Qué entradas compró. `planTitle` viaja resuelto para que la ficha no muestre un id opaco. */
   ordenesDetalle: {
     id: string
@@ -366,17 +378,21 @@ export async function getPerson(id: string): Promise<PersonaFicha | null> {
           membership: true,
           registrations: { orderBy: { ts: 'desc' } },
           orders: { orderBy: { ts: 'desc' }, include: { plan: { select: { name: true } } } },
-          _count: { select: { registrations: true } },
+          // Solo las CONFIRMADAS cuentan como "inscripciones": una cancelada (p.ej. al revocar una
+          // cortesía reclamada) no debe seguir inflando el número de la lista y la ficha.
+          _count: { select: { registrations: { where: { status: 'confirmada' } } } },
         },
       },
-      applications: { orderBy: { ts: 'desc' } },
+      // Traemos el título de la convocatoria (como órdenes trae plan.name): la ficha mostraba el id
+      // crudo "conv-camino-2026" en vez de "Camino a CCM".
+      applications: { orderBy: { ts: 'desc' }, include: { convocatoria: { select: { title: true } } } },
     },
   })
   if (!p) return null
 
   const fields = p.devices.flatMap((d) => d.fields)
   // applications ya viene ts-desc (ver el include de arriba), así que [0] es la más reciente.
-  const campos = camposDe(fields, p.applications[0])
+  const campos = camposDe(fields, p.applications[0], { email: p.email, dni: p.dni, capturedAt: p.createdAt })
   const campo = (k: string) => campos.find((c) => c.key === k)?.value ?? null
   // Los campos de consentimiento son por dispositivo: si la persona tiene más de uno, se
   // muestra el primero que tenga ALGO marcado (en vez de siempre el primer dispositivo a
@@ -422,7 +438,12 @@ export async function getPerson(id: string): Promise<PersonaFicha | null> {
       })),
     ),
     postulacionesDetalle: p.applications.map((a) => ({
-      id: a.id, convocatoriaId: a.convocatoriaId, status: a.status, ts: a.ts.toISOString(), data: a.data,
+      id: a.id,
+      convocatoriaId: a.convocatoriaId,
+      convocatoriaTitle: a.convocatoria?.title ?? null,
+      status: a.status,
+      ts: a.ts.toISOString(),
+      data: a.data,
     })),
     // El orderBy del include ordena dentro de CADA dispositivo; con dos dispositivos el flatMap
     // los concatena y el resultado deja de estar ordenado. Se reordena sobre el total, que es lo
