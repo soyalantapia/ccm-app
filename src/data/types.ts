@@ -177,8 +177,9 @@ export interface CatalogProfile {
   slug: string
   name: string
   role: string // 'Diseñadora' | 'Artista' | 'Influencer' | 'Marca' ...
-  /** participante | expositor — distinto cupo de imágenes (4 vs 2) + campo "cuenta proyectos". */
-  kind?: 'participante' | 'expositor'
+  /** participante | expositor | speaker. Distinto cupo de imágenes + "cuenta proyectos" (expositor).
+   *  speaker no aparece en el catálogo público de participantes; vive en /speakers. */
+  kind?: 'participante' | 'expositor' | 'speaker'
   platform: string // 'Moda' | 'Belleza' | 'Arte' | ...
   city: string
   bio: string
@@ -190,7 +191,23 @@ export interface CatalogProfile {
   whatsapp?: string
   verified: boolean
   participatesIn: string[]
+  /** "Corazón que inspira": frase propia del speaker. */
+  quote?: string
   portfolio: PortfolioPiece[]
+}
+
+/** Una aparición de un speaker: en qué evento (y opcionalmente qué bloque) habla. */
+export interface SpeakerAppearanceInput {
+  eventId: string
+  blockId: string | null
+}
+
+/** Una persona del catálogo que habla en un evento, tal como la ve /speakers. */
+export interface SpeakersByEvent {
+  eventId: string
+  eventTitle: string
+  eventDate: string // startDate ISO, para ordenar
+  speakers: CatalogProfile[]
 }
 
 /* ─── Fotos ─── */

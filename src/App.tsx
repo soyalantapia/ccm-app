@@ -27,6 +27,7 @@ const Eventos = lazyWithReload(() => import('./pages/Eventos'))
 const EventoFicha = lazyWithReload(() => import('./pages/EventoFicha'))
 const Catalogo = lazyWithReload(() => import('./pages/Catalogo'))
 const CatalogoPerfil = lazyWithReload(() => import('./pages/CatalogoPerfil'))
+const Speakers = lazyWithReload(() => import('./pages/Speakers'))
 const Fotos = lazyWithReload(() => import('./pages/Fotos'))
 const FotosGaleria = lazyWithReload(() => import('./pages/FotosGaleria'))
 const Contenido = lazyWithReload(() => import('./pages/Contenido'))
@@ -104,6 +105,7 @@ const router = createBrowserRouter(
             { path: '/eventos/:slug', element: <S><EventoFicha /></S> },
             { path: '/catalogo', element: <S><Catalogo /></S> },
             { path: '/p/:slug', element: <S><CatalogoPerfil /></S> },
+            { path: '/speakers', element: <S><Speakers /></S> },
             { path: '/fotos', element: <S><Fotos /></S> },
             { path: '/fotos/:slug', element: <S><FotosGaleria /></S> },
             { path: '/contenido', element: <S><Contenido /></S> },

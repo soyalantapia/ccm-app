@@ -19,6 +19,8 @@ import type {
   Registration,
   Sponsor,
   AdSlot,
+  SpeakerAppearanceInput,
+  SpeakersByEvent,
   SponsorCreative,
   MpStatus,
   TicketOrder,
@@ -55,6 +57,9 @@ export type NewGallery = Omit<Gallery, 'id' | 'slug'> & { slug?: string }
 export type NewSponsor = Omit<Sponsor, 'id'>
 /** Alta de expositor (catálogo) desde el admin (el store genera id + slug). */
 export type NewCatalogProfile = Omit<CatalogProfile, 'id' | 'slug'> & { slug?: string }
+/** Apariciones de speaker a adjuntar al crear/editar un perfil — no es parte del tipo de
+ *  dominio `CatalogProfile` (esas filas viven en `EventSpeaker`, no en la tabla del perfil). */
+export type CatalogSpeakerAppearances = { speakerAppearances?: SpeakerAppearanceInput[] }
 /** Alta de contenido (video) desde el admin (el store genera id). */
 export type NewContent = Omit<ContentItem, 'id'>
 /** Compra de espacio publicitario autogestionado (el store genera id + ts). */
@@ -186,9 +191,14 @@ export interface DataStore {
   /* Catálogo */
   getCatalog(): CatalogProfile[]
   getCatalogProfile(slug: string): CatalogProfile | undefined
-  createCatalogProfile(input: NewCatalogProfile): CatalogProfile
-  updateCatalogProfile(id: string, patch: Partial<CatalogProfile>): void
+  createCatalogProfile(input: NewCatalogProfile & CatalogSpeakerAppearances): CatalogProfile
+  updateCatalogProfile(id: string, patch: Partial<CatalogProfile> & CatalogSpeakerAppearances): void
   deleteCatalogProfile(id: string): void
+
+  /** Perfiles del catálogo agrupados por evento en el que hablan (kind: 'speaker'), tal como
+   *  los ve la página pública /speakers. Hidratado del backend (GET /api/v1/speakers); en la
+   *  demo (LocalDataStore) no hay tabla EventSpeaker, así que devuelve []. */
+  getSpeakersByEvent(): SpeakersByEvent[]
 
   /* Fotos */
   getGalleries(): Gallery[]

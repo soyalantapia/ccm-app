@@ -29,10 +29,12 @@ import type {
   Nota,
   NewNota,
   InscriptoAdmin,
+  SpeakersByEvent,
 } from '../types'
 import type {
   BlockAvailability,
   CheckoutItem,
+  CatalogSpeakerAppearances,
   DataStore,
   GrantClaim,
   GrantPreview,
@@ -397,25 +399,37 @@ export class LocalDataStore implements DataStore {
     return this.getCatalog().find((p) => p.slug === slug)
   }
 
-  createCatalogProfile(input: NewCatalogProfile): CatalogProfile {
+  createCatalogProfile(input: NewCatalogProfile & CatalogSpeakerAppearances): CatalogProfile {
+    // `speakerAppearances` se ignora acá a propósito: la demo no tiene tabla EventSpeaker
+    // (esa relación sólo existe contra el backend real, ver RemoteDataStore).
+    const { speakerAppearances: _speakerAppearances, ...rest } = input
     const existing = new Set(this.getCatalog().map((p) => p.slug))
-    const base = input.slug || slugify(input.name)
+    const base = rest.slug || slugify(rest.name)
     let slug = base
     for (let i = 2; existing.has(slug); i++) slug = `${base}-${i}`
-    const profile: CatalogProfile = { ...input, id: newId('cat'), slug }
+    const profile: CatalogProfile = { ...rest, id: newId('cat'), slug }
     overlayCreate(K.catalogOverlay, profile)
     this.track('admin_catalog_created', { profileId: profile.id })
     return profile
   }
 
-  updateCatalogProfile(id: string, patch: Partial<CatalogProfile>): void {
-    overlayEdit(K.catalogOverlay, id, patch)
+  updateCatalogProfile(id: string, patch: Partial<CatalogProfile> & CatalogSpeakerAppearances): void {
+    // Igual que en createCatalogProfile: sin tabla EventSpeaker en la demo, se ignora.
+    const { speakerAppearances: _speakerAppearances, ...rest } = patch
+    overlayEdit(K.catalogOverlay, id, rest)
     this.track('admin_catalog_updated', { profileId: id })
   }
 
   deleteCatalogProfile(id: string): void {
     overlayDelete(K.catalogOverlay, id)
     this.track('admin_catalog_deleted', { profileId: id })
+  }
+
+  /** La demo no tiene tabla EventSpeaker (esa relación sólo la persiste el backend real): no
+   *  hay forma de derivar "quién habla en qué evento" del seed estático, así que se devuelve
+   *  vacío en vez de simular una agrupación con datos inventados. */
+  getSpeakersByEvent(): SpeakersByEvent[] {
+    return []
   }
 
   /* ─── Fotos ─── */

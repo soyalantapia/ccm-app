@@ -21,7 +21,7 @@ function scrollToId(id: string) {
 
 export default function CatalogoPerfil() {
   const { slug = '' } = useParams()
-  const catalog = useStore((s) => s.getCatalog())
+  const catalog = useStore((s) => s.getCatalog().filter((p) => p.kind !== 'speaker'))
   const profile = useStore((s) => s.getCatalogProfile(slug))
   const hydrating = useStore((s) => s.isHydrating('catalog'))
   const [openIndex, setOpenIndex] = useState<number | null>(null)
@@ -59,7 +59,9 @@ export default function CatalogoPerfil() {
   const total = pieces.length
 
   const idx = catalog.findIndex((c) => c.id === profile.id)
-  const many = catalog.length > 1
+  // idx === -1 cuando el perfil actual es un speaker puro (excluido de `catalog`,
+  // que solo lista participantes/expositores): en ese caso no hay prev/next.
+  const many = idx !== -1 && catalog.length > 1
   const prev = many ? catalog[(idx - 1 + catalog.length) % catalog.length] : null
   const next = many ? catalog[(idx + 1) % catalog.length] : null
 

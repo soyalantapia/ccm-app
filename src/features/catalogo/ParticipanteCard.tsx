@@ -34,6 +34,11 @@ export function ParticipanteCard({ profile }: { profile: CatalogProfile }) {
         <h3 className="type-serif mt-1 text-[16px] leading-tight text-ink lg:text-[21px]">{profile.name}</h3>
         {profile.city && <div className="mt-1 text-[10px] font-semibold text-accent lg:text-[11px]">{profile.city}</div>}
         <p className="mt-2 line-clamp-3 text-[10px] leading-[1.5] text-text-3 lg:text-[12px] lg:leading-[1.6]">{profile.bio}</p>
+        {profile.quote && (
+          <p className="mt-2 text-[11px] italic leading-snug text-accent-strong lg:text-[13px]">
+            "{profile.quote}"
+          </p>
+        )}
         <Link
           to={`/p/${profile.slug}`}
           // accent-strong y no accent: es texto de 10px sobre el fondo, y el acento puro da
